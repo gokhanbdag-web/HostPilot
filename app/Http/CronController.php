@@ -206,6 +206,8 @@ final class CronController
                 $this->db->prepare("UPDATE provisioning_jobs SET status='needs_review',last_error='Worker yanıtı zaman aşımına uğradı; uzak hesap durumu doğrulanmalı.',updated_at=:now WHERE id=:id")->execute([':now'=>$now,':id'=>$old['id']]);
                 if($old['job_type']==='create'){
                     $this->db->prepare("UPDATE services SET provisioning_status='needs_review',provisioning_error='Otomatik işlem sonucu belirsiz; yönetici kontrolü gerekli.',updated_at=:now WHERE id=:id")->execute([':now'=>$now,':id'=>$old['service_id']]);
+                }elseif(preg_match('/^package_([0-9]+)$/',(string)$old['job_type'],$stalePackage)){
+                    $this->db->prepare("UPDATE service_package_changes SET status='needs_review',updated_at=:now WHERE id=:id")->execute([':now'=>$now,':id'=>(int)$stalePackage[1]]);
                 }elseif(str_starts_with((string)$old['job_type'],'terminate_')){
                     $this->db->prepare("UPDATE services SET provisioning_status='needs_review',provisioning_error='Hesap sonlandırma yanıtı belirsiz; uzak hesap doğrulanmalı.',updated_at=:now WHERE id=:id")->execute([':now'=>$now,':id'=>$old['service_id']]);
                 }else{
@@ -217,7 +219,7 @@ final class CronController
             if(!$jobId){$this->db->commit();echo json_encode(['ok'=>true,'processed'=>0,'message'=>'Bekleyen iş yok.']);return;}
             $jobQuery=$this->db->prepare("SELECT * FROM provisioning_jobs WHERE id=:id FOR UPDATE");
             $jobQuery->execute([':id'=>$jobId]);$job=$jobQuery->fetch();
-            if(!$job||($job['job_type']!=='create'&&!preg_match('/^(suspend|unsuspend)_[0-9]+$/',(string)$job['job_type'])&&!preg_match('/^terminate_[0-9]{14}_[a-f0-9]{6}$/',(string)$job['job_type'])))throw new \RuntimeException('Desteklenmeyen kuyruk işlemi.');
+            if(!$job||($job['job_type']!=='create'&&!preg_match('/^(suspend|unsuspend)_[0-9]+$/',(string)$job['job_type'])&&!preg_match('/^terminate_[0-9]{14}_[a-f0-9]{6}$/',(string)$job['job_type'])&&!preg_match('/^package_[0-9]+$/',(string)$job['job_type'])))throw new \RuntimeException('Desteklenmeyen kuyruk işlemi.');
             $this->db->prepare("UPDATE provisioning_jobs SET status='processing',attempts=attempts+1,locked_at=:now,updated_at=:now2 WHERE id=:id")
                 ->execute([':now'=>$now,':now2'=>$now,':id'=>$jobId]);
             $this->db->commit();
@@ -227,6 +229,10 @@ final class CronController
             if(!$service)throw new \RuntimeException('Hizmet kaydı bulunamadı.');
             if(str_starts_with((string)$job['job_type'],'terminate_')){
                 $this->processTerminationJob($job,$service,$remoteCallStarted);
+                return;
+            }
+            if(preg_match('/^package_([0-9]+)$/',(string)$job['job_type'],$packageMatch)){
+                $this->processPackageChangeJob($job,$service,(int)$packageMatch[1],$remoteCallStarted);
                 return;
             }
             if($job['job_type']!=='create'){
@@ -289,6 +295,8 @@ final class CronController
                         $serviceStatus=$ambiguous?'needs_review':($retry?'queued':'failed');
                         $this->db->prepare("UPDATE services SET provisioning_status=:status,provisioning_error=:error,updated_at=:updated WHERE id=:id")
                             ->execute([':status'=>$serviceStatus,':error'=>$ambiguous?'Uzak sunucu yanıtı belirsiz; yinelenen hesap açılmasını önlemek için yönetici kontrolü gerekiyor.':$safe,':updated'=>$finished,':id'=>$service['id']]);
+                    }elseif(preg_match('/^package_([0-9]+)$/',(string)($job['job_type']??''),$failedPackage)){
+                        $this->db->prepare('UPDATE service_package_changes SET status=:status,updated_at=:updated WHERE id=:id')->execute([':status'=>$ambiguous?'needs_review':($retry?'queued':'failed'),':updated'=>$finished,':id'=>(int)$failedPackage[1]]);
                     }elseif($ambiguous&&str_starts_with((string)($job['job_type']??''),'terminate_')){
                         $this->db->prepare("UPDATE services SET provisioning_status='needs_review',provisioning_error='Uzak hesap silme yanıtı belirsiz; yönetici kontrolü gerekli.',updated_at=:updated WHERE id=:id")->execute([':updated'=>$finished,':id'=>$service['id']]);
                     }elseif($ambiguous){
@@ -351,6 +359,32 @@ final class CronController
         $modify=['monthly'=>'+1 month','quarterly'=>'+3 months','semiannually'=>'+6 months','annually'=>'+1 year','biennially'=>'+2 years','triennially'=>'+3 years'];
         if(!isset($modify[$cycle]))return null;
         return (new \DateTimeImmutable($period,new \DateTimeZone('UTC')))->modify($modify[$cycle])->format('Y-m-d');
+    }
+
+    private function processPackageChangeJob(array $job,array $service,int $changeId,bool &$remoteCallStarted):void
+    {
+        $q=$this->db->prepare("SELECT * FROM service_package_changes WHERE id=:id AND service_id=:service LIMIT 1");$q->execute([':id'=>$changeId,':service'=>$service['id']]);$change=$q->fetch();
+        if(!$change||$change['status']!=='queued')throw new \\RuntimeException('Paket değişikliği isteği sırada değil.');
+        $invoice=$this->db->prepare("SELECT status,total,amount_paid FROM invoices WHERE id=:id");$invoice->execute([':id'=>$change['invoice_id']]);$bill=$invoice->fetch();
+        if(!$bill||$bill['status']!=='paid'||(float)$bill['amount_paid']+0.005<(float)$bill['total'])throw new \\RuntimeException('Paket yükseltme faturası tamamen ödenmemiş.');
+        if($service['status']!=='active'||$service['provisioning_status']!=='completed'||(int)$service['product_id']!==(int)$change['from_product_id']||empty($service['remote_username'])||empty($service['remote_domain'])||empty($service['server_id']))throw new \\RuntimeException('Hizmet durumu değişti; paket yükseltme iptal edildi.');
+        $sq=$this->db->prepare('SELECT * FROM servers WHERE id=:id AND enabled=1 LIMIT 1');$sq->execute([':id'=>$service['server_id']]);$server=$sq->fetch();
+        if(!$server)throw new \\RuntimeException('Hizmet sunucusu bulunamadı veya devre dışı.');
+        if(!in_array($server['panel_type'],['cpanel','plesk'],true))throw new \\RuntimeException('Bu sunucu panelinde paket değiştirme desteklenmiyor.');
+        $server['secret']=$this->vault->decrypt((string)$server['secret_enc']);
+        $config=['base_url'=>$server['base_url'],'username'=>$server['username'],'secret'=>$server['secret'],'auth_mode'=>$server['auth_mode'],'shared_ip'=>$server['shared_ip']];
+        $adapter=match($server['panel_type']){'cpanel'=>new CpanelWhmAdapter($config),'plesk'=>new PleskXmlAdapter($config),default=>throw new \\RuntimeException('Desteklenmeyen kontrol paneli.')};
+        $remoteCallStarted=true;
+        $adapter->changePackage((string)$service['remote_username'],(string)$service['remote_domain'],(string)$change['target_package'],(string)($change['target_package_guid']??''),(string)($change['target_package_external_id']??''));
+        $now=gmdate('Y-m-d H:i:s');$this->db->beginTransaction();
+        $u=$this->db->prepare("UPDATE services SET product_id=:product,amount=:amount,updated_at=:updated WHERE id=:id AND product_id=:old AND status='active'");
+        $u->execute([':product'=>$change['to_product_id'],':amount'=>$change['target_amount'],':updated'=>$now,':id'=>$service['id'],':old'=>$change['from_product_id']]);
+        if($u->rowCount()!==1)throw new \\RuntimeException('Uzak paket değişti ancak hizmet kaydı eşzamanlı güncellenemedi.');
+        $this->db->prepare("UPDATE service_package_changes SET status='completed',updated_at=:updated WHERE id=:id")->execute([':updated'=>$now,':id'=>$changeId]);
+        $this->db->prepare("UPDATE provisioning_jobs SET status='completed',locked_at=NULL,last_error=NULL,updated_at=:updated WHERE id=:id")->execute([':updated'=>$now,':id'=>$job['id']]);
+        $this->audit((int)$service['id'],(int)$server['id'],'package_change','success','Ödenmiş yükseltme sonrası uzak paket değiştirildi.');
+        $this->db->commit();
+        echo json_encode(['ok'=>true,'processed'=>1,'job_id'=>(int)$job['id'],'status'=>'package_changed'],JSON_UNESCAPED_SLASHES);
     }
 
     private function processTerminationJob(array $job,array $service,bool &$remoteCallStarted):void
