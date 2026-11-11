@@ -364,22 +364,22 @@ final class CronController
     private function processPackageChangeJob(array $job,array $service,int $changeId,bool &$remoteCallStarted):void
     {
         $q=$this->db->prepare("SELECT * FROM service_package_changes WHERE id=:id AND service_id=:service LIMIT 1");$q->execute([':id'=>$changeId,':service'=>$service['id']]);$change=$q->fetch();
-        if(!$change||$change['status']!=='queued')throw new \\RuntimeException('Paket değişikliği isteği sırada değil.');
+        if(!$change||$change['status']!=='queued')throw new \RuntimeException('Paket değişikliği isteği sırada değil.');
         $invoice=$this->db->prepare("SELECT status,total,amount_paid FROM invoices WHERE id=:id");$invoice->execute([':id'=>$change['invoice_id']]);$bill=$invoice->fetch();
-        if(!$bill||$bill['status']!=='paid'||(float)$bill['amount_paid']+0.005<(float)$bill['total'])throw new \\RuntimeException('Paket yükseltme faturası tamamen ödenmemiş.');
-        if($service['status']!=='active'||$service['provisioning_status']!=='completed'||(int)$service['product_id']!==(int)$change['from_product_id']||empty($service['remote_username'])||empty($service['remote_domain'])||empty($service['server_id']))throw new \\RuntimeException('Hizmet durumu değişti; paket yükseltme iptal edildi.');
+        if(!$bill||$bill['status']!=='paid'||(float)$bill['amount_paid']+0.005<(float)$bill['total'])throw new \RuntimeException('Paket yükseltme faturası tamamen ödenmemiş.');
+        if($service['status']!=='active'||$service['provisioning_status']!=='completed'||(int)$service['product_id']!==(int)$change['from_product_id']||empty($service['remote_username'])||empty($service['remote_domain'])||empty($service['server_id']))throw new \RuntimeException('Hizmet durumu değişti; paket yükseltme iptal edildi.');
         $sq=$this->db->prepare('SELECT * FROM servers WHERE id=:id AND enabled=1 LIMIT 1');$sq->execute([':id'=>$service['server_id']]);$server=$sq->fetch();
-        if(!$server)throw new \\RuntimeException('Hizmet sunucusu bulunamadı veya devre dışı.');
-        if(!in_array($server['panel_type'],['cpanel','plesk'],true))throw new \\RuntimeException('Bu sunucu panelinde paket değiştirme desteklenmiyor.');
+        if(!$server)throw new \RuntimeException('Hizmet sunucusu bulunamadı veya devre dışı.');
+        if(!in_array($server['panel_type'],['cpanel','plesk'],true))throw new \RuntimeException('Bu sunucu panelinde paket değiştirme desteklenmiyor.');
         $server['secret']=$this->vault->decrypt((string)$server['secret_enc']);
         $config=['base_url'=>$server['base_url'],'username'=>$server['username'],'secret'=>$server['secret'],'auth_mode'=>$server['auth_mode'],'shared_ip'=>$server['shared_ip']];
-        $adapter=match($server['panel_type']){'cpanel'=>new CpanelWhmAdapter($config),'plesk'=>new PleskXmlAdapter($config),default=>throw new \\RuntimeException('Desteklenmeyen kontrol paneli.')};
+        $adapter=match($server['panel_type']){'cpanel'=>new CpanelWhmAdapter($config),'plesk'=>new PleskXmlAdapter($config),default=>throw new \RuntimeException('Desteklenmeyen kontrol paneli.')};
         $remoteCallStarted=true;
         $adapter->changePackage((string)$service['remote_username'],(string)$service['remote_domain'],(string)$change['target_package'],(string)($change['target_package_guid']??''),(string)($change['target_package_external_id']??''));
         $now=gmdate('Y-m-d H:i:s');$this->db->beginTransaction();
         $u=$this->db->prepare("UPDATE services SET product_id=:product,amount=:amount,updated_at=:updated WHERE id=:id AND product_id=:old AND status='active'");
         $u->execute([':product'=>$change['to_product_id'],':amount'=>$change['target_amount'],':updated'=>$now,':id'=>$service['id'],':old'=>$change['from_product_id']]);
-        if($u->rowCount()!==1)throw new \\RuntimeException('Uzak paket değişti ancak hizmet kaydı eşzamanlı güncellenemedi.');
+        if($u->rowCount()!==1)throw new \RuntimeException('Uzak paket değişti ancak hizmet kaydı eşzamanlı güncellenemedi.');
         $this->db->prepare("UPDATE service_package_changes SET status='completed',updated_at=:updated WHERE id=:id")->execute([':updated'=>$now,':id'=>$changeId]);
         $this->db->prepare("UPDATE provisioning_jobs SET status='completed',locked_at=NULL,last_error=NULL,updated_at=:updated WHERE id=:id")->execute([':updated'=>$now,':id'=>$job['id']]);
         $this->audit((int)$service['id'],(int)$server['id'],'package_change','success','Ödenmiş yükseltme sonrası uzak paket değiştirildi.');
