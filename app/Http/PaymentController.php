@@ -216,14 +216,21 @@ final class PaymentController
                 $this->db->prepare("UPDATE orders SET status='paid',updated_at=:updated WHERE id=:id")->execute([':updated'=>$now,':id'=>$invoice['order_id']]);
                 $exists=$this->db->prepare('SELECT COUNT(*) FROM services WHERE order_id=:id');$exists->execute([':id'=>$invoice['order_id']]);
                 if((int)$exists->fetchColumn()===0){
-                    $service=$this->db->prepare("INSERT INTO services(user_id,product_id,order_id,status,billing_cycle,amount,next_due_date,created_at,updated_at)
-                        SELECT o.user_id,oi.product_id,o.id,'pending',oi.billing_cycle,oi.line_total,DATE_ADD(CURDATE(),INTERVAL 30 DAY),:created,:updated
-                        FROM orders o JOIN order_items oi ON oi.order_id=o.id WHERE o.id=:order_id");
-                    $service->execute([':created'=>$now,':updated'=>$now,':order_id'=>$invoice['order_id']]);
+                    $items=$this->db->prepare('SELECT o.user_id,oi.product_id,oi.billing_cycle,oi.line_total FROM orders o JOIN order_items oi ON oi.order_id=o.id WHERE o.id=:order_id');
+                    $items->execute([':order_id'=>$invoice['order_id']]);
+                    $service=$this->db->prepare("INSERT INTO services(user_id,product_id,order_id,status,billing_cycle,amount,next_due_date,created_at,updated_at) VALUES(:user,:product,:order_id,'pending',:cycle,:amount,:due,:created,:updated)");
+                    foreach($items->fetchAll() as $item)$service->execute([':user'=>$item['user_id'],':product'=>$item['product_id'],':order_id'=>$invoice['order_id'],':cycle'=>$item['billing_cycle'],':amount'=>$item['line_total'],':due'=>$this->nextDueDate((string)$item['billing_cycle']),':created'=>$now,':updated'=>$now]);
                 }
             }
             $this->db->commit();
         }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();throw $e;}
+    }
+
+    private function nextDueDate(string $cycle):?string
+    {
+        $modify=['monthly'=>'+1 month','quarterly'=>'+3 months','semiannually'=>'+6 months','annually'=>'+1 year','biennially'=>'+2 years','triennially'=>'+3 years'];
+        if(!isset($modify[$cycle]))return null;
+        return (new \DateTimeImmutable('today',new \DateTimeZone('UTC')))->modify($modify[$cycle])->format('Y-m-d');
     }
 
     private function updateTransaction(int $id,array $fields):void
@@ -231,7 +238,7 @@ final class PaymentController
         $allowed=['status','gateway_transaction_id','request_reference','response_code','safe_message'];
         $sets=[];$params=[':id'=>$id];foreach($fields as $k=>$v)if(in_array($k,$allowed,true)){$sets[]=$k.'=:'.$k;$params[':'.$k]=$v;}
         if(!$sets)return;$sets[]='updated_at=:updated';$params[':updated']=gmdate('Y-m-d H:i:s');
-        $q=$this->db->prepare('UPDATE payment_transactions SET '.implode(',',$sets).' WHERE id=:id');$q->execute($params);
+        $where=' WHERE id=:id';if(isset($fields['status'])&&$fields['status']!=='success')$where.=" AND status<>'success'";$q=$this->db->prepare('UPDATE payment_transactions SET '.implode(',',$sets).$where);$q->execute($params);
     }
 
     private function settings():array
@@ -241,7 +248,7 @@ final class PaymentController
         foreach($q->fetchAll() as $row)if(array_key_exists($row['setting_key'],$defaults))$defaults[$row['setting_key']]=(string)$row['setting_value'];
         return $defaults;
     }
-    private function isStaff():bool{return in_array((Auth::user()['role']??''),['super_admin','admin','staff'],true);}
+    private function isStaff():bool{return in_array((Auth::user()['role']??''),['super_admin','admin'],true);}
     private function clientIp():string
     {$ip=(string)($_SERVER['REMOTE_ADDR']??'');return filter_var($ip,FILTER_VALIDATE_IP)?$ip:'127.0.0.1';}
     private function asciiEmail(string $email):string
