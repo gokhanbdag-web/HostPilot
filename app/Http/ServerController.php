@@ -98,7 +98,10 @@ final class ServerController
                 echo '<form method="post" action="'.$this->url('/admin/services/provision').'" class="provision"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="service_id" value="'.(int)$row['id'].'"><select name="server_id" required><option value="">Sunucu seçin</option>';
                 foreach($servers as $sv)echo '<option value="'.(int)$sv['id'].'">'. $this->e($sv['name']).'</option>';
                 echo '</select><input name="domain" required placeholder="example.com" value="'.$this->e((string)($row['domain']??'')).'"><button>Hesabı oluştur</button></form>';
-            }else echo '<span class="muted">İşlem tamamlandı</span>';
+            }elseif(!empty($row['provisioned_at'])&&in_array($row['status'],['active','suspended'],true)){
+                $op=$row['status']==='active'?'suspend':'unsuspend';$label=$op==='suspend'?'Hizmeti askıya al':'Yeniden etkinleştir';
+                echo '<form method="post" action="'.$this->url('/admin/services/lifecycle').'" onsubmit="return confirm(\\'Bu hizmetin sunucu durumunu değiştirmek istediğinize emin misiniz?\\')"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="service_id" value="'.(int)$row['id'].'"><input type="hidden" name="operation" value="'.$op.'"><button class="secondary">'.$label.'</button></form>';
+            }else echo '<span class="muted">İşlem bekliyor</span>';
             echo '</td></tr>';
         }
         if(!$rows)echo '<tr><td colspan="5">Henüz hizmet bulunmuyor.</td></tr>';
@@ -133,6 +136,36 @@ final class ServerController
             if($this->db->inTransaction())$this->db->rollBack();
             $this->db->prepare("UPDATE services SET provisioning_status='failed',provisioning_error=:error,updated_at=:updated WHERE id=:id")->execute([':error'=>substr($e->getMessage(),0,1000),':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$id]);
             $this->log($id,$serverId,'create','failed',substr($e->getMessage(),0,1000));
+            $this->go('/admin/services','error='.$e->getMessage());
+        }
+    }
+
+    public function lifecycle():void
+    {
+        if(!$this->allowed())return;
+        if(!$this->csrf())$this->go('/admin/services','error=Güvenlik doğrulaması başarısız.');
+        $id=(int)($_POST['service_id']??0);$operation=(string)($_POST['operation']??'');
+        if(!in_array($operation,['suspend','unsuspend'],true))$this->go('/admin/services','error=Geçersiz hizmet işlemi.');
+        try{
+            $this->db->beginTransaction();
+            $q=$this->db->prepare("SELECT * FROM services WHERE id=:id FOR UPDATE");$q->execute([':id'=>$id]);$service=$q->fetch();
+            if(!$service||empty($service['provisioned_at'])||empty($service['remote_username'])||empty($service['remote_domain'])||empty($service['server_id']))throw new \RuntimeException('Sunucuda oluşturulmuş hizmet kaydı bulunamadı.');
+            if($operation==='suspend'&&$service['status']!=='active')throw new \RuntimeException('Yalnızca aktif hizmetler askıya alınabilir.');
+            if($operation==='unsuspend'&&$service['status']!=='suspended')throw new \RuntimeException('Yalnızca askıdaki hizmetler yeniden etkinleştirilebilir.');
+            $server=$this->server((int)$service['server_id']);
+            $this->db->commit();
+            $adapter=$this->adapter($server);
+            if($operation==='suspend')$adapter->suspendAccount((string)$service['remote_username'],(string)$service['remote_domain'],'HostPilot billing / administrator action');
+            else $adapter->unsuspendAccount((string)$service['remote_username'],(string)$service['remote_domain']);
+            $newStatus=$operation==='suspend'?'suspended':'active';$now=gmdate('Y-m-d H:i:s');
+            $u=$this->db->prepare("UPDATE services SET status=:status,updated_at=:updated WHERE id=:id AND status=:old");
+            $u->execute([':status'=>$newStatus,':updated'=>$now,':id'=>$id,':old'=>$service['status']]);
+            if($u->rowCount()!==1)throw new \RuntimeException('Hizmet durumu eşzamanlı değişti; işlem tekrar kontrol edilmeli.');
+            $this->log($id,(int)$service['server_id'],$operation,'success','Kontrol paneli hizmet durumu: '.$newStatus);
+            $this->go('/admin/services','notice=Sunucu ve HostPilot hizmet durumu güncellendi.');
+        }catch(Throwable $e){
+            if($this->db->inTransaction())$this->db->rollBack();
+            $this->log($id,0,$operation,'failed',substr($e->getMessage(),0,900));
             $this->go('/admin/services','error='.$e->getMessage());
         }
     }
