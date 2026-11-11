@@ -273,6 +273,14 @@ final class PaymentController
     {$ip=(string)($_SERVER['REMOTE_ADDR']??'');return filter_var($ip,FILTER_VALIDATE_IP)?$ip:'127.0.0.1';}
     private function asciiEmail(string $email):string
     {return substr(preg_replace('/[^\\x20-\\x7E]/','',$email)??$email,0,100);}
+    private function validTurkishId(string $number):bool
+    {
+        if(!preg_match('/^[1-9][0-9]{10}$/',$number))return false;
+        $d=array_map('intval',str_split($number));
+        $odd=$d[0]+$d[2]+$d[4]+$d[6]+$d[8];$even=$d[1]+$d[3]+$d[5]+$d[7];
+        return (($odd*7-$even)%10)===$d[9]&&(array_sum(array_slice($d,0,10))%10)===$d[10];
+    }
+
     private function normalizeMoney(mixed $v):string
     {$s=rtrim(rtrim(number_format((float)$v,8,'.',''),'0'),'.');return $s===''?'0':$s;}
     private function pageStart(string $title):void
