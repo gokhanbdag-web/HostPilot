@@ -41,3 +41,5 @@ Shared hosting / cPanel-compatible deployment, with PHP 8.3+ as the initial base
 ## License
 
 License and commercial distribution terms are to be decided before the first public release.
+
+**Package-change integration status:** cPanel/WHM uses WHM API 1 `changepackage`; Plesk uses `webspace/switch-subscription` with both plan GUID and external ID. DirectAdmin package switching is disabled until the connected server's own OpenAPI contract is verified. Customer-facing upgrade/downgrade billing and queue workflow are still in development.
