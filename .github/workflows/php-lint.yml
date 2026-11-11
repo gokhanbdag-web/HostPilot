@@ -21,3 +21,4 @@ jobs:
           php tests/hosting_adapters.php
           php tests/provisioning_queue.php
           php tests/billing_lifecycle.php
+          php tests/package_changes.php
