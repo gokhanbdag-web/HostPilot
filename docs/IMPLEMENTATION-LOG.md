@@ -106,3 +106,10 @@
 ### Payment verification tooling
 - Added dependency-free PHP smoke tests for AES-256-GCM credential vault round trips, rejection under a different install key, iyzico IYZWSv2 request-signature composition, and PayTR callback signature validation/tamper rejection.
 - GitHub Actions now runs PHP syntax checks and the payment cryptography smoke tests on pushes to any branch and pull requests.
+
+
+### Payment operations visibility
+- Added an administrator payment transaction history view with provider, invoice/customer, amount, status, provider reference, and safe response notes.
+- Staff roles cannot access payment credential settings or payment transaction history.
+- Cancelled/refunded invoices are blocked from online payment; failed checkout initialization is recorded as a failed transaction.
+- iyzico fraud-review outcomes remain pending rather than being incorrectly marked as failed.
