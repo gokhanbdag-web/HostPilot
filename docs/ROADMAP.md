@@ -69,11 +69,12 @@
 - [x] Configurable 1–30 day payment grace period and overdue-balance suspension queue.
 - [x] Payment-triggered billing unsuspension with manual-vs-billing suspension source protection.
 - [x] Bounded exponential retries before external calls; ambiguous external lifecycle outcomes enter manual review.
-- [ ] Async terminate/package-change workflows.
+- [x] Paid customer package-upgrade workflow for cPanel/WHM and Plesk: same-cycle mapped-plan validation, remaining-term prorated invoice, payment-gated queue, worker application, and manual reconciliation for ambiguous remote results.
+- [ ] Package downgrades and scheduled next-cycle changes; DirectAdmin package switching after per-server OpenAPI verification.
 - [x] Admin automation queue with safe retry for pre-call failures and manual confirmation for ambiguous account creation.
 - [x] Invoice-aware admin reconciliation for ambiguous suspend/reactivate jobs, with explicit remote-applied vs remote-not-applied confirmation and safe invoice revalidation.
 - [x] Manual remote-state reconciliation for ambiguous termination jobs.
-- [ ] Live remote-state querying adapters and customer-facing package upgrade/downgrade workflows.
+- [ ] Live remote-state querying adapters and customer-facing package downgrade workflows.
 - [x] Verified package-change adapter capability for cPanel/WHM and Plesk; Plesk plan GUID + external ID mapping; DirectAdmin remains explicitly unsupported until its server-specific OpenAPI contract is verified.
 
 **Exit criteria:** Sandbox/test server lifecycle operations work with least-privilege credentials and full audit history.
