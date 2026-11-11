@@ -23,7 +23,7 @@ final class CatalogController
     {
         $q=$this->db->prepare("SELECT p.*,g.name AS group_name FROM products p LEFT JOIN product_groups g ON g.id=p.group_id WHERE p.slug=:slug AND p.status='active' LIMIT 1");$q->execute([':slug'=>$slug]);$p=$q->fetch();
         if(!$p){http_response_code(404);echo 'Ürün bulunamadı.';return;}
-        $prices=$this->db->prepare('SELECT billing_cycle,price,currency,setup_fee FROM product_pricing WHERE product_id=:id AND is_active=1 ORDER BY FIELD(billing_cycle,\\'monthly\\',\\'quarterly\\',\\'semiannually\\',\\'annually\\',\\'biennially\\',\\'triennially\\')');$prices->execute([':id'=>$p['id']]);$rows=$prices->fetchAll();
+        $prices=$this->db->prepare('SELECT billing_cycle,price,currency,setup_fee FROM product_pricing WHERE product_id=:id AND is_active=1 ORDER BY FIELD(billing_cycle,\'monthly\',\'quarterly\',\'semiannually\',\'annually\',\'biennially\',\'triennially\')');$prices->execute([':id'=>$p['id']]);$rows=$prices->fetchAll();
         $this->start($p['name']);echo '<main class="detail"><a class="brand" href="'.$this->url('/').'">HOST<span>PILOT</span></a><a class="back" href="'.$this->url('/').'">← Tüm paketler</a><section class="productdetail"><small>'.$this->e($p['group_name']??'HİZMET PAKETİ').'</small><h1>'.$this->e($p['name']).'</h1><div class="description">'.nl2br($this->e((string)$p['description'])).'</div><h2>Faturalandırma dönemi seçin</h2>';
         if(!$rows)echo '<p>Bu ürün için henüz aktif fiyat tanımlanmamış.</p>';
         foreach($rows as $r)echo '<form method="post" action="'.$this->url('/order/create').'" class="price"><input type="hidden" name="_token" value="'.(class_exists(Auth::class)?$this->e(Auth::csrfToken()):'').'"><input type="hidden" name="product_id" value="'.(int)$p['id'].'"><label><input type="radio" name="billing_cycle" value="'.$this->e($r['billing_cycle']).'" '.($r===$rows[0]?'checked':'').' required> '.$this->e($this->cycle($r['billing_cycle'])).' — <b>'.number_format((float)$r['price'],2,',','.').' '.$this->e($r['currency']).'</b></label><button class="button">Siparişe devam et</button></form>';
@@ -86,7 +86,7 @@ final class CatalogController
 
     private function staff():?array{if(!Auth::check()){$this->redirect('/admin/login');return null;}$u=Auth::user();if(!in_array($u['role']??'', ['super_admin','admin','staff'],true)){http_response_code(403);echo 'Yetkisiz erişim.';return null;}return $u;}
     private function cycle(string $c):string{return ['monthly'=>'Aylık','quarterly'=>'3 aylık','semiannually'=>'6 aylık','annually'=>'Yıllık','biennially'=>'2 yıllık','triennially'=>'3 yıllık','onetime'=>'Tek seferlik'][$c]??$c;}
-    private function slug(string $s):string{$s=mb_strtolower($s,'UTF-8');$s=strtr($s,['ı'=>'i','ğ'=>'g','ü'=>'u','ş'=>'s','ö'=>'o','ç'=>'c']);$s=preg_replace('/[^a-z0-9]+/','-',$s)??'';return trim($s,'-')?:'product';}
+    private function slug(string $s):string{$s=strtolower($s);$s=strtr($s,['ı'=>'i','ğ'=>'g','ü'=>'u','ş'=>'s','ö'=>'o','ç'=>'c']);$s=preg_replace('/[^a-z0-9]+/','-',$s)??'';return trim($s,'-')?:'product';}
     private function url(string $p):string{return htmlspecialchars(rtrim($this->basePath,'/').$p,ENT_QUOTES,'UTF-8');}
     private function redirect(string $p):never{header('Location: '.$this->url($p));exit;}
     private function e(string $s):string{return htmlspecialchars($s,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');}
