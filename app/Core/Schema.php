@@ -219,6 +219,21 @@ final class Schema
             if(!(int)$fk)$db->exec('ALTER TABLE invoices ADD CONSTRAINT fk_invoice_service FOREIGN KEY(service_id) REFERENCES services(id) ON DELETE SET NULL');
             $record=$db->prepare('INSERT IGNORE INTO migrations(migration,batch,applied_at) VALUES(:name,5,:applied)');
             $record->execute([':name'=>$billingLifecycleName,':applied'=>gmdate('Y-m-d H:i:s')]);
+
+        $provisioningIntentName='20261111_0006_provisioning_intent';
+        $pi=$db->prepare('SELECT id FROM migrations WHERE migration=:name LIMIT 1');
+        $pi->execute([':name'=>$provisioningIntentName]);
+        if(!$pi->fetchColumn()){
+            $addIntentColumn=static function(string $column,string $definition)use($db):void{
+                $check=$db->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='services' AND COLUMN_NAME=:column");
+                $check->execute([':column'=>$column]);
+                if(!(int)$check->fetchColumn())$db->exec('ALTER TABLE services ADD COLUMN '.$column.' '.$definition);
+            };
+            $addIntentColumn('provisioning_username','VARCHAR(120) NULL');
+            $addIntentColumn('provisioning_password_enc','TEXT NULL');
+            $record=$db->prepare('INSERT IGNORE INTO migrations(migration,batch,applied_at) VALUES(:name,6,:applied)');
+            $record->execute([':name'=>$provisioningIntentName,':applied'=>gmdate('Y-m-d H:i:s')]);
+        }
         }
     }
 }
