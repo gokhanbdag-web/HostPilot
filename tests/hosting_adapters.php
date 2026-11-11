@@ -35,11 +35,17 @@ $contract=new ReflectionClass(HostPilot\Hosting\HostingAdapter::class);
 hostingExpect($contract->hasMethod('suspendAccount'),'Hosting adapter contract exposes account suspension');
 hostingExpect($contract->hasMethod('unsuspendAccount'),'Hosting adapter contract exposes account reactivation');
 hostingExpect($contract->hasMethod('terminateAccount'),'Hosting adapter contract exposes permanent account termination');
+hostingExpect($contract->hasMethod('changePackage'),'Hosting adapter contract exposes package changes');
+$daPackageRejected=false;try{$directAdmin->changePackage('validuser','example.test','Business');}catch(RuntimeException $e){$daPackageRejected=str_contains($e->getMessage(),'OpenAPI sözleşmesi');}
+hostingExpect($daPackageRejected,'DirectAdmin package change fails safely until server-specific API contract is verified');
+$pleskMissingPlanRejected=false;try{$plesk->changePackage('hp123456','example.test','Business');}catch(RuntimeException $e){$pleskMissingPlanRejected=str_contains($e->getMessage(),'GUID');}
+hostingExpect($pleskMissingPlanRejected,'Plesk package change requires both plan identifiers before network access');
 foreach([HostPilot\Hosting\CpanelWhmAdapter::class,HostPilot\Hosting\DirectAdminAdapter::class,HostPilot\Hosting\PleskXmlAdapter::class] as $adapterClass){
     $adapter=new ReflectionClass($adapterClass);
     hostingExpect($adapter->implementsInterface(HostPilot\Hosting\HostingAdapter::class),'Adapter implements shared lifecycle contract: '.$adapterClass);
     hostingExpect($adapter->hasMethod('suspendAccount')&&$adapter->hasMethod('unsuspendAccount'),'Adapter provides suspend/reactivate methods: '.$adapterClass);
     hostingExpect($adapter->hasMethod('terminateAccount'),'Adapter provides termination method: '.$adapterClass);
+    hostingExpect($adapter->hasMethod('changePackage'),'Adapter provides package change method: '.$adapterClass);
 }
 
 echo 'Hosting adapter smoke tests completed.'.PHP_EOL;
