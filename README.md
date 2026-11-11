@@ -24,7 +24,7 @@ It is intended to provide three integrated experiences:
 
 ## Current status
 
-The repository now contains the initial browser-installer flow, PDO connection layer, admin authentication, and a responsive full-screen dashboard with a Chart.js customer-registration chart. Billing, payment, provisioning, registrar, ticketing, storefront themes, visual builder, and infrastructure monitoring are still under development and are not yet production-ready.
+The repository now contains the initial browser-installer flow, PDO connection layer, admin authentication, and a responsive full-screen dashboard with a Chart.js customer-registration chart. The customer portal now includes registration/login, a client dashboard, customer-owned support tickets with threaded replies, and a public knowledge base listing. Staff can review, answer, close, and reopen tickets from the admin area. Billing, payment, provisioning, registrar, storefront themes, visual builder, and infrastructure monitoring are still under development and are not yet production-ready.
 
 ## Documentation
 
