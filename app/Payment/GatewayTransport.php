@@ -18,14 +18,19 @@ final class GatewayTransport
         $body=json_encode($data,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRESERVE_ZERO_FRACTION);
         if(!is_string($body))throw new \RuntimeException('Ödeme isteği hazırlanamadı.');
         $rnd=(string)round(microtime(true)*1000).bin2hex(random_bytes(5));
-        $signature=hash_hmac('sha256',$rnd.$path.$body,$secretKey);
-        $auth=base64_encode('apiKey:'.$apiKey.'&randomKey:'.$rnd.'&signature:'.$signature);
+        $authorization=self::buildIyzicoAuthorization($path,$body,$apiKey,$secretKey,$rnd);
         [$status,$response]=self::request($url,$body,'application/json',[
-            'Authorization: IYZWSv2 '.$auth,'x-iyzi-rnd: '.$rnd
+            'Authorization: '.$authorization,'x-iyzi-rnd: '.$rnd
         ]);
         $json=json_decode($response,true);
         if($status<200||$status>=300||!is_array($json))throw new \RuntimeException('iyzico geçerli bir yanıt döndürmedi (HTTP '.$status.').');
         return $json;
+    }
+
+    public static function buildIyzicoAuthorization(string $path,string $body,string $apiKey,string $secretKey,string $randomKey):string
+    {
+        $signature=hash_hmac('sha256',$randomKey.$path.$body,$secretKey);
+        return 'IYZWSv2 '.base64_encode('apiKey:'.$apiKey.'&randomKey:'.$randomKey.'&signature:'.$signature);
     }
 
     private static function request(string $url,string $body,string $contentType,array $extra=[]):array
