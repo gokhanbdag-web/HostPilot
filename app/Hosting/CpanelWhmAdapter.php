@@ -24,6 +24,11 @@ final class CpanelWhmAdapter implements HostingAdapter
     {$this->call('suspendacct',['user'=>$username,'reason'=>$reason,'disallowun'=>1]);}
     public function unsuspendAccount(string $username,string $domain):void
     {$this->call('unsuspendacct',['user'=>$username]);}
+    public function terminateAccount(string $username,string $domain):void
+    {
+        if(!preg_match('/^[a-z][a-z0-9]{0,15}$/',$username))throw new RuntimeException('cPanel kullanıcı adı geçersiz.');
+        $this->call('removeacct',['user'=>$username],'POST');
+    }
     public function createAccount(array $a):array
     {
         $username=strtolower((string)$a['username']);
