@@ -112,6 +112,9 @@ The HostPilot operator must obtain:
 
 ## Hosting package changes
 
+Customer-facing cPanel/WHM and Plesk upgrades now create a prorated remaining-term invoice. The remote package is changed only after the payment callback has verified full settlement; the bounded cron worker performs the change and ambiguous outcomes require explicit administrator reconciliation. Downgrades are not yet exposed. DirectAdmin remains fail-closed.
+
+
 - cPanel/WHM uses the documented WHM API 1 `changepackage` operation with the remote account username and package name.
 - Plesk uses XML API `webspace/switch-subscription`. The request requires both `plan-guid` and `plan-external-id`; the server-product mapping screen stores these separately from the package display name.
 - DirectAdmin is deliberately fail-closed for package changes. DirectAdmin publishes the actual OpenAPI/Swagger contract at `/static/swagger.json` per server, but HostPilot does not guess an endpoint or mutate user configuration files. A server-specific documented operation must be verified before enabling it.
