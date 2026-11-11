@@ -82,6 +82,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new RuntimeException('storage dizini oluşturulamadı.');
             }
 
+            // Defense in depth: deny direct HTTP access to secrets, logs, sessions, and private files.
+            $storageHtaccess = $storage . DIRECTORY_SEPARATOR . '.htaccess';
+            if (!is_file($storageHtaccess)) {
+                $denyRules = "<IfModule mod_authz_core.c>\\nRequire all denied\\n</IfModule>\\n<IfModule !mod_authz_core.c>\\nDeny from all\\n</IfModule>\\n";
+                if (file_put_contents($storageHtaccess, $denyRules, LOCK_EX) === false) {
+                    throw new RuntimeException('storage erişim koruması yazılamadı.');
+                }
+                @chmod($storageHtaccess, 0640);
+            }
+
             $dsn = sprintf('mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4', $dbHost, $dbPort, $dbName);
             $pdo = new PDO($dsn, $dbUser, $dbPass, [
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
