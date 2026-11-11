@@ -72,7 +72,8 @@
 - [ ] Async terminate/package-change workflows.
 - [x] Admin automation queue with safe retry for pre-call failures and manual confirmation for ambiguous account creation.
 - [x] Invoice-aware admin reconciliation for ambiguous suspend/reactivate jobs, with explicit remote-applied vs remote-not-applied confirmation and safe invoice revalidation.
-- [ ] Full remote-state querying adapters and reconciliation for termination/package changes.
+- [x] Manual remote-state reconciliation for ambiguous termination jobs.
+- [ ] Live remote-state querying adapters and package upgrade/downgrade workflows.
 
 **Exit criteria:** Sandbox/test server lifecycle operations work with least-privilege credentials and full audit history.
 
