@@ -36,7 +36,7 @@ The repository now contains the initial browser-installer flow, PDO connection l
 
 ## Target deployment
 
-Shared hosting / cPanel-compatible deployment, with PHP 8.3+ as the initial baseline (subject to the hosting environment's available extensions), MySQL 8.0+ or a tested compatible MariaDB release, HTTPS, and a browser-accessible installer. Scheduled automation will use a documented cPanel cron entry where available; a constrained web-trigger fallback will not be represented as equivalent to a real scheduler.
+Shared hosting / cPanel-compatible deployment, with PHP 8.3+ as the initial baseline (subject to the hosting environment's available extensions), PDO MySQL, OpenSSL, cURL, MySQL 8.0+ or a tested compatible MariaDB release, HTTPS, and a browser-accessible installer. Outbound hosting-panel integrations require cURL and valid remote TLS certificates. No Composer, SSH, or CLI is required for the installer. Scheduled automation will use a documented cPanel cron entry where available; a constrained web-trigger fallback will not be represented as equivalent to a real scheduler.
 
 ## License
 
