@@ -55,11 +55,12 @@
 **Exit criteria:** Sandbox payment can settle an invoice exactly once; failures and retries are handled.
 
 ## Phase 5 — Hosting provisioning
-- [ ] Server registry and encrypted credentials.
-- [ ] cPanel/WHM adapter.
-- [ ] DirectAdmin adapter.
-- [ ] Plesk REST adapter plus XML fallback for documented gaps.
-- [ ] Connection/capability tests.
+- [x] Server registry and encrypted API credentials (AES-256-GCM).
+- [x] cPanel/WHM connection test and create-account adapter.
+- [x] DirectAdmin connection test and create-user adapter.
+- [x] Plesk XML API connection test and subscription-create adapter (documented XML protocol).
+- [x] HTTPS connection tests and product-to-remote-package mapping UI.
+- [x] Admin-triggered first-time hosting account provisioning with audit log and encrypted customer credentials.
 - [ ] Async create/suspend/unsuspend/terminate/package-change workflows.
 - [ ] Reconciliation and manual retry interface.
 
