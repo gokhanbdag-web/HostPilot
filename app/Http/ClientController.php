@@ -7,7 +7,8 @@ use Throwable;
 
 final class ClientController
 {
-    public function __construct(private readonly PDO $db, private readonly string $basePath = '') {}
+    private SecretVault $vault;
+    public function __construct(private readonly PDO $db, private readonly string $basePath = '',string $appKey='') {$this->vault=new SecretVault($appKey);}
 
     public function login(): void
     {
@@ -38,7 +39,26 @@ final class ClientController
     public function dashboard():void
     {
         $u=$this->customer();if(!$u)return;$s=$this->db->prepare('SELECT COUNT(*) FROM tickets WHERE user_id=:id');$s->execute([':id'=>$u['id']]);$n=(int)$s->fetchColumn();
-        $this->shell($u,'Müşteri paneli');echo '<section class="hero"><span>HOSTPILOT CLIENT AREA</span><h1>Merhaba, '.$this->e($u['name']).'</h1><p>Hesabınızı ve destek işlemlerinizi yönetin.</p></section><div class="stats"><article><small>Destek taleplerim</small><strong>'.$n.'</strong></article><article><small>Hesap durumu</small><strong>Aktif</strong></article><article><small>Üyelik tarihi</small><strong>'.date('d.m.Y',strtotime($u['created_at'])).'</strong></article></div><section class="panel"><h2>Destek merkezi</h2><p>Bir sorunuz varsa destek ekibimize ulaşın.</p><a class="button" href="'.$this->url('/client/tickets/new').'">Yeni destek talebi</a><a class="quick" href="'.$this->url('/client/orders').'">Siparişlerim →</a><a class="quick" href="'.$this->url('/client/invoices').'">Faturalarım →</a><a class="quick" href="'.$this->url('/client/tickets').'">Destek taleplerim →</a><a class="quick" href="'.$this->url('/knowledgebase').'">Sıkça sorulan sorular / Bilgi bankası →</a></section>';$this->shellEnd();
+        $this->shell($u,'Müşteri paneli');echo '<section class="hero"><span>HOSTPILOT CLIENT AREA</span><h1>Merhaba, '.$this->e($u['name']).'</h1><p>Hesabınızı ve destek işlemlerinizi yönetin.</p></section><div class="stats"><article><small>Destek taleplerim</small><strong>'.$n.'</strong></article><article><small>Hesap durumu</small><strong>Aktif</strong></article><article><small>Üyelik tarihi</small><strong>'.date('d.m.Y',strtotime($u['created_at'])).'</strong></article></div><section class="panel"><h2>Destek merkezi</h2><p>Bir sorunuz varsa destek ekibimize ulaşın.</p><a class="button" href="'.$this->url('/client/tickets/new').'">Yeni destek talebi</a><a class="quick" href="'.$this->url('/client/orders').'">Siparişlerim →</a><a class="quick" href="'.$this->url('/client/services').'">Hosting hizmetlerim →</a><a class="quick" href="'.$this->url('/client/invoices').'">Faturalarım →</a><a class="quick" href="'.$this->url('/client/tickets').'">Destek taleplerim →</a><a class="quick" href="'.$this->url('/knowledgebase').'">Sıkça sorulan sorular / Bilgi bankası →</a></section>';$this->shellEnd();
+    }
+
+    public function services():void
+    {
+        $u=$this->customer();if(!$u)return;
+        $q=$this->db->prepare("SELECT s.*,p.name AS product_name,sv.name AS server_name,sv.panel_type,sv.base_url FROM services s JOIN products p ON p.id=s.product_id LEFT JOIN servers sv ON sv.id=s.server_id WHERE s.user_id=:user ORDER BY s.id DESC");
+        $q->execute([':user'=>$u['id']]);$rows=$q->fetchAll();
+        $this->shell($u,'Hizmetlerim');
+        echo '<section class="panel"><div class="panelhead"><div><h1>Hosting hizmetlerim</h1><p>Aktif hizmetleriniz ve kontrol paneli erişim bilgileriniz</p></div><a class="back" href="'.$this->url('/client').'">← Müşteri paneli</a></div>';
+        if(!$rows)echo '<div class="empty">Henüz hesabınıza bağlı bir hosting hizmeti bulunmuyor.</div>';
+        foreach($rows as $row){
+            echo '<article class="kb"><small>'.$this->e(strtoupper((string)($row['panel_type']??'BEKLEMEDE'))).' · '.$this->e((string)$row['status']).'</small><h2>'.$this->e($row['product_name']).'</h2><p>Domain: <b>'.$this->e((string)($row['remote_domain']??$row['domain']??'Henüz tanımlanmadı')).'</b><br>Sunucu: '.$this->e((string)($row['server_name']??'Henüz atanmadı')).'<br>Hesap durumu: '.$this->e((string)($row['provisioning_status']??'not_started')).'</p>';
+            if(($row['provisioning_status']??'')==='completed'&&$row['remote_username']){
+                $password='';try{$password=$this->vault->decrypt((string)$row['remote_password_enc']);}catch(Throwable){}
+                echo '<details><summary>Hosting giriş bilgilerimi göster</summary><p>Kullanıcı adı: <b>'.$this->e((string)$row['remote_username']).'</b><br>Parola: <b>'.$this->e($password!==''?$password:'Parola bilgisi bulunamadı').'</b><br>Kontrol paneli adresi: '.$this->e((string)($row['base_url']??'')).'</p><small>Bu bilgiler yalnızca kendi hesabınızda görüntülenir. Güvenli bir yerde saklayın.</small></details>';
+            }
+            echo '</article>';
+        }
+        echo '</section>';$this->shellEnd();
     }
 
     public function tickets():void
