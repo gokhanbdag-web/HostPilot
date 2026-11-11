@@ -65,5 +65,5 @@ final class PackageChangeController
     private function end():void{echo '</body></html>';}
     private function url(string $p):string{return htmlspecialchars(rtrim($this->basePath,'/').$p,ENT_QUOTES,'UTF-8');}
     private function e(string $v):string{return htmlspecialchars($v,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');}
-    private function go(string $p,string $query=''):never{$location=rtrim($this->basePath,'/').$p;if($query!=='')$location.='?'.http_build_query(['error'=>$query]);header('Location: '.$location);exit;}
+    private function go(string $p,string $query=''):never{$location=rtrim($this->basePath,'/').$p;if($query!==''){parse_str($query,$params);if($params)$location.=(str_contains($location,'?')?'&':'?').http_build_query($params);}header('Location: '.$location);exit;}
 }
