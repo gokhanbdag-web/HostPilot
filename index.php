@@ -70,6 +70,9 @@ if ($requestPath === '/client/logout' && $method === 'POST') { $client->logout()
 if ($requestPath === '/client' || $requestPath === '/client/') { $client->dashboard(); exit; }
 if ($requestPath === '/client/services' && $method === 'GET') { $client->services(); exit; }
 if ($requestPath === '/client/services/domain' && $method === 'POST') { $client->saveServiceDomain(); exit; }
+$packageChanges = new \\HostPilot\\Http\\PackageChangeController($pdo, $basePath);
+if ($requestPath === '/client/services/change' && $method === 'GET') { $packageChanges->index(); exit; }
+if ($requestPath === '/client/services/change' && $method === 'POST') { $packageChanges->create(); exit; }
 if ($requestPath === '/client/tickets' && $method === 'GET') { $client->tickets(); exit; }
 if ($requestPath === '/client/tickets/new' && in_array($method, ['GET', 'POST'], true)) { $client->newTicket(); exit; }
 if (preg_match('#^/client/tickets/([0-9]+)$#', $requestPath, $ticketMatch) && in_array($method, ['GET', 'POST'], true)) { $client->viewTicket((int)$ticketMatch[1]); exit; }
