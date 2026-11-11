@@ -11,4 +11,6 @@ interface HostingAdapter
     public function unsuspendAccount(string $username,string $domain):void;
     /** Permanently removes the remote hosting account. */
     public function terminateAccount(string $username,string $domain):void;
+    /** Changes the remote hosting plan. Plesk requires both plan GUID and external ID. */
+    public function changePackage(string $username,string $domain,string $package,string $packageGuid='',string $packageExternalId=''):void;
 }
