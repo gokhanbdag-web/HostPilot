@@ -46,9 +46,9 @@
 ## Phase 4 — Billing and payment
 - [x] Initial unpaid invoice generation with order-linked invoice line snapshots (legal e-invoice integration and full accounting rules remain pending).
 - [ ] Tax rules, currency conversion, credit balance, partial payments, refunds.
-- [ ] PayTR adapter and verified callback.
-- [ ] iyzico adapter and verified callback.
-- [ ] Reconciliation, payment logs, duplicate notification tests.
+- [x] PayTR iFrame token flow and HMAC-verified callback (merchant sandbox/live testing pending).
+- [x] iyzico Checkout Form initialize/retrieve with IYZWSv2 request signing and response signature validation (merchant sandbox/live testing pending).
+- [ ] Reconciliation UI, payment log views, and duplicate-notification integration tests.
 - [ ] Invoice email and customer invoice portal.
 
 **Exit criteria:** Sandbox payment can settle an invoice exactly once; failures and retries are handled.
