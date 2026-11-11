@@ -242,6 +242,12 @@ final class PaymentController
                     $service=$this->db->prepare("INSERT INTO services(user_id,product_id,order_id,status,billing_cycle,amount,next_due_date,provisioning_status,created_at,updated_at) VALUES(:user,:product,:order_id,'pending',:cycle,:amount,:due,'waiting_input',:created,:updated)");
                     foreach($items->fetchAll() as $item)$service->execute([':user'=>$item['user_id'],':product'=>$item['product_id'],':order_id'=>$invoice['order_id'],':cycle'=>$item['billing_cycle'],':amount'=>$item['line_total'],':due'=>$this->nextDueDate((string)$item['billing_cycle']),':created'=>$now,':updated'=>$now]);
                 }
+                if(!empty($invoice['service_id'])){
+                    $jobNow=gmdate('Y-m-d H:i:s');
+                    $jobType='unsuspend_'.(int)$invoice['id'];
+                    $job=$this->db->prepare("INSERT INTO provisioning_jobs(service_id,job_type,status,attempts,available_at,created_at,updated_at) VALUES(:service,:type,'queued',0,:available,:created,:updated) ON DUPLICATE KEY UPDATE status=IF(status IN ('failed','queued'),'queued',status),available_at=IF(status='failed',VALUES(available_at),available_at),last_error=IF(status='failed',NULL,last_error),updated_at=VALUES(updated_at)");
+                    $job->execute([':service'=>$invoice['service_id'],':type'=>$jobType,':available'=>$jobNow,':created'=>$jobNow,':updated'=>$jobNow]);
+                }
             }
             $this->db->commit();
         }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();throw $e;}
