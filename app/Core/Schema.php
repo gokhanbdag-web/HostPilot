@@ -195,6 +195,30 @@ final class Schema
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
             $record=$db->prepare('INSERT IGNORE INTO migrations(migration,batch,applied_at) VALUES(:name,4,:applied)');
             $record->execute([':name'=>$queueName,':applied'=>gmdate('Y-m-d H:i:s')]);
+
+        $billingLifecycleName='20261111_0005_service_billing_lifecycle';
+        $bl=$db->prepare('SELECT id FROM migrations WHERE migration=:name LIMIT 1');
+        $bl->execute([':name'=>$billingLifecycleName]);
+        if(!$bl->fetchColumn()){
+            $addColumn=static function(string $table,string $column,string $definition)use($db):void{
+                $check=$db->prepare('SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=:table_name AND COLUMN_NAME=:column_name');
+                $check->execute([':table_name'=>$table,':column_name'=>$column]);
+                if(!(int)$check->fetchColumn())$db->exec('ALTER TABLE '.$table.' ADD COLUMN '.$column.' '.$definition);
+            };
+            $addColumn('invoices','service_id','BIGINT UNSIGNED NULL');
+            $addColumn('invoices','service_period_start','DATE NULL');
+            $addColumn('services','suspension_source',"VARCHAR(24) NOT NULL DEFAULT 'none'");
+            $addColumn('services','suspension_invoice_id','BIGINT UNSIGNED NULL');
+            $addColumn('services','suspended_at','DATETIME NULL');
+            $invoiceIndex=$db->prepare("SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='invoices' AND INDEX_NAME='uq_invoice_service_period'");
+            if(!(int)$invoiceIndex->fetchColumn())$db->exec('ALTER TABLE invoices ADD UNIQUE KEY uq_invoice_service_period(service_id,service_period_start)');
+            $serviceIndex=$db->prepare("SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='invoices' AND INDEX_NAME='idx_invoice_service_due'");
+            if(!(int)$serviceIndex->fetchColumn())$db->exec('ALTER TABLE invoices ADD KEY idx_invoice_service_due(service_id,status,due_at)');
+            $fk=$db->prepare("SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() AND TABLE_NAME='invoices' AND CONSTRAINT_NAME='fk_invoice_service'");
+            if(!(int)$fk)$db->exec('ALTER TABLE invoices ADD CONSTRAINT fk_invoice_service FOREIGN KEY(service_id) REFERENCES services(id) ON DELETE SET NULL');
+            $record=$db->prepare('INSERT IGNORE INTO migrations(migration,batch,applied_at) VALUES(:name,5,:applied)');
+            $record->execute([':name'=>$billingLifecycleName,':applied'=>gmdate('Y-m-d H:i:s')]);
+        }
         }
     }
 }
