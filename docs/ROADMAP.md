@@ -44,8 +44,8 @@
 **Exit criteria:** User can browse products and place a pending order end-to-end.
 
 ## Phase 4 — Billing and payment
-- [ ] Invoice engine and immutable line-item snapshots.
-- [ ] Tax, currency, credit, partial payments, refunds.
+- [x] Initial unpaid invoice generation with order-linked invoice line snapshots (legal e-invoice integration and full accounting rules remain pending).
+- [ ] Tax rules, currency conversion, credit balance, partial payments, refunds.
 - [ ] PayTR adapter and verified callback.
 - [ ] iyzico adapter and verified callback.
 - [ ] Reconciliation, payment logs, duplicate notification tests.
