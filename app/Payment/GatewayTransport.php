@@ -30,15 +30,25 @@ final class GatewayTransport
 
     private static function request(string $url,string $body,string $contentType,array $extra=[]):array
     {
-        if(!function_exists('curl_init'))throw new \RuntimeException('Sunucuda PHP cURL eklentisi etkin olmalıdır.');
-        $ch=curl_init($url);
-        curl_setopt_array($ch,[
-            CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>$body,CURLOPT_RETURNTRANSFER=>true,
-            CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>35,CURLOPT_SSL_VERIFYPEER=>true,
-            CURLOPT_SSL_VERIFYHOST=>2,CURLOPT_HTTPHEADER=>array_merge(['Content-Type: '.$contentType,'Accept: application/json'],$extra)
-        ]);
-        $response=curl_exec($ch);$error=curl_error($ch);$status=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);curl_close($ch);
-        if(!is_string($response))throw new \RuntimeException('Ödeme bağlantısı kurulamadı: '.$error);
+        $headers=array_merge(['Content-Type: '.$contentType,'Accept: application/json'],$extra);
+        if(function_exists('curl_init')){
+            $ch=curl_init($url);
+            curl_setopt_array($ch,[
+                CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>$body,CURLOPT_RETURNTRANSFER=>true,
+                CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>35,CURLOPT_SSL_VERIFYPEER=>true,
+                CURLOPT_SSL_VERIFYHOST=>2,CURLOPT_HTTPHEADER=>$headers
+            ]);
+            $response=curl_exec($ch);$error=curl_error($ch);$status=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);curl_close($ch);
+            if(!is_string($response))throw new \RuntimeException('Ödeme bağlantısı kurulamadı: '.$error);
+            return [$status,$response];
+        }
+        $headerText=implode("\r\n",$headers);
+        $context=stream_context_create(['http'=>['method'=>'POST','header'=>$headerText,'content'=>$body,'timeout'=>35,'ignore_errors'=>true],
+            'ssl'=>['verify_peer'=>true,'verify_peer_name'=>true]]);
+        $response=@file_get_contents($url,false,$context);
+        if(!is_string($response))throw new \RuntimeException('Sunucuda cURL veya etkin HTTPS stream desteği bulunamadı.');
+        $status=0;
+        foreach(($http_response_header??[]) as $line)if(preg_match('#^HTTP/\\S+\\s+(\\d{3})#',$line,$m))$status=(int)$m[1];
         return [$status,$response];
     }
 }
