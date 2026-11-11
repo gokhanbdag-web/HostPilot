@@ -18,7 +18,7 @@ $checks=[
     'worker route registered'=>str_contains($routes,"'/cron/provision'"),
     'customer domain route registered'=>str_contains($routes,"'/client/services/domain'"),
     'admin termination route registered'=>str_contains($routes,"'/admin/services/terminate'"),
-    'termination requires exact domain confirmation'=>str_contains($server,"hash_equals((string)$service['remote_domain'],$confirmation)"),
+    'termination requires exact domain confirmation'=>str_contains($server,"hash_equals((string)\$service['remote_domain'],\$confirmation)"),
     'termination is queued instead of deleting in web request'=>str_contains($server,"INSERT INTO provisioning_jobs(service_id,job_type,status,attempts,available_at,created_at,updated_at)"),
     'worker dispatches termination jobs'=>str_contains($worker,'processTerminationJob')&&str_contains($worker,"terminate_[0-9]{14}_[a-f0-9]{6}"),
     'ambiguous termination requires manual reconciliation'=>str_contains($worker,"resolution\" value=\"remote_deleted\"")&&str_contains($worker,"resolution\" value=\"remote_present\""),
