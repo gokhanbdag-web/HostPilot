@@ -63,8 +63,10 @@
 - [x] Admin-triggered first-time hosting account provisioning with audit log and encrypted customer credentials.
 - [x] Admin-triggered suspend/reactivate lifecycle operations across cPanel/WHM, DirectAdmin, and Plesk XML adapters.
 - [x] Lifecycle actions require CSRF, administrator authorization, a provisioned remote account, and state-transition checks.
-- [ ] Async create/suspend/unsuspend/terminate/package-change workflows.
-- [ ] Reconciliation and manual retry interface.
+- [x] Customer domain capture and queued hosting account creation via an authenticated cPanel Cron Jobs worker.
+- [x] One-job bounded worker, automatic mapped-server selection, audit logs, and ambiguous remote-result manual-review protection.
+- [ ] Async suspend/unsuspend/terminate/package-change workflows.
+- [ ] Reconciliation and manual retry interface (failed and ambiguous jobs are not blindly replayed).
 
 **Exit criteria:** Sandbox/test server lifecycle operations work with least-privilege credentials and full audit history.
 
