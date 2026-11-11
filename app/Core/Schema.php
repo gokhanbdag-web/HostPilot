@@ -219,7 +219,9 @@ final class Schema
             if(!(int)$fk)$db->exec('ALTER TABLE invoices ADD CONSTRAINT fk_invoice_service FOREIGN KEY(service_id) REFERENCES services(id) ON DELETE SET NULL');
             $record=$db->prepare('INSERT IGNORE INTO migrations(migration,batch,applied_at) VALUES(:name,5,:applied)');
             $record->execute([':name'=>$billingLifecycleName,':applied'=>gmdate('Y-m-d H:i:s')]);
+        }
 
+        // Keep each migration independently reachable on already-upgraded installations.
         $provisioningIntentName='20261111_0006_provisioning_intent';
         $pi=$db->prepare('SELECT id FROM migrations WHERE migration=:name LIMIT 1');
         $pi->execute([':name'=>$provisioningIntentName]);
@@ -234,6 +236,20 @@ final class Schema
             $record=$db->prepare('INSERT IGNORE INTO migrations(migration,batch,applied_at) VALUES(:name,6,:applied)');
             $record->execute([':name'=>$provisioningIntentName,':applied'=>gmdate('Y-m-d H:i:s')]);
         }
+
+        $packageMappingName='20261111_0007_remote_package_identifiers';
+        $pm=$db->prepare('SELECT id FROM migrations WHERE migration=:name LIMIT 1');
+        $pm->execute([':name'=>$packageMappingName]);
+        if(!$pm->fetchColumn()){
+            $addMapColumn=static function(string $column,string $definition)use($db):void{
+                $check=$db->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='server_product_map' AND COLUMN_NAME=:column");
+                $check->execute([':column'=>$column]);
+                if(!(int)$check->fetchColumn())$db->exec('ALTER TABLE server_product_map ADD COLUMN '.$column.' '.$definition);
+            };
+            $addMapColumn('remote_package_guid','VARCHAR(190) NULL');
+            $addMapColumn('remote_package_external_id','VARCHAR(190) NULL');
+            $record=$db->prepare('INSERT IGNORE INTO migrations(migration,batch,applied_at) VALUES(:name,7,:applied)');
+            $record->execute([':name'=>$packageMappingName,':applied'=>gmdate('Y-m-d H:i:s')]);
         }
     }
 }
