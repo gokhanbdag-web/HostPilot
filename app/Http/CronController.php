@@ -108,17 +108,24 @@ final class CronController
                 'plesk'=>new PleskXmlAdapter($adapterConfig),
                 default=>throw new \RuntimeException('Desteklenmeyen kontrol paneli.')
             };
-            $username='hp'.substr(bin2hex(random_bytes(6)),0,6);
-            $password=rtrim(strtr(base64_encode(random_bytes(24)),'+/','-_'),'=');
-            $this->db->prepare("UPDATE services SET server_id=:server,remote_domain=domain,provisioning_status='in_progress',provisioning_error=NULL,updated_at=:now WHERE id=:id")
-                ->execute([':server'=>$server['id'],':now'=>$now,':id'=>$service['id']]);
+            $username=(string)($service['provisioning_username']??'');
+            $passwordEnc=(string)($service['provisioning_password_enc']??'');
+            if($username===''||$passwordEnc===''){
+                $username='hp'.substr(bin2hex(random_bytes(6)),0,6);
+                $password=rtrim(strtr(base64_encode(random_bytes(24)),'+/','-_'),'=');
+                $passwordEnc=$this->vault->encrypt($password);
+            }else{
+                $password=$this->vault->decrypt($passwordEnc);
+            }
+            $this->db->prepare("UPDATE services SET server_id=:server,remote_domain=domain,provisioning_username=:username,provisioning_password_enc=:password,provisioning_status='in_progress',provisioning_error=NULL,updated_at=:now WHERE id=:id")
+                ->execute([':server'=>$server['id'],':username'=>$username,':password'=>$passwordEnc,':now'=>$now,':id'=>$service['id']]);
             $remoteCallStarted=true;
             $result=$adapter->createAccount(['username'=>$username,'password'=>$password,'domain'=>$service['domain'],'email'=>$service['email'],'package'=>$server['remote_package']]);
 
             $finished=gmdate('Y-m-d H:i:s');
             $this->db->beginTransaction();
-            $this->db->prepare("UPDATE services SET status='active',provisioning_status='completed',remote_identifier=:remote,remote_username=:username,remote_password_enc=:password,provisioned_at=:at,provisioning_error=NULL,updated_at=:updated WHERE id=:id")
-                ->execute([':remote'=>$result['identifier'],':username'=>$result['username'],':password'=>$this->vault->encrypt($password),':at'=>$finished,':updated'=>$finished,':id'=>$service['id']]);
+            $this->db->prepare("UPDATE services SET status='active',provisioning_status='completed',remote_identifier=:remote,remote_username=:username,remote_domain=domain,remote_password_enc=:password,provisioning_username=NULL,provisioning_password_enc=NULL,provisioned_at=:at,provisioning_error=NULL,updated_at=:updated WHERE id=:id")
+                ->execute([':remote'=>$result['identifier'],':username'=>$result['username'],':password'=>$passwordEnc,':at'=>$finished,':updated'=>$finished,':id'=>$service['id']]);
             $this->db->prepare("UPDATE provisioning_jobs SET status='completed',locked_at=NULL,last_error=NULL,updated_at=:updated WHERE id=:id")
                 ->execute([':updated'=>$finished,':id'=>$jobId]);
             $this->audit((int)$service['id'],(int)$server['id'],'create','success','Hosting hesabı oluşturuldu: '.(string)$result['identifier']);
