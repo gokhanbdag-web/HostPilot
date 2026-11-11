@@ -235,8 +235,9 @@ final class PaymentController
             $p->execute([':gateway_id'=>$gatewayId,':message'=>$message,':updated'=>$now,':id'=>$tx['id']]);
             if($newStatus==='paid'){
                 $this->db->prepare("UPDATE orders SET status='paid',updated_at=:updated WHERE id=:id")->execute([':updated'=>$now,':id'=>$invoice['order_id']]);
+                $packageInvoice=$this->db->prepare('SELECT id FROM service_package_changes WHERE invoice_id=:invoice LIMIT 1');$packageInvoice->execute([':invoice'=>$invoice['id']]);$isPackageInvoice=(bool)$packageInvoice->fetchColumn();
                 $exists=$this->db->prepare('SELECT COUNT(*) FROM services WHERE order_id=:id');$exists->execute([':id'=>$invoice['order_id']]);
-                if((int)$exists->fetchColumn()===0){
+                if(!$isPackageInvoice&&(int)$exists->fetchColumn()===0){
                     $items=$this->db->prepare('SELECT o.user_id,oi.product_id,oi.billing_cycle,oi.line_total FROM orders o JOIN order_items oi ON oi.order_id=o.id WHERE o.id=:order_id');
                     $items->execute([':order_id'=>$invoice['order_id']]);
                     $service=$this->db->prepare("INSERT INTO services(user_id,product_id,order_id,status,billing_cycle,amount,next_due_date,provisioning_status,created_at,updated_at) VALUES(:user,:product,:order_id,'pending',:cycle,:amount,:due,'waiting_input',:created,:updated)");
