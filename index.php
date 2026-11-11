@@ -47,9 +47,9 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 try {
     $database = new \HostPilot\Core\Database($config['database']);
     $pdo = $database->connection();
-    \\HostPilot\\Core\\Schema::migrate($pdo);
+    \HostPilot\Core\Schema::migrate($pdo);
 } catch (Throwable $exception) {
-    error_log('[HostPilot] Database connection failed: ' . $exception->getMessage());
+    error_log('[HostPilot] Database bootstrap or migration failed: ' . $exception->getMessage());
     http_response_code(503);
     exit('HostPilot veritabanına bağlanamıyor veya veritabanı güncellemesini tamamlayamıyor. Yapılandırmayı ve hata kayıtlarını kontrol edin.');
 }
