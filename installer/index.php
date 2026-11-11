@@ -142,6 +142,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 UNIQUE KEY uq_migrations_name (migration)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+            $pdo->exec("CREATE TABLE IF NOT EXISTS tickets (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                ticket_number VARCHAR(24) NOT NULL,
+                user_id BIGINT UNSIGNED NOT NULL,
+                department VARCHAR(80) NOT NULL DEFAULT 'General Support',
+                subject VARCHAR(190) NOT NULL,
+                priority VARCHAR(20) NOT NULL DEFAULT 'normal',
+                status VARCHAR(24) NOT NULL DEFAULT 'open',
+                last_reply_at DATETIME NULL,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL,
+                UNIQUE KEY uq_tickets_number (ticket_number),
+                KEY idx_tickets_user_status (user_id, status),
+                CONSTRAINT fk_tickets_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+            $pdo->exec("CREATE TABLE IF NOT EXISTS ticket_messages (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                ticket_id BIGINT UNSIGNED NOT NULL,
+                user_id BIGINT UNSIGNED NOT NULL,
+                message LONGTEXT NOT NULL,
+                is_staff TINYINT(1) NOT NULL DEFAULT 0,
+                created_at DATETIME NOT NULL,
+                KEY idx_ticket_messages_ticket (ticket_id, created_at),
+                CONSTRAINT fk_ticket_messages_ticket FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE,
+                CONSTRAINT fk_ticket_messages_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+            $pdo->exec("CREATE TABLE IF NOT EXISTS knowledgebase_articles (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                title VARCHAR(190) NOT NULL,
+                slug VARCHAR(190) NOT NULL,
+                excerpt TEXT NULL,
+                content LONGTEXT NOT NULL,
+                category VARCHAR(100) NOT NULL DEFAULT 'Genel',
+                status VARCHAR(20) NOT NULL DEFAULT 'published',
+                sort_order INT NOT NULL DEFAULT 0,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL,
+                UNIQUE KEY uq_kb_slug (slug),
+                KEY idx_kb_status_sort (status, sort_order)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
             $pdo->beginTransaction();
             $now = gmdate('Y-m-d H:i:s');
             $stmt = $pdo->prepare("INSERT INTO users
@@ -238,7 +281,7 @@ button{border:0;border-radius:10px;padding:14px 20px;background:#1d4ed8;color:#f
 <header><span>HOSTPILOT</span><h1>Kurulum sihirbazı</h1><p>Veritabanı bağlantısını ve ilk yönetici hesabını oluşturun. Kurulum SSH veya Composer gerektirmez.</p></header>
 
 <?php if ($success): ?>
-<div class="panel"><div class="ok"><strong>Kurulum tamamlandı.</strong><br>HostPilot çekirdek tabloları ve ilk yönetici kaydı oluşturuldu. Güvenlik için kurulum kilitlendi. Yönetim paneli henüz sonraki geliştirme aşamasındadır.</div></div>
+<div class="panel"><div class="ok"><strong>Kurulum tamamlandı.</strong><br>HostPilot çekirdek tabloları, destek talebi altyapısı, bilgi bankası ve ilk yönetici kaydı oluşturuldu. Güvenlik için kurulum kilitlendi. Yönetim paneline giriş yapabilirsiniz.</div></div>
 <?php else: ?>
 <?php foreach ($errors as $error): ?><div class="error"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div><?php endforeach; ?>
 <form method="post" class="panel" autocomplete="off">
