@@ -58,7 +58,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $adminEmail = trim((string)($_POST['admin_email'] ?? ''));
     $adminPass = (string)($_POST['admin_pass'] ?? '');
 
-    if ($dbHost === '' || $dbName === '' || $dbUser === '' || $dbPort < 1 || $dbPort > 65535) {
+    if ($dbHost === '' || !preg_match('/^[a-zA-Z0-9.\\-:\\[\\]]{1,255}$/', $dbHost)
+        || $dbName === '' || $dbUser === '' || strlen($dbUser) > 128
+        || $dbPort < 1 || $dbPort > 65535) {
         $errors[] = 'Veritabanı bağlantı bilgilerini kontrol edin.';
     }
     if (!preg_match('/^[a-zA-Z0-9_]{1,64}$/', $dbName)) {
@@ -122,6 +124,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 UNIQUE KEY uq_migrations_name (migration)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+            $pdo->beginTransaction();
             $now = gmdate('Y-m-d H:i:s');
             $stmt = $pdo->prepare("INSERT INTO users
                 (name, email, username, password_hash, role, status, created_at, updated_at)
@@ -171,9 +174,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new RuntimeException('Kurulum kilidi oluşturulamadı.');
             }
             @chmod($lockFile, 0640);
+            $pdo->commit();
             $success = true;
             unset($_SESSION['hostpilot_install_csrf']);
         } catch (Throwable $exception) {
+            if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            if (!$success) {
+                @unlink($lockFile);
+                @unlink($configFile);
+                @unlink($configFile . '.tmp');
+            }
             error_log('[HostPilot Installer] ' . $exception->getMessage());
             $errors[] = 'Kurulum tamamlanamadı. Veritabanı bilgilerini ve storage dizininin yazma izinlerini kontrol edin.';
         }
