@@ -93,6 +93,8 @@ $catalog = new \HostPilot\Http\CatalogController($pdo, $basePath);
 if ($requestPath === '/admin/products' && in_array($method, ['GET','POST'], true)) { $catalog->adminProducts(); exit; }
 if ($requestPath === '/admin/orders' && $method === 'GET') { $catalog->adminOrders(); exit; }
 if ($requestPath === '/client/orders' && $method === 'GET') { $catalog->clientOrders(); exit; }
+if ($requestPath === '/client/invoices' && $method === 'GET') { $catalog->clientInvoices(); exit; }
+if ($requestPath === '/admin/invoices' && $method === 'GET') { $catalog->adminInvoices(); exit; }
 if ($requestPath === '/order/create' && $method === 'POST') { $catalog->createOrder(); exit; }
 if (preg_match('#^/product/([a-z0-9-]+)$#', $requestPath, $productMatch) && $method === 'GET') { $catalog->product($productMatch[1]); exit; }
 
