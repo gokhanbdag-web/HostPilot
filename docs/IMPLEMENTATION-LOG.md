@@ -45,3 +45,22 @@
 - Ticket creation and first message are wrapped in a database transaction.
 - Email notifications, file attachments, staff assignment, SLA, canned replies, and article administration are not implemented yet.
 - Existing installations will need a schema migration mechanism before these new tables can be applied; the browser installer creates them for fresh installs only.
+
+
+## 2026-11-11 — Catalogue and order foundation
+
+### Added
+- Product groups and product catalogue schema, including product type, visibility, and sort order.
+- Currency-aware price rows with supported billing-cycle identifiers and setup-fee field.
+- Order and order-item records with DECIMAL monetary fields and product-name snapshots.
+- Customer-facing storefront catalogue and individual product detail pages.
+- Customer checkout action creates a pending order only after server-side product and active-price revalidation.
+- Customer order history restricted to the signed-in customer.
+- Staff product/group creation and staff order overview.
+- Idempotent browser-request migration for already-installed instances, plus matching fresh-installer schema.
+- GitHub Actions PHP syntax lint workflow.
+
+### Not yet implemented
+- Multiple prices per product editing, cart/multi-item checkout, product custom fields, coupons, tax rules, invoices, payment collection, service activation, order review actions, and provisioning adapters.
+- Migration execution currently runs at application bootstrap and needs concurrency locking plus an explicit upgrade UI before production release.
+- GitHub Actions result is pending; source has not been deployed to a live PHP/MySQL host in this turn.
