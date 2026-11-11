@@ -22,6 +22,12 @@ final class DirectAdminAdapter implements HostingAdapter
     }
     public function suspendAccount(string $username,string $domain,string $reason):void{$this->accountAction($username,'suspend');}
     public function unsuspendAccount(string $username,string $domain):void{$this->accountAction($username,'unsuspend');}
+    public function changePackage(string $username,string $domain,string $package,string $packageGuid='',string $packageExternalId=''):void
+    {
+        // DirectAdmin exposes a per-server OpenAPI document. No stable, documented
+        // package-switch operation is currently assumed by HostPilot.
+        throw new RuntimeException('DirectAdmin paket değiştirme bu sunucunun OpenAPI sözleşmesi doğrulanana kadar desteklenmiyor. Hesap üzerinde değişiklik yapılmadı.');
+    }
     public function terminateAccount(string $username,string $domain):void
     {
         if(!preg_match('/^[a-z][a-z0-9]{3,7}$/',$username))throw new RuntimeException('DirectAdmin kullanıcı adı geçersiz.');
