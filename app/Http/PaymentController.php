@@ -164,7 +164,7 @@ final class PaymentController
         catch(Throwable){http_response_code(503);echo 'NO_CONFIG';return;}
         $expected=base64_encode(hash_hmac('sha256',$oid.$salt.$status.$total,$key,true));
         if(!hash_equals($expected,$hash)){http_response_code(400);echo 'BAD_HASH';return;}
-        $q=$this->db->prepare("SELECT pt.*,i.total AS invoice_total,i.currency AS invoice_currency FROM payment_transactions pt JOIN invoices i ON i.id=pt.invoice_id WHERE pt.gateway='paytr' AND pt.request_reference=:ref LIMIT 1");
+        $q=$this->db->prepare("SELECT pt.*,i.total AS invoice_total,i.currency AS invoice_currency,i.invoice_number FROM payment_transactions pt JOIN invoices i ON i.id=pt.invoice_id WHERE pt.gateway='paytr' AND pt.request_reference=:ref LIMIT 1");
         $q->execute([':ref'=>$oid]);$tx=$q->fetch();
         if(!$tx){http_response_code(404);echo 'NOT_FOUND';return;}
         $paid=(int)$total;
@@ -178,7 +178,7 @@ final class PaymentController
     public function iyzicoCallback():void
     {
         $token=trim((string)($_POST['token']??''));if($token===''){http_response_code(400);echo 'Eksik token';return;}
-        $q=$this->db->prepare("SELECT pt.*,i.total AS invoice_total,i.currency AS invoice_currency FROM payment_transactions pt JOIN invoices i ON i.id=pt.invoice_id WHERE pt.gateway='iyzico' AND pt.request_reference=:token LIMIT 1");
+        $q=$this->db->prepare("SELECT pt.*,i.total AS invoice_total,i.currency AS invoice_currency,i.invoice_number FROM payment_transactions pt JOIN invoices i ON i.id=pt.invoice_id WHERE pt.gateway='iyzico' AND pt.request_reference=:token LIMIT 1");
         $q->execute([':token'=>$token]);$tx=$q->fetch();
         if(!$tx){http_response_code(404);echo 'İşlem bulunamadı.';return;}
         $v=$this->settings();try{
@@ -189,7 +189,7 @@ final class PaymentController
             $paid=(float)($result['paidPrice']??0);$expected=(float)$tx['amount'];$currency=(string)($result['currency']??'');
             $sigData=implode(':',[(string)($result['paymentStatus']??''),(string)($result['paymentId']??''),$currency,(string)($result['basketId']??''),(string)($result['conversationId']??''),$this->normalizeMoney($result['paidPrice']??''),$this->normalizeMoney($result['price']??''),$token]);
             $signature=(string)($result['signature']??'');$signatureOk=$signature!==''&&hash_equals(hash_hmac('sha256',$sigData,$secret),$signature);
-            $ok=($result['status']??'')==='success'&&($result['paymentStatus']??'')==='SUCCESS'&&(int)($result['fraudStatus']??-1)===1&&$currency===(string)$tx['currency']&&abs($paid-$expected)<0.005&&$signatureOk;
+            $ok=($result['status']??'')==='success'&&($result['paymentStatus']??'')==='SUCCESS'&&(int)($result['fraudStatus']??-1)===1&&$currency===(string)$tx['currency']&&abs($paid-$expected)<0.005&&abs((float)($result['price']??0)-$expected)<0.005&&(string)($result['basketId']??'')===(string)$tx['invoice_number']&&(string)($result['conversationId']??'')===(string)$tx['idempotency_key']&&$signatureOk;
             if($ok)$this->settle($tx,'success',(string)($result['paymentId']??$token),'iyzico retrieve and signature verified');
             else $this->updateTransaction((int)$tx['id'],['status'=>'failed','gateway_transaction_id'=>(string)($result['paymentId']??''),'response_code'=>(string)($result['errorCode']??$result['paymentStatus']??'not_approved'),'safe_message'=>'iyzico sonucu doğrulanamadı veya ödeme onaylanmadı']);
             $this->redirect('/client/invoices');
@@ -245,7 +245,7 @@ final class PaymentController
     private function clientIp():string
     {$ip=(string)($_SERVER['REMOTE_ADDR']??'');return filter_var($ip,FILTER_VALIDATE_IP)?$ip:'127.0.0.1';}
     private function asciiEmail(string $email):string
-    {$email=iconv('UTF-8','ASCII//TRANSLIT//IGNORE',$email)?:$email;return substr($email,0,100);}
+    {$email=iconv('UTF-8','ASCII//TRANSLIT//IGNORE',$email)?:$email;return substr(preg_replace('/[^\\x20-\\x7E]/','',$email)??$email,0,100);}
     private function normalizeMoney(mixed $v):string
     {$s=rtrim(rtrim(number_format((float)$v,8,'.',''),'0'),'.');return $s===''?'0':$s;}
     private function pageStart(string $title):void
