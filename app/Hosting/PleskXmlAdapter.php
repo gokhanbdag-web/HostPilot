@@ -32,6 +32,13 @@ final class PleskXmlAdapter implements HostingAdapter
     }
     public function suspendAccount(string $username,string $domain,string $reason):void{$this->setSubscriptionStatus($domain,16);}
     public function unsuspendAccount(string $username,string $domain):void{$this->setSubscriptionStatus($domain,0);}
+    public function terminateAccount(string $username,string $domain):void
+    {
+        if(!filter_var($domain,FILTER_VALIDATE_DOMAIN,FILTER_FLAG_HOSTNAME))throw new RuntimeException('Plesk abonelik alan adı geçersiz.');
+        $name=htmlspecialchars($domain,ENT_XML1|ENT_QUOTES,'UTF-8');
+        $response=$this->xml('<?xml version="1.0" encoding="UTF-8"?><packet><webspace><del><filter><name>'.$name.'</name></filter></del></webspace></packet>');
+        if(preg_match('/<result>.*?<status>\\s*error\\s*<\\/status>/si',$response))throw new RuntimeException('Plesk aboneliği silinemedi.');
+    }
     public function createAccount(array $a):array
     {
         $ip=(string)($this->server['shared_ip']??'');
