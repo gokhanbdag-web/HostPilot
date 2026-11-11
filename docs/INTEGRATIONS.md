@@ -107,7 +107,7 @@ The HostPilot operator must obtain:
 - PayTR and/or iyzico merchant accounts approved for the intended payment flow.
 - Reseller accounts and API access for each domain registrar.
 - HTTPS certificate and a supported PHP/MySQL hosting environment.
-- Cron access for reliable scheduled automation, preferably cPanel Cron Jobs.
+- Cron access for reliable scheduled automation, preferably cPanel Cron Jobs. The initial provisioning worker is configured under Admin → Automation and should run once per minute. It processes at most one account-creation job per request. If the remote panel's create response is ambiguous, the job is held for manual review instead of being blindly retried.
 
 ## 6. Research sources
 
