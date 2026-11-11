@@ -21,7 +21,7 @@ final class PleskXmlAdapter implements HostingAdapter
     }
     public function testConnection():string
     {
-        $response=$this->xml('<?xml version="1.0" encoding="UTF-8"?><packet><server><get>< ಆಡ></get></server></packet>');
+        $response=$this->xml('<?xml version="1.0" encoding="UTF-8"?><packet><server><get><gen_info/></get></server></packet>');
         return 'Plesk XML API bağlantısı başarılı.';
     }
     public function createAccount(array $a):array
