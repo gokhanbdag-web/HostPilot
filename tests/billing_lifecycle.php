@@ -15,7 +15,7 @@ $checks=[
     'safe failures use bounded retry backoff'=>str_contains($cron,'$attempts<5')&&str_contains($cron,'$delay=min(3600,300*'),
     'ambiguous lifecycle outcomes enter review state'=>str_contains($cron,"suspension_source='review'"),
     'lifecycle worker handles suspend and unsuspend'=>str_contains($cron,'processLifecycleJob')&&str_contains($cron,'suspendAccount')&&str_contains($cron,'unsuspendAccount'),
-    'full payment queues matching invoice unsuspend'=>str_contains($payment,"$jobType='unsuspend_'")&&str_contains($payment,'$invoice[\'service_id\']'),
+    'full payment queues matching invoice unsuspend'=>str_contains($payment,"\$jobType='unsuspend_'")&&str_contains($payment,'$invoice[\'service_id\']'),
     'manual suspension is distinguished from billing'=>str_contains($server,"'admin':'none'"),
     'automation settings accepts POST'=>str_contains($routes,"in_array(\$method, ['GET','POST'], true)) { \$cronController->adminAutomation(); exit; }"),
     'account intent credentials are encrypted before provisioning'=>str_contains($schema,"'provisioning_password_enc'")&&str_contains($cron,'provisioning_password_enc=:password'),
