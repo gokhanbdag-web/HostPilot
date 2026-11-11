@@ -5,6 +5,7 @@ $worker=file_get_contents(__DIR__.'/../app/Http/CronController.php');
 $client=file_get_contents(__DIR__.'/../app/Http/ClientController.php');
 $payment=file_get_contents(__DIR__.'/../app/Http/PaymentController.php');
 $routes=file_get_contents(__DIR__.'/../index.php');
+$server=file_get_contents(__DIR__.'/../app/Http/ServerController.php');
 $checks=[
     'queue migration'=>str_contains($schema,'CREATE TABLE IF NOT EXISTS provisioning_jobs'),
     'unique create job per service'=>str_contains($schema,'uq_provision_job_service_type'),
@@ -17,8 +18,8 @@ $checks=[
     'worker route registered'=>str_contains($routes,"'/cron/provision'"),
     'customer domain route registered'=>str_contains($routes,"'/client/services/domain'"),
     'admin termination route registered'=>str_contains($routes,"'/admin/services/terminate'"),
-    'termination requires exact domain confirmation'=>str_contains($worker,"hash_equals((string)$service['remote_domain'],$confirmation)"),
-    'termination is queued instead of deleting in web request'=>str_contains($worker,"INSERT INTO provisioning_jobs(service_id,job_type,status,attempts,available_at,created_at,updated_at)"),
+    'termination requires exact domain confirmation'=>str_contains($server,"hash_equals((string)$service['remote_domain'],$confirmation)"),
+    'termination is queued instead of deleting in web request'=>str_contains($server,"INSERT INTO provisioning_jobs(service_id,job_type,status,attempts,available_at,created_at,updated_at)"),
     'worker dispatches termination jobs'=>str_contains($worker,'processTerminationJob')&&str_contains($worker,"terminate_[0-9]{14}_[a-f0-9]{6}"),
     'ambiguous termination requires manual reconciliation'=>str_contains($worker,"resolution\" value=\"remote_deleted\"")&&str_contains($worker,"resolution\" value=\"remote_present\""),
     'termination clears stored hosting password after confirmed deletion'=>str_contains($worker,"provisioning_status='terminated',provisioning_error=NULL,remote_password_enc=NULL"),
