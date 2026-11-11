@@ -12,6 +12,16 @@ final class DirectAdminAdapter implements HostingAdapter
         $r=HostingTransport::request($this->server['base_url'],'/api/version','GET',['Accept: application/json'],null,[$this->server['username'],$this->server['secret']]);
         return 'DirectAdmin API bağlantısı başarılı · '.substr(trim($r['body']),0,80);
     }
+    private function accountAction(string $username,string $action):void
+    {
+        if(!preg_match('/^[a-z][a-z0-9]{3,7}$/',$username))throw new RuntimeException('DirectAdmin kullanıcı adı geçersiz.');
+        $data=['select0'=>$username,'location'=>'CMD_SELECT_USERS'];
+        if($action==='suspend')$data['dosuspend']=1;else $data['dounsuspend']=1;
+        $r=HostingTransport::request($this->server['base_url'],'/CMD_API_SELECT_USERS','POST',['Accept: application/json','Content-Type: application/x-www-form-urlencoded'],http_build_query($data),[$this->server['username'],$this->server['secret']]);
+        if(stripos($r['body'],'error=1')!==false||stripos($r['body'],'error=')===0)throw new RuntimeException('DirectAdmin hesap durumunu değiştiremedi: '.substr(strip_tags($r['body']),0,250));
+    }
+    public function suspendAccount(string $username,string $domain,string $reason):void{$this->accountAction($username,'suspend');}
+    public function unsuspendAccount(string $username,string $domain):void{$this->accountAction($username,'unsuspend');}
     public function createAccount(array $a):array
     {
         $username=strtolower((string)$a['username']);
