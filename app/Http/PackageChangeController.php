@@ -39,13 +39,9 @@ final class PackageChangeController
             $p->execute([':currency'=>$currency,':cycle'=>$s['billing_cycle'],':server'=>$s['server_id'],':pid'=>$pid]);$plan=$p->fetch();
             if(!$plan||(float)$plan['price']<=(float)$s['amount'])throw new \RuntimeException('Seçilen ürün geçerli bir üst paket değil veya sunucuyla eşleştirilmemiş.');
             if($s['panel_type']==='plesk'&&(!$plan['remote_package_guid']||!$plan['remote_package_external_id']))throw new \RuntimeException('Plesk paketi için GUID ve harici plan kimliği eksik.');
-            $cycleBack=['monthly'=>'-1 month','quarterly'=>'-3 months','semiannually'=>'-6 months','annually'=>'-1 year','biennially'=>'-2 years','triennially'=>'-3 years'][$s['billing_cycle']]??null;
-            if($cycleBack===null)throw new \RuntimeException('Desteklenmeyen fatura dönemi.');
-            $dueDate=new \DateTimeImmutable((string)$s['next_due_date'],new \DateTimeZone('UTC'));
-            $today=new \DateTimeImmutable(gmdate('Y-m-d'),new \DateTimeZone('UTC'));
-            $days=max(0,(int)$today->diff($dueDate)->format('%r%a'));
-            $cycleDays=(int)$dueDate->modify($cycleBack)->diff($dueDate)->days;
-            if($days<1||$cycleDays<1)throw new \RuntimeException('Kalan fatura dönemi hesaplanamadı.');
+            $days=max(0,(new \\DateTimeImmutable(gmdate('Y-m-d'),new \\DateTimeZone('UTC')))->diff(new \\DateTimeImmutable((string)$s['next_due_date'],new \\DateTimeZone('UTC')))->days);
+            $cycleDays=['monthly'=>30,'quarterly'=>90,'semiannually'=>182,'annually'=>365,'biennially'=>730,'triennially'=>1095][$s['billing_cycle']]??0;
+            if($days<1||$cycleDays<1)throw new \\RuntimeException('Kalan fatura dönemi hesaplanamadı.');
             $amount=round(((float)$plan['price']-(float)$s['amount'])*min(1,$days/$cycleDays),2);if($amount<=0)throw new \RuntimeException('Yükseltme farkı tahsilata uygun değil.');
             $now=gmdate('Y-m-d H:i:s');$due=gmdate('Y-m-d H:i:s',time()+604800);
             $c=$this->db->prepare("INSERT INTO service_package_changes(service_id,from_product_id,to_product_id,target_package,target_package_guid,target_package_external_id,target_amount,charge_amount,currency,status,effective_at,created_at,updated_at) VALUES(:sid,:from,:to,:package,:guid,:external,:target,:charge,:currency,'pending_payment',:effective,:created,:updated)");
