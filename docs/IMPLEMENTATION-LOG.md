@@ -101,3 +101,8 @@
 - Recurring/subscription billing, refunds, partial payments, tax calculation, reconciliation, email notifications, and formal accounting/e-invoice compliance remain pending.
 - Payment settings require OpenSSL support; outbound HTTPS requires cURL or PHP HTTPS stream support.
 - PHP lint workflow is present but its run result has not been confirmed in this turn.
+
+
+### Payment verification tooling
+- Added dependency-free PHP smoke tests for AES-256-GCM credential vault round trips, rejection under a different install key, iyzico IYZWSv2 request-signature composition, and PayTR callback signature validation/tamper rejection.
+- GitHub Actions now runs PHP syntax checks and the payment cryptography smoke tests on pushes to any branch and pull requests.
