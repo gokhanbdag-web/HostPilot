@@ -66,11 +66,15 @@ final class CronController
         try{
             $now=gmdate('Y-m-d H:i:s');
             $this->db->beginTransaction();
-            $stale=$this->db->prepare("SELECT id,service_id FROM provisioning_jobs WHERE status='processing' AND locked_at IS NOT NULL AND locked_at<:cutoff LIMIT 10 FOR UPDATE");
+            $stale=$this->db->prepare("SELECT id,service_id,job_type FROM provisioning_jobs WHERE status='processing' AND locked_at IS NOT NULL AND locked_at<:cutoff LIMIT 10 FOR UPDATE");
             $stale->execute([':cutoff'=>gmdate('Y-m-d H:i:s',time()-1200)]);
             foreach($stale->fetchAll() as $old){
                 $this->db->prepare("UPDATE provisioning_jobs SET status='needs_review',last_error='Worker yanıtı zaman aşımına uğradı; uzak hesap durumu doğrulanmalı.',updated_at=:now WHERE id=:id")->execute([':now'=>$now,':id'=>$old['id']]);
-                $this->db->prepare("UPDATE services SET provisioning_status='needs_review',provisioning_error='Otomatik işlem sonucu belirsiz; yönetici kontrolü gerekli.',updated_at=:now WHERE id=:id")->execute([':now'=>$now,':id'=>$old['service_id']]);
+                if($old['job_type']==='create'){
+                    $this->db->prepare("UPDATE services SET provisioning_status='needs_review',provisioning_error='Otomatik işlem sonucu belirsiz; yönetici kontrolü gerekli.',updated_at=:now WHERE id=:id")->execute([':now'=>$now,':id'=>$old['service_id']]);
+                }else{
+                    $this->db->prepare("UPDATE services SET suspension_source='review',updated_at=:now WHERE id=:id AND suspension_source='none'")->execute([':now'=>$now,':id'=>$old['service_id']]);
+                }
             }
             $pick=$this->db->prepare("SELECT id FROM provisioning_jobs WHERE status='queued' AND available_at<=:now ORDER BY id ASC LIMIT 1 FOR UPDATE");
             $pick->execute([':now'=>$now]);$jobId=(int)$pick->fetchColumn();
@@ -124,15 +128,22 @@ final class CronController
             if($this->db->inTransaction())$this->db->rollBack();
             $finished=gmdate('Y-m-d H:i:s');
             $ambiguous=$remoteCallStarted;
-            $jobStatus=$ambiguous?'needs_review':'failed';
+            $attempts=(int)($job['attempts']??0)+1;
+            $retry=!$ambiguous&&$attempts<5;
+            $jobStatus=$ambiguous?'needs_review':($retry?'queued':'failed');
             $safe=substr($e->getMessage(),0,900);
             if($jobId>0){
-                $this->db->prepare("UPDATE provisioning_jobs SET status=:status,locked_at=NULL,last_error=:error,updated_at=:updated WHERE id=:id")
-                    ->execute([':status'=>$jobStatus,':error'=>$safe,':updated'=>$finished,':id'=>$jobId]);
+                $delay=min(3600,300*(2**max(0,$attempts-1)));
+                $available=$retry?gmdate('Y-m-d H:i:s',time()+$delay):$finished;
+                $this->db->prepare("UPDATE provisioning_jobs SET status=:status,available_at=:available,locked_at=NULL,attempts=:attempts,last_error=:error,updated_at=:updated WHERE id=:id")
+                    ->execute([':status'=>$jobStatus,':available'=>$available,':attempts'=>$attempts,':error'=>$safe,':updated'=>$finished,':id'=>$jobId]);
                 if(is_array($service)&&isset($service['id'])){
                     if(($job['job_type']??'create')==='create'){
+                        $serviceStatus=$ambiguous?'needs_review':($retry?'queued':'failed');
                         $this->db->prepare("UPDATE services SET provisioning_status=:status,provisioning_error=:error,updated_at=:updated WHERE id=:id")
-                            ->execute([':status'=>$jobStatus,':error'=>$ambiguous?'Uzak sunucu yanıtı belirsiz; yinelenen hesap açılmasını önlemek için yönetici kontrolü gerekiyor.':$safe,':updated'=>$finished,':id'=>$service['id']]);
+                            ->execute([':status'=>$serviceStatus,':error'=>$ambiguous?'Uzak sunucu yanıtı belirsiz; yinelenen hesap açılmasını önlemek için yönetici kontrolü gerekiyor.':$safe,':updated'=>$finished,':id'=>$service['id']]);
+                    }elseif($ambiguous){
+                        $this->db->prepare("UPDATE services SET suspension_source='review',updated_at=:updated WHERE id=:id AND suspension_source='none'")->execute([':updated'=>$finished,':id'=>$service['id']]);
                     }
                     $this->audit((int)$service['id'],is_array($server)?(int)$server['id']:0,(string)($job['job_type']??'create'),$jobStatus,$safe);
                 }
