@@ -48,7 +48,8 @@
 - [ ] Tax rules, currency conversion, credit balance, partial payments, refunds.
 - [x] PayTR iFrame token flow and HMAC-verified callback (merchant sandbox/live testing pending).
 - [x] iyzico Checkout Form initialize/retrieve with IYZWSv2 request signing and response signature validation (merchant sandbox/live testing pending).
-- [ ] Reconciliation UI, payment log views, and duplicate-notification integration tests.
+- [x] Administrator payment transaction history view.
+- [ ] Reconciliation UI and automated duplicate-notification integration tests.
 - [ ] Invoice email and customer invoice portal.
 
 **Exit criteria:** Sandbox payment can settle an invoice exactly once; failures and retries are handled.
