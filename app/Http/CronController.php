@@ -142,6 +142,117 @@ final class CronController
         }
     }
 
+    private function runBillingAutomation():void
+    {
+        try{
+            $setting=$this->db->prepare("SELECT setting_value FROM settings WHERE setting_group='billing' AND setting_key='grace_days' LIMIT 1");
+            $setting->execute();$grace=max(1,min(30,(int)($setting->fetchColumn()?:7)));
+            $today=gmdate('Y-m-d');$now=gmdate('Y-m-d H:i:s');
+
+            // Create at most one renewal invoice per cron request; the service-period unique key prevents duplicates.
+            $this->db->beginTransaction();
+            $due=$this->db->prepare("SELECT s.*,p.name AS product_name FROM services s JOIN products p ON p.id=s.product_id WHERE s.status='active' AND s.provisioning_status='completed' AND s.suspension_source='none' AND s.next_due_date IS NOT NULL AND s.next_due_date<=:today ORDER BY s.next_due_date,s.id LIMIT 1 FOR UPDATE");
+            $due->execute([':today'=>$today]);$service=$due->fetch();
+            if($service){
+                if(empty($service['order_id']))throw new \RuntimeException('Yenileme faturası için hizmetin sipariş bağlantısı bulunamadı.');
+                $period=(string)$service['next_due_date'];
+                $next=$this->advanceBillingDate($period,(string)$service['billing_cycle']);
+                if($next===null)throw new \RuntimeException('Desteklenmeyen hizmet faturalandırma dönemi.');
+                $number='HPF'.gmdate('ymd').strtoupper(bin2hex(random_bytes(4)));
+                $dueAt=(new \DateTimeImmutable($now,new \DateTimeZone('UTC')))->modify('+'.$grace.' days')->format('Y-m-d H:i:s');
+                $invoice=$this->db->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,service_id,service_period_start,status,currency,subtotal,tax_total,total,amount_paid,issued_at,due_at,created_at,updated_at) SELECT :number,:order_id,user_id,:service,:period,'unpaid','TRY',:amount,0,:total,0,:issued,:due,:created,:updated FROM services WHERE id=:id");
+                $invoice->execute([':number'=>$number,':order_id'=>$service['order_id'],':service'=>$service['id'],':period'=>$period,':amount'=>$service['amount'],':total'=>$service['amount'],':issued'=>$now,':due'=>$dueAt,':created'=>$now,':updated'=>$now,':id'=>$service['id']]);
+                $invoiceId=(int)$this->db->lastInsertId();
+                $line=$this->db->prepare("INSERT INTO invoice_items(invoice_id,description,quantity,unit_price,tax_rate,tax_amount,line_total,created_at) VALUES(:invoice,:description,1,:price,0,0,:total,:created)");
+                $line->execute([':invoice'=>$invoiceId,':description'=>$service['product_name'].' · Hizmet yenileme '.$period,':price'=>$service['amount'],':total'=>$service['amount'],':created'=>$now]);
+                $this->db->prepare("UPDATE services SET next_due_date=:next,updated_at=:updated WHERE id=:id")->execute([':next'=>$next,':updated'=>$now,':id'=>$service['id']]);
+            }
+            $this->db->commit();
+
+            // Queue suspension only for a provisioned service with a genuinely outstanding, expired invoice balance.
+            $overdue=$this->db->prepare("SELECT i.id AS invoice_id,s.id AS service_id FROM invoices i JOIN services s ON s.id=i.service_id WHERE i.status IN ('unpaid','partially_paid') AND i.amount_paid+0.005<i.total AND i.due_at IS NOT NULL AND i.due_at<=:now AND s.status='active' AND s.suspension_source='none' AND s.provisioned_at IS NOT NULL ORDER BY i.due_at,i.id LIMIT 1");
+            $overdue->execute([':now'=>$now]);$item=$overdue->fetch();
+            if($item){
+                $type='suspend_'.(int)$item['invoice_id'];
+                $insert=$this->db->prepare("INSERT IGNORE INTO provisioning_jobs(service_id,job_type,status,attempts,available_at,created_at,updated_at) VALUES(:service,:type,'queued',0,:available,:created,:updated)");
+                $insert->execute([':service'=>$item['service_id'],':type'=>$type,':available'=>$now,':created'=>$now,':updated'=>$now]);
+            }
+        }catch(Throwable $e){
+            if($this->db->inTransaction())$this->db->rollBack();
+            error_log('[HostPilot] Billing automation: '.$e->getMessage());
+        }
+    }
+
+    private function advanceBillingDate(string $period,string $cycle):?string
+    {
+        $modify=['monthly'=>'+1 month','quarterly'=>'+3 months','semiannually'=>'+6 months','annually'=>'+1 year','biennially'=>'+2 years','triennially'=>'+3 years'];
+        if(!isset($modify[$cycle]))return null;
+        return (new \DateTimeImmutable($period,new \DateTimeZone('UTC')))->modify($modify[$cycle])->format('Y-m-d');
+    }
+
+    private function processLifecycleJob(array $job,array $service,bool &$remoteCallStarted):void
+    {
+        if(!preg_match('/^(suspend|unsuspend)_([0-9]+)$/',(string)$job['job_type'],$match))throw new \RuntimeException('Geçersiz hizmet yaşam döngüsü işi.');
+        $action=$match[1];$invoiceId=(int)$match[2];$now=gmdate('Y-m-d H:i:s');
+        $q=$this->db->prepare('SELECT * FROM invoices WHERE id=:id AND service_id=:service LIMIT 1');
+        $q->execute([':id'=>$invoiceId,':service'=>$service['id']]);$invoice=$q->fetch();
+        if(!$invoice)throw new \RuntimeException('Hizmetle ilişkili fatura bulunamadı.');
+
+        if($action==='suspend'){
+            $eligible=in_array($invoice['status'],['unpaid','partially_paid'],true)
+                &&(float)$invoice['amount_paid']+0.005<(float)$invoice['total']
+                &&!empty($invoice['due_at'])&&$invoice['due_at']<=$now
+                &&$service['status']==='active'&&($service['suspension_source']??'none')==='none'
+                &&!empty($service['provisioned_at']);
+        }else{
+            $eligible=$invoice['status']==='paid'&&$service['status']==='suspended'
+                &&($service['suspension_source']??'none')==='billing'
+                &&(int)($service['suspension_invoice_id']??0)===$invoiceId;
+        }
+        if(!$eligible){
+            $this->db->prepare("UPDATE provisioning_jobs SET status='completed',locked_at=NULL,last_error='İşlem koşulları artık geçerli değil; güvenlik nedeniyle atlandı.',updated_at=:updated WHERE id=:id")
+                ->execute([':updated'=>$now,':id'=>$job['id']]);
+            echo json_encode(['ok'=>true,'processed'=>1,'job_id'=>(int)$job['id'],'status'=>'skipped'],JSON_UNESCAPED_SLASHES);
+            return;
+        }
+        if(empty($service['server_id'])||empty($service['remote_username'])||empty($service['remote_domain']))throw new \RuntimeException('Uzak hosting hesabı bilgileri eksik.');
+        $serverQuery=$this->db->prepare('SELECT * FROM servers WHERE id=:id LIMIT 1');$serverQuery->execute([':id'=>$service['server_id']]);$server=$serverQuery->fetch();
+        if(!$server||!(int)$server['enabled'])throw new \RuntimeException('Hizmetin sunucusu bulunamadı veya devre dışı.');
+        $server['secret']=$this->vault->decrypt((string)$server['secret_enc']);
+        $adapterConfig=['base_url'=>$server['base_url'],'username'=>$server['username'],'secret'=>$server['secret'],'auth_mode'=>$server['auth_mode'],'shared_ip'=>$server['shared_ip']];
+        $adapter=match($server['panel_type']){
+            'cpanel'=>new CpanelWhmAdapter($adapterConfig),
+            'directadmin'=>new DirectAdminAdapter($adapterConfig),
+            'plesk'=>new PleskXmlAdapter($adapterConfig),
+            default=>throw new \RuntimeException('Desteklenmeyen kontrol paneli.')
+        };
+        $remoteCallStarted=true;
+        if($action==='suspend'){
+            $adapter->suspendAccount((string)$service['remote_username'],(string)$service['remote_domain'],'HostPilot overdue invoice #'.$invoice['invoice_number']);
+            // Recheck after the remote call: a payment may have arrived while the panel request was running.
+            $check=$this->db->prepare('SELECT status,amount_paid,total FROM invoices WHERE id=:id');$check->execute([':id'=>$invoiceId]);$fresh=$check->fetch();
+            if($fresh&&$fresh['status']==='paid'&&(float)$fresh['amount_paid']+0.005>=(float)$fresh['total']){
+                $adapter->unsuspendAccount((string)$service['remote_username'],(string)$service['remote_domain']);
+                $this->db->prepare("UPDATE services SET status='active',suspension_source='none',suspension_invoice_id=NULL,suspended_at=NULL,updated_at=:updated WHERE id=:id AND status='active' AND suspension_source='none'")->execute([':updated'=>$now,':id'=>$service['id']]);
+                $this->db->prepare("UPDATE provisioning_jobs SET status='completed',locked_at=NULL,last_error='Ödeme işlem sırasında tamamlandı; askıya alma geri alındı.',updated_at=:updated WHERE id=:id")->execute([':updated'=>$now,':id'=>$job['id']]);
+                $this->audit((int)$service['id'],(int)$server['id'],$job['job_type'],'success','Ödeme kontrol edildi; askıya alma geri alındı.');
+                echo json_encode(['ok'=>true,'processed'=>1,'status'=>'payment_race_recovered'],JSON_UNESCAPED_SLASHES);
+                return;
+            }
+            $update=$this->db->prepare("UPDATE services SET status='suspended',suspension_source='billing',suspension_invoice_id=:invoice,suspended_at=:suspended,updated_at=:updated WHERE id=:id AND status='active' AND suspension_source='none'");
+            $update->execute([':invoice'=>$invoiceId,':suspended'=>$now,':updated'=>$now,':id'=>$service['id']]);
+        }else{
+            $adapter->unsuspendAccount((string)$service['remote_username'],(string)$service['remote_domain']);
+            $update=$this->db->prepare("UPDATE services SET status='active',suspension_source='none',suspension_invoice_id=NULL,suspended_at=NULL,updated_at=:updated WHERE id=:id AND status='suspended' AND suspension_source='billing' AND suspension_invoice_id=:invoice");
+            $update->execute([':updated'=>$now,':id'=>$service['id'],':invoice'=>$invoiceId]);
+        }
+        if($update->rowCount()!==1)throw new \RuntimeException('Uzak işlem tamamlandı ancak hizmet kaydı eşzamanlı değişti; yönetici kontrolü gerekli.');
+        $this->db->prepare("UPDATE provisioning_jobs SET status='completed',locked_at=NULL,last_error=NULL,updated_at=:updated WHERE id=:id")
+            ->execute([':updated'=>$now,':id'=>$job['id']]);
+        $this->audit((int)$service['id'],(int)$server['id'],$job['job_type'],'success',$action==='suspend'?'Vadesi geçmiş fatura nedeniyle hizmet askıya alındı.':'Ödeme alındı; hizmet yeniden etkinleştirildi.');
+        echo json_encode(['ok'=>true,'processed'=>1,'job_id'=>(int)$job['id'],'status'=>'completed'],JSON_UNESCAPED_SLASHES);
+    }
+
     private function audit(int $service,int $server,string $action,string $status,string $message):void
     {
         try{
