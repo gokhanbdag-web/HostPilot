@@ -70,7 +70,7 @@ final class Schema
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
         ];
         foreach($statements as $sql)$db->exec($sql);
-        $s=$db->prepare('INSERT INTO migrations(migration,batch,applied_at) VALUES(:name,COALESCE((SELECT MAX(batch)+1 FROM (SELECT batch FROM migrations) AS migration_batches),1),:applied)');
+        $s=$db->prepare('INSERT INTO migrations(migration,batch,applied_at) VALUES(:name,1,:applied)');
         $s->execute([':name'=>$name,':applied'=>gmdate('Y-m-d H:i:s')]);
     }
 }
