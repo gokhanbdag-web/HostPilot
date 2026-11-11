@@ -237,6 +237,37 @@ final class Schema
             $record->execute([':name'=>$provisioningIntentName,':applied'=>gmdate('Y-m-d H:i:s')]);
         }
 
+        $packageChangeName='20261112_0008_service_package_changes';
+        $pc=$db->prepare('SELECT id FROM migrations WHERE migration=:name LIMIT 1');
+        $pc->execute([':name'=>$packageChangeName]);
+        if(!$pc->fetchColumn()){
+            $db->exec("CREATE TABLE IF NOT EXISTS service_package_changes (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                service_id BIGINT UNSIGNED NOT NULL,
+                from_product_id BIGINT UNSIGNED NOT NULL,
+                to_product_id BIGINT UNSIGNED NOT NULL,
+                invoice_id BIGINT UNSIGNED NULL,
+                target_package VARCHAR(190) NOT NULL,
+                target_package_guid VARCHAR(190) NULL,
+                target_package_external_id VARCHAR(190) NULL,
+                target_amount DECIMAL(12,2) NOT NULL,
+                charge_amount DECIMAL(12,2) NOT NULL,
+                currency CHAR(3) NOT NULL,
+                status VARCHAR(24) NOT NULL DEFAULT 'pending_payment',
+                effective_at DATETIME NOT NULL,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL,
+                KEY idx_package_change_service_status(service_id,status),
+                KEY idx_package_change_invoice(invoice_id),
+                CONSTRAINT fk_package_change_service FOREIGN KEY(service_id) REFERENCES services(id) ON DELETE RESTRICT,
+                CONSTRAINT fk_package_change_from FOREIGN KEY(from_product_id) REFERENCES products(id) ON DELETE RESTRICT,
+                CONSTRAINT fk_package_change_to FOREIGN KEY(to_product_id) REFERENCES products(id) ON DELETE RESTRICT,
+                CONSTRAINT fk_package_change_invoice FOREIGN KEY(invoice_id) REFERENCES invoices(id) ON DELETE SET NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            $record=$db->prepare('INSERT IGNORE INTO migrations(migration,batch,applied_at) VALUES(:name,8,:applied)');
+            $record->execute([':name'=>$packageChangeName,':applied'=>gmdate('Y-m-d H:i:s')]);
+        }
+
         $packageMappingName='20261111_0007_remote_package_identifiers';
         $pm=$db->prepare('SELECT id FROM migrations WHERE migration=:name LIMIT 1');
         $pm->execute([':name'=>$packageMappingName]);
