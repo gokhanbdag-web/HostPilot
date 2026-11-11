@@ -25,7 +25,7 @@ $checks=[
     'ambiguous suspend/reactivate jobs have explicit admin reconciliation actions'=>str_contains($cron,'resolution" value="remote_applied"')&&str_contains($cron,'resolution" value="remote_not_applied"'),
     'lifecycle reconciliation rechecks invoice ownership and state'=>str_contains($cron,"SELECT * FROM invoices WHERE id=:id AND service_id=:service FOR UPDATE")&&str_contains($cron,"Fatura artık askıya alma koşullarını karşılamıyor"),
     'suspend review marker is cleared before safe retry'=>str_contains($cron,"SET suspension_source='none'")&&str_contains($cron,"['none','review']"),
-    'lifecycle reconciliation exits before account-creation fallback'=>str_contains($cron,"\$this->go('/admin/automation','notice='.$message);"),
+    'lifecycle reconciliation exits before account-creation fallback'=>str_contains($cron,"\$this->go('/admin/automation','notice='.\$message);"),
 
 ];
 $failed=[];
