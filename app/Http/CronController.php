@@ -63,6 +63,10 @@ final class CronController
                 echo '<form method="post" action="'.$this->e($this->url('/admin/automation/jobs/retry')).'"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="job_id" value="'.(int)$job['id'].'"><button type="submit">Güvenli şekilde yeniden kuyruğa al</button></form>';
             }elseif($job['status']==='needs_review'&&$type==='create'&&!empty($job['provisioning_username'])){
                 echo '<p>Önce kontrol panelinde kullanıcı adının varlığını ve alan adını doğrulayın.</p><form method="post" action="'.$this->e($this->url('/admin/automation/jobs/resolve')).'" style="display:inline-block;margin:4px 6px 4px 0"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="job_id" value="'.(int)$job['id'].'"><input type="hidden" name="resolution" value="remote_created"><button type="submit">Hesap mevcut — etkinleştir</button></form><form method="post" action="'.$this->e($this->url('/admin/automation/jobs/resolve')).'" style="display:inline-block;margin:4px 0"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="job_id" value="'.(int)$job['id'].'"><input type="hidden" name="resolution" value="remote_absent"><button type="submit">Hesap yok — yeniden dene</button></form>';
+            }elseif($job['status']==='needs_review'&&preg_match('/^terminate_[0-9]{14}_[a-f0-9]{6}$/',$type)){
+                echo '<p>Kontrol panelinde bu domain ve kullanıcı adının mevcut olup olmadığını doğrulayın. Silinmişse HostPilot kaydını sonlandırılmış olarak eşitleyin; hâlâ mevcutsa yeniden denemeyi seçin.</p>';
+                echo '<form method="post" action="'.$this->e($this->url('/admin/automation/jobs/resolve')).'" style="display:inline-block;margin:4px 6px 4px 0"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="job_id" value="'.(int)$job['id'].'"><input type="hidden" name="resolution" value="remote_deleted"><button type="submit">Uzak hesap silinmiş — eşitle</button></form>';
+                echo '<form method="post" action="'.$this->e($this->url('/admin/automation/jobs/resolve')).'" style="display:inline-block;margin:4px 0"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="job_id" value="'.(int)$job['id'].'"><input type="hidden" name="resolution" value="remote_present"><button type="submit">Uzak hesap mevcut — yeniden dene</button></form>';
             }elseif($job['status']==='needs_review'&&preg_match('/^(suspend|unsuspend)_([0-9]+)$/',$type,$lifeMatch)){
                 $lifeAction=$lifeMatch[1];
                 echo '<p>Kontrol panelinde hesabın durumunu doğrulayın. Uzak işlem uygulanmışsa durumu eşitleyin; uygulanmamışsa güvenli yeniden deneme kuyruğuna alın.</p>';
@@ -116,7 +120,21 @@ final class CronController
             if(!$job||$job['status']!=='needs_review')throw new \RuntimeException('Bu işlem yönetici incelemesinde değil.');
             $serviceQuery=$this->db->prepare('SELECT * FROM services WHERE id=:id FOR UPDATE');$serviceQuery->execute([':id'=>$job['service_id']]);$service=$serviceQuery->fetch();
             if(!$service)throw new \RuntimeException('Hizmet kaydı bulunamadı.');
-            if(preg_match('/^(suspend|unsuspend)_([0-9]+)$/',(string)$job['job_type'],$lifeMatch)){
+            if(preg_match('/^terminate_[0-9]{14}_[a-f0-9]{6}$/',(string)$job['job_type'])){
+                if(!in_array($resolution,['remote_deleted','remote_present'],true))throw new \\RuntimeException('Geçersiz sonlandırma uzlaştırma kararı.');
+                if($resolution==='remote_deleted'){
+                    $this->db->prepare("UPDATE services SET status='terminated',provisioning_status='terminated',provisioning_error=NULL,remote_password_enc=NULL,suspension_source='none',suspension_invoice_id=NULL,suspended_at=NULL,updated_at=:updated WHERE id=:id AND status IN ('active','suspended')")->execute([':updated'=>$now,':id'=>$service['id']]);
+                    $jobStatus='completed';$message='Yönetici uzak hesabın silindiğini doğruladı; HostPilot hizmeti sonlandırıldı.';
+                }else{
+                    if(!in_array($service['status'],['active','suspended'],true))throw new \\RuntimeException('Hizmet yeniden denemeye uygun değil.');
+                    $this->db->prepare("UPDATE services SET provisioning_status='completed',provisioning_error=NULL,updated_at=:updated WHERE id=:id")->execute([':updated'=>$now,':id'=>$service['id']]);
+                    $jobStatus='queued';$message='Yönetici uzak hesabın hâlâ mevcut olduğunu doğruladı; sonlandırma yeniden kuyruğa alındı.';
+                }
+                $this->db->prepare("UPDATE provisioning_jobs SET status=:status,attempts=0,available_at=:available,locked_at=NULL,last_error=NULL,updated_at=:updated WHERE id=:id")->execute([':status'=>$jobStatus,':available'=>$now,':updated'=>$now,':id'=>$id]);
+                $this->audit((int)$service['id'],(int)$service['server_id'],'terminate','admin_reconciled',$message);
+                $this->db->commit();
+                $this->go('/admin/automation','notice='.$message);
+            }elseif(preg_match('/^(suspend|unsuspend)_([0-9]+)$/',(string)$job['job_type'],$lifeMatch)){
                 if(!in_array($resolution,['remote_applied','remote_not_applied'],true))throw new \RuntimeException('Geçersiz uzak hizmet uzlaştırma kararı.');
                 $action=$lifeMatch[1];$invoiceId=(int)$lifeMatch[2];
                 $iq=$this->db->prepare('SELECT * FROM invoices WHERE id=:id AND service_id=:service FOR UPDATE');$iq->execute([':id'=>$invoiceId,':service'=>$service['id']]);$invoice=$iq->fetch();
@@ -188,6 +206,8 @@ final class CronController
                 $this->db->prepare("UPDATE provisioning_jobs SET status='needs_review',last_error='Worker yanıtı zaman aşımına uğradı; uzak hesap durumu doğrulanmalı.',updated_at=:now WHERE id=:id")->execute([':now'=>$now,':id'=>$old['id']]);
                 if($old['job_type']==='create'){
                     $this->db->prepare("UPDATE services SET provisioning_status='needs_review',provisioning_error='Otomatik işlem sonucu belirsiz; yönetici kontrolü gerekli.',updated_at=:now WHERE id=:id")->execute([':now'=>$now,':id'=>$old['service_id']]);
+                }elseif(str_starts_with((string)$old['job_type'],'terminate_')){
+                    $this->db->prepare("UPDATE services SET provisioning_status='needs_review',provisioning_error='Hesap sonlandırma yanıtı belirsiz; uzak hesap doğrulanmalı.',updated_at=:now WHERE id=:id")->execute([':now'=>$now,':id'=>$old['service_id']]);
                 }else{
                     $this->db->prepare("UPDATE services SET suspension_source='review',updated_at=:now WHERE id=:id AND suspension_source='none'")->execute([':now'=>$now,':id'=>$old['service_id']]);
                 }
@@ -197,7 +217,7 @@ final class CronController
             if(!$jobId){$this->db->commit();echo json_encode(['ok'=>true,'processed'=>0,'message'=>'Bekleyen iş yok.']);return;}
             $jobQuery=$this->db->prepare("SELECT * FROM provisioning_jobs WHERE id=:id FOR UPDATE");
             $jobQuery->execute([':id'=>$jobId]);$job=$jobQuery->fetch();
-            if(!$job||($job['job_type']!=='create'&&!preg_match('/^(suspend|unsuspend)_[0-9]+$/',(string)$job['job_type'])))throw new \RuntimeException('Desteklenmeyen kuyruk işlemi.');
+            if(!$job||($job['job_type']!=='create'&&!preg_match('/^(suspend|unsuspend)_[0-9]+$/',(string)$job['job_type'])&&!preg_match('/^terminate_[0-9]{14}_[a-f0-9]{6}$/',(string)$job['job_type'])))throw new \RuntimeException('Desteklenmeyen kuyruk işlemi.');
             $this->db->prepare("UPDATE provisioning_jobs SET status='processing',attempts=attempts+1,locked_at=:now,updated_at=:now2 WHERE id=:id")
                 ->execute([':now'=>$now,':now2'=>$now,':id'=>$jobId]);
             $this->db->commit();
@@ -205,6 +225,10 @@ final class CronController
             $serviceQuery=$this->db->prepare("SELECT s.*,u.email FROM services s JOIN users u ON u.id=s.user_id WHERE s.id=:id LIMIT 1");
             $serviceQuery->execute([':id'=>$job['service_id']]);$service=$serviceQuery->fetch();
             if(!$service)throw new \RuntimeException('Hizmet kaydı bulunamadı.');
+            if(str_starts_with((string)$job['job_type'],'terminate_')){
+                $this->processTerminationJob($job,$service,$remoteCallStarted);
+                return;
+            }
             if($job['job_type']!=='create'){
                 $this->processLifecycleJob($job,$service,$remoteCallStarted);
                 return;
@@ -265,6 +289,8 @@ final class CronController
                         $serviceStatus=$ambiguous?'needs_review':($retry?'queued':'failed');
                         $this->db->prepare("UPDATE services SET provisioning_status=:status,provisioning_error=:error,updated_at=:updated WHERE id=:id")
                             ->execute([':status'=>$serviceStatus,':error'=>$ambiguous?'Uzak sunucu yanıtı belirsiz; yinelenen hesap açılmasını önlemek için yönetici kontrolü gerekiyor.':$safe,':updated'=>$finished,':id'=>$service['id']]);
+                    }elseif($ambiguous&&str_starts_with((string)($job['job_type']??''),'terminate_')){
+                        $this->db->prepare("UPDATE services SET provisioning_status='needs_review',provisioning_error='Uzak hesap silme yanıtı belirsiz; yönetici kontrolü gerekli.',updated_at=:updated WHERE id=:id")->execute([':updated'=>$finished,':id'=>$service['id']]);
                     }elseif($ambiguous){
                         $this->db->prepare("UPDATE services SET suspension_source='review',updated_at=:updated WHERE id=:id AND suspension_source='none'")->execute([':updated'=>$finished,':id'=>$service['id']]);
                     }
@@ -325,6 +351,33 @@ final class CronController
         $modify=['monthly'=>'+1 month','quarterly'=>'+3 months','semiannually'=>'+6 months','annually'=>'+1 year','biennially'=>'+2 years','triennially'=>'+3 years'];
         if(!isset($modify[$cycle]))return null;
         return (new \DateTimeImmutable($period,new \DateTimeZone('UTC')))->modify($modify[$cycle])->format('Y-m-d');
+    }
+
+    private function processTerminationJob(array $job,array $service,bool &$remoteCallStarted):void
+    {
+        if(!preg_match('/^terminate_[0-9]{14}_[a-f0-9]{6}$/',(string)$job['job_type']))throw new \\RuntimeException('Geçersiz sonlandırma işi.');
+        if(!in_array($service['status'],['active','suspended'],true)||empty($service['provisioned_at'])||empty($service['server_id'])||empty($service['remote_username'])||empty($service['remote_domain']))throw new \\RuntimeException('Hizmet uzak hesap sonlandırmaya uygun değil.');
+        $q=$this->db->prepare('SELECT * FROM servers WHERE id=:id LIMIT 1');$q->execute([':id'=>$service['server_id']]);$server=$q->fetch();
+        if(!$server||!(int)$server['enabled'])throw new \\RuntimeException('Hizmetin sunucusu bulunamadı veya devre dışı.');
+        $server['secret']=$this->vault->decrypt((string)$server['secret_enc']);
+        $config=['base_url'=>$server['base_url'],'username'=>$server['username'],'secret'=>$server['secret'],'auth_mode'=>$server['auth_mode'],'shared_ip'=>$server['shared_ip']];
+        $adapter=match($server['panel_type']){
+            'cpanel'=>new CpanelWhmAdapter($config),
+            'directadmin'=>new DirectAdminAdapter($config),
+            'plesk'=>new PleskXmlAdapter($config),
+            default=>throw new \\RuntimeException('Desteklenmeyen kontrol paneli.')
+        };
+        $remoteCallStarted=true;
+        $adapter->terminateAccount((string)$service['remote_username'],(string)$service['remote_domain']);
+        $now=gmdate('Y-m-d H:i:s');
+        $this->db->beginTransaction();
+        $u=$this->db->prepare("UPDATE services SET status='terminated',provisioning_status='terminated',provisioning_error=NULL,remote_password_enc=NULL,suspension_source='none',suspension_invoice_id=NULL,suspended_at=NULL,updated_at=:updated WHERE id=:id AND status IN ('active','suspended')");
+        $u->execute([':updated'=>$now,':id'=>$service['id']]);
+        if($u->rowCount()!==1)throw new \\RuntimeException('Uzak hesap silindi ancak HostPilot hizmet kaydı eşzamanlı değişti; yönetici uzlaştırması gerekli.');
+        $this->db->prepare("UPDATE provisioning_jobs SET status='completed',locked_at=NULL,last_error=NULL,updated_at=:updated WHERE id=:id")->execute([':updated'=>$now,':id'=>$job['id']]);
+        $this->audit((int)$service['id'],(int)$server['id'],'terminate','success','Uzak hosting hesabı kalıcı olarak sonlandırıldı.');
+        $this->db->commit();
+        echo json_encode(['ok'=>true,'processed'=>1,'job_id'=>(int)$job['id'],'status'=>'terminated'],JSON_UNESCAPED_SLASHES);
     }
 
     private function processLifecycleJob(array $job,array $service,bool &$remoteCallStarted):void
