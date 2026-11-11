@@ -61,7 +61,8 @@ final class CronController
         $expected=hash_hmac('sha256','HostPilot provisioning cron v1',$this->applicationKey);
         if($this->applicationKey===''||$provided===''||!hash_equals($expected,$provided)){http_response_code(403);echo 'Forbidden';return;}
         header('Content-Type: application/json; charset=utf-8');
-        $jobId=0;$service=null;$server=null;$remoteCallStarted=false;
+        $jobId=0;$job=null;$service=null;$server=null;$remoteCallStarted=false;
+        $this->runBillingAutomation();
         try{
             $now=gmdate('Y-m-d H:i:s');
             $this->db->beginTransaction();
@@ -76,14 +77,19 @@ final class CronController
             if(!$jobId){$this->db->commit();echo json_encode(['ok'=>true,'processed'=>0,'message'=>'Bekleyen iş yok.']);return;}
             $jobQuery=$this->db->prepare("SELECT * FROM provisioning_jobs WHERE id=:id FOR UPDATE");
             $jobQuery->execute([':id'=>$jobId]);$job=$jobQuery->fetch();
-            if(!$job||$job['job_type']!=='create')throw new \RuntimeException('Desteklenmeyen kuyruk işlemi.');
+            if(!$job||($job['job_type']!=='create'&&!preg_match('/^(suspend|unsuspend)_[0-9]+$/',(string)$job['job_type'])))throw new \RuntimeException('Desteklenmeyen kuyruk işlemi.');
             $this->db->prepare("UPDATE provisioning_jobs SET status='processing',attempts=attempts+1,locked_at=:now,updated_at=:now2 WHERE id=:id")
                 ->execute([':now'=>$now,':now2'=>$now,':id'=>$jobId]);
             $this->db->commit();
 
             $serviceQuery=$this->db->prepare("SELECT s.*,u.email FROM services s JOIN users u ON u.id=s.user_id WHERE s.id=:id LIMIT 1");
             $serviceQuery->execute([':id'=>$job['service_id']]);$service=$serviceQuery->fetch();
-            if(!$service||$service['status']!=='pending'||empty($service['domain'])||!filter_var($service['domain'],FILTER_VALIDATE_DOMAIN,FILTER_FLAG_HOSTNAME))
+            if(!$service)throw new \RuntimeException('Hizmet kaydı bulunamadı.');
+            if($job['job_type']!=='create'){
+                $this->processLifecycleJob($job,$service,$remoteCallStarted);
+                return;
+            }
+            if($service['status']!=='pending'||empty($service['domain'])||!filter_var($service['domain'],FILTER_VALIDATE_DOMAIN,FILTER_FLAG_HOSTNAME))
                 throw new \RuntimeException('Hizmet veya alan adı doğrulaması başarısız.');
 
             $serverQuery=$this->db->prepare("SELECT sv.*,m.remote_package FROM servers sv JOIN server_product_map m ON m.server_id=sv.id WHERE sv.enabled=1 AND m.product_id=:product ORDER BY (SELECT COUNT(*) FROM services s2 WHERE s2.server_id=sv.id AND s2.status IN ('active','pending')) ASC,sv.id ASC LIMIT 1");
@@ -124,9 +130,11 @@ final class CronController
                 $this->db->prepare("UPDATE provisioning_jobs SET status=:status,locked_at=NULL,last_error=:error,updated_at=:updated WHERE id=:id")
                     ->execute([':status'=>$jobStatus,':error'=>$safe,':updated'=>$finished,':id'=>$jobId]);
                 if(is_array($service)&&isset($service['id'])){
-                    $this->db->prepare("UPDATE services SET provisioning_status=:status,provisioning_error=:error,updated_at=:updated WHERE id=:id")
-                        ->execute([':status'=>$jobStatus,':error'=>$ambiguous?'Uzak sunucu yanıtı belirsiz; yinelenen hesap açılmasını önlemek için yönetici kontrolü gerekiyor.':$safe,':updated'=>$finished,':id'=>$service['id']]);
-                    $this->audit((int)$service['id'],is_array($server)?(int)$server['id']:0,'create',$jobStatus,$safe);
+                    if(($job['job_type']??'create')==='create'){
+                        $this->db->prepare("UPDATE services SET provisioning_status=:status,provisioning_error=:error,updated_at=:updated WHERE id=:id")
+                            ->execute([':status'=>$jobStatus,':error'=>$ambiguous?'Uzak sunucu yanıtı belirsiz; yinelenen hesap açılmasını önlemek için yönetici kontrolü gerekiyor.':$safe,':updated'=>$finished,':id'=>$service['id']]);
+                    }
+                    $this->audit((int)$service['id'],is_array($server)?(int)$server['id']:0,(string)($job['job_type']??'create'),$jobStatus,$safe);
                 }
             }
             http_response_code(200);
