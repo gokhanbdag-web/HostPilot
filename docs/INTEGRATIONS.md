@@ -13,7 +13,8 @@
 - Suspend reference: https://api.docs.cpanel.net/specifications/whm.openapi/operation/suspendacct/
 - Verified documented use cases include WHM server administration, account management, service management, account creation, and suspension.
 - Implemented: WHM API 1 token authentication, HTTPS connection/version probe, and `createacct` account creation. Account credentials are sent in a POST body. TLS verification is mandatory.
-- Pending: suspend/unsuspend/terminate/package changes, account details, capability discovery, and live server acceptance tests.
+- Implemented: suspend and unsuspend via WHM API `suspendacct` / `unsuspendacct`.
+- Pending: termination/package changes, account details, capability discovery, and live server acceptance tests.
 - Constraints: reseller ACLs, server profile, WHM version, and token permissions may limit available operations. Test using the actual configured reseller/root scope; never assume root-level access.
 
 ### DirectAdmin
@@ -22,7 +23,8 @@
 - Official docs describe two modes: newer JSON API under `/api/...` and legacy API under `/CMD_API_...`.
 - The current server exposes its supported OpenAPI/Swagger description at `/static/swagger.json`.
 - Implemented: HTTPS `/api/version` connection probe and legacy `CMD_ACCOUNT_USER?json=yes` account creation using Basic authentication. Use a dedicated restricted DirectAdmin Login Key rather than the main administrator password.
-- Pending: capability discovery from `/static/swagger.json`, suspend/unsuspend/terminate/package changes, and live server acceptance tests.
+- Implemented: suspend/unsuspend via `CMD_API_SELECT_USERS` account-selection actions.
+- Pending: capability discovery from `/static/swagger.json`, terminate/package changes, and live server acceptance tests.
 - Constraints: DirectAdmin API surface evolves; endpoint availability and permission scope depend on installed version/configuration.
 
 ### Plesk
@@ -32,7 +34,8 @@
 - Plesk documents both REST and XML APIs. REST uses HTTPS and OpenAPI; API keys are recommended by Plesk. Current REST access starts with Obsidian 18.0.79 for admin/reseller/customer roles when permission is granted.
 - Plesk explicitly notes REST coverage is still limited compared with XML API. New integrations should prefer REST; use XML only for required operations not yet available in REST.
 - Implemented: XML API connection probe and `webspace/add` subscription creation with a mapped Plesk service plan and configured shared IP. Authentication supports `HTTP_AUTH_LOGIN`/`HTTP_AUTH_PASSWD` or the `KEY` header; TLS verification is mandatory.
-- Pending: REST adapter, suspend/unsuspend/terminate/package changes, role/capability checks, and live server acceptance tests.
+- Implemented: XML `<webspace><set>` subscription status changes for suspend/reactivate.
+- Pending: REST adapter, termination/package changes, role/capability checks, and live server acceptance tests.
 - Constraints: role permissions, Plesk version, platform (Linux/Windows), and endpoint coverage. Do not assume a reseller has administrator capabilities.
 
 ### Shared hosting adapter security
