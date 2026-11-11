@@ -366,5 +366,10 @@ final class CronController
     }
     private function url(string $path):string{return htmlspecialchars(rtrim($this->basePath,'/').$path,ENT_QUOTES,'UTF-8');}
     private function e(string $s):string{return htmlspecialchars($s,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');}
-    private function go(string $path):never{header('Location: '.$this->url($path));exit;}
+    private function go(string $path,string $query=''):never
+    {
+        $location=rtrim($this->basePath,'/').$path;
+        if($query!==''){parse_str($query,$params);if($params)$location.='?'.http_build_query($params);}
+        header('Location: '.$location);exit;
+    }
 }
