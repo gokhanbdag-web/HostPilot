@@ -34,10 +34,12 @@ hostingExpect($badPlesk,'Plesk account creation requires a valid shared IP');
 $contract=new ReflectionClass(HostPilot\Hosting\HostingAdapter::class);
 hostingExpect($contract->hasMethod('suspendAccount'),'Hosting adapter contract exposes account suspension');
 hostingExpect($contract->hasMethod('unsuspendAccount'),'Hosting adapter contract exposes account reactivation');
+hostingExpect($contract->hasMethod('terminateAccount'),'Hosting adapter contract exposes permanent account termination');
 foreach([HostPilot\Hosting\CpanelWhmAdapter::class,HostPilot\Hosting\DirectAdminAdapter::class,HostPilot\Hosting\PleskXmlAdapter::class] as $adapterClass){
     $adapter=new ReflectionClass($adapterClass);
     hostingExpect($adapter->implementsInterface(HostPilot\Hosting\HostingAdapter::class),'Adapter implements shared lifecycle contract: '.$adapterClass);
     hostingExpect($adapter->hasMethod('suspendAccount')&&$adapter->hasMethod('unsuspendAccount'),'Adapter provides suspend/reactivate methods: '.$adapterClass);
+    hostingExpect($adapter->hasMethod('terminateAccount'),'Adapter provides termination method: '.$adapterClass);
 }
 
 echo 'Hosting adapter smoke tests completed.'.PHP_EOL;
