@@ -53,6 +53,22 @@ final class PaymentController
         $this->pageEnd();
     }
 
+    public function adminTransactions():void
+    {
+        if(!$this->isStaff()){http_response_code(403);echo 'Yetkisiz erişim.';return;}
+        $rows=$this->db->query("SELECT pt.id,pt.gateway,pt.gateway_transaction_id,pt.status,pt.currency,pt.amount,pt.response_code,pt.safe_message,pt.created_at,i.invoice_number,u.name,u.email
+            FROM payment_transactions pt JOIN invoices i ON i.id=pt.invoice_id JOIN users u ON u.id=pt.user_id
+            ORDER BY pt.created_at DESC LIMIT 500")->fetchAll();
+        $this->pageStart('Ödeme işlemleri');
+        echo '<div class="admin"><aside><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a href="'.$this->url('/admin').'">← Kontrol merkezi</a><a href="'.$this->url('/admin/payments').'">Ödeme ayarları</a><a class="active" href="'.$this->url('/admin/payment-transactions').'">Ödeme işlemleri</a><a href="'.$this->url('/admin/invoices').'">Faturalar</a></aside><main><header><small>FİNANS / İŞLEM KAYITLARI</small><h1>Ödeme işlemleri</h1><p>Sağlayıcı dönüşleri, işlem referansları ve tahsilat durumları. En son 500 işlem gösterilir.</p></header><section class="box"><div style="overflow-x:auto"><table><thead><tr><th>Tarih</th><th>Fatura / Müşteri</th><th>Sağlayıcı</th><th>Tutar</th><th>Durum</th><th>Referans</th></tr></thead><tbody>';
+        if(!$rows)echo '<tr><td colspan="6">Henüz ödeme işlemi bulunmuyor.</td></tr>';
+        foreach($rows as $v)echo '<tr><td>'.date('d.m.Y H:i',strtotime($v['created_at'])).'</td><td>#'.$this->e($v['invoice_number']).'<small>'.$this->e($v['name']).' · '.$this->e($v['email']).'</small></td><td>'.$this->e(strtoupper($v['gateway'])).'</td><td>'.number_format((float)$v['amount'],2,',','.').' '.$this->e($v['currency']).'</td><td>'.$this->e($this->transactionStatus($v['status'])).'<small>'.$this->e((string)$v['response_code']).'</small></td><td>'.$this->e((string)($v['gateway_transaction_id']??'—')).'<small>'.$this->e((string)($v['safe_message']??'')).'</small></td></tr>';
+        echo '</tbody></table></div></section></main></div>';$this->pageEnd();
+    }
+
+    private function transactionStatus(string $status):string
+    {return ['pending'=>'Bekliyor','success'=>'Başarılı','failed'=>'Başarısız','review'=>'İncelemede','cancelled'=>'İptal'][strtolower($status)]??$status;}
+
     public function payInvoice(int $invoiceId):void
     {
         $user=Auth::user();
