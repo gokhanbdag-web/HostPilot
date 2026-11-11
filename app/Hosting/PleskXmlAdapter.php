@@ -24,6 +24,14 @@ final class PleskXmlAdapter implements HostingAdapter
         $response=$this->xml('<?xml version="1.0" encoding="UTF-8"?><packet><server><get><gen_info/></get></server></packet>');
         return 'Plesk XML API bağlantısı başarılı.';
     }
+    private function setSubscriptionStatus(string $domain,int $status):void
+    {
+        $name=htmlspecialchars($domain,ENT_XML1|ENT_QUOTES,'UTF-8');
+        $body='<?xml version="1.0" encoding="UTF-8"?><packet><webspace><set><filter><name>'.$name.'</name></filter><values><gen_setup><status>'.$status.'</status></gen_setup></values></set></webspace></packet>';
+        $this->xml($body);
+    }
+    public function suspendAccount(string $username,string $domain,string $reason):void{$this->setSubscriptionStatus($domain,16);}
+    public function unsuspendAccount(string $username,string $domain):void{$this->setSubscriptionStatus($domain,0);}
     public function createAccount(array $a):array
     {
         $ip=(string)($this->server['shared_ip']??'');
