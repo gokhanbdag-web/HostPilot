@@ -10,7 +10,7 @@ $checks=[
     'billing suspension ownership fields'=>str_contains($schema,'suspension_source')&&str_contains($schema,'suspension_invoice_id'),
     'grace period is configurable'=>str_contains($cron,'billing_grace_days')&&str_contains($cron,"setting_key='grace_days'"),
     'renewal invoices are generated from service due dates'=>str_contains($cron,'advanceBillingDate')&&str_contains($cron,'service_period_start'),
-    'only outstanding overdue balances are suspended'=>str_contains($cron,"i.status IN ('unpaid','partially_paid')")&&str_contains($cron,'i.amount_paid+0.005<i.total'),
+    'only outstanding overdue balances are suspended'=>str_contains($cron,"i.status IN ('unpaid','partially_paid','overdue')")&&str_contains($cron,'i.amount_paid+0.005<i.total')&&str_contains($cron,"SET status='overdue'"),
     'billing worker rechecks invoice before suspend'=>str_contains($cron,'Recheck after the remote call')&&str_contains($cron,'payment_race_recovered'),
     'safe failures use bounded retry backoff'=>str_contains($cron,'$attempts<5')&&str_contains($cron,'$delay=min(3600,300*'),
     'ambiguous lifecycle outcomes enter review state'=>str_contains($cron,"suspension_source='review'"),
