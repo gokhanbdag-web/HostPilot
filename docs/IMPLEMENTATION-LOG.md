@@ -116,3 +116,23 @@
 
 - iyzico fraud-review states are kept pending only after the retrieve response signature and invoice/conversation/amount data all match.
 - iyzico buyer identity number is checksum-validated before checkout initialization.
+
+## 2026-11-11 — Hosting control-panel provisioning foundation
+
+### Added
+- Versioned schema migration for hosting servers, encrypted API credentials, per-product remote package mappings, provisioning logs, and service remote-account fields.
+- Shared HTTPS transport with TLS certificate/hostname verification, bounded timeouts, no redirect following, and rejection of insecure/local literal endpoints.
+- cPanel/WHM adapter using WHM API 1 token authentication; account creation sends credentials in a POST body, not a URL query string.
+- DirectAdmin adapter using Basic authentication and the documented legacy account-create endpoint; dedicated Login Key credentials are recommended.
+- Plesk XML API adapter for connection checks and subscription creation with a selected service plan.
+- Admin server registry, connection-test action, and product-to-remote-package mapping interface.
+- Admin-triggered service provisioning with a transaction lock, duplicate-action protection, generated account credentials, encrypted password storage, and provisioning audit logs.
+- Customer-owned hosting service page; account credentials are decrypted only for the authenticated owner. Customer panel URLs use the panel-specific ports.
+- Dependency-free smoke tests for secure URL validation and adapter-side input validation; GitHub Actions runs them alongside PHP lint and payment crypto tests.
+
+### Not yet production-verified
+- No live cPanel/WHM, DirectAdmin, or Plesk server credentials were supplied; remote API calls have not been executed.
+- Automatic queued provisioning, scheduled worker/cron, suspend/unsuspend/termination, package changes, reconciliation, and automated retry remain pending.
+- DirectAdmin and Plesk API behavior can vary by installed version, account permissions, available packages, and server configuration.
+- cPanel requires a WHM API token with appropriate account-creation privileges; DirectAdmin should use a restricted Login Key; Plesk XML API KEYs can be IP-bound.
+- PHP cURL and OpenSSL support and valid TLS certificates are required.
