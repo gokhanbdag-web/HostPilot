@@ -32,6 +32,16 @@ final class PleskXmlAdapter implements HostingAdapter
     }
     public function suspendAccount(string $username,string $domain,string $reason):void{$this->setSubscriptionStatus($domain,16);}
     public function unsuspendAccount(string $username,string $domain):void{$this->setSubscriptionStatus($domain,0);}
+    public function changePackage(string $username,string $domain,string $package,string $packageGuid='',string $packageExternalId=''):void
+    {
+        if(!filter_var($domain,FILTER_VALIDATE_DOMAIN,FILTER_FLAG_HOSTNAME))throw new RuntimeException('Plesk abonelik alan adı geçersiz.');
+        if($packageGuid===''||$packageExternalId==='')throw new RuntimeException('Plesk paket değişimi için plan GUID ve harici plan kimliği birlikte tanımlanmalıdır.');
+        if(strlen($packageGuid)>190||strlen($packageExternalId)>190||preg_match('/[\\r\\n\\x00]/',$packageGuid.$packageExternalId))throw new RuntimeException('Plesk plan kimlikleri geçersiz.');
+        $esc=static fn(string $v):string=>htmlspecialchars($v,ENT_XML1|ENT_QUOTES,'UTF-8');
+        $name=$esc($domain);$guid=$esc($packageGuid);$external=$esc($packageExternalId);
+        $body='<?xml version="1.0" encoding="UTF-8"?><packet><webspace><switch-subscription><filter><name>'.$name.'</name></filter><plan-guid>'.$guid.'</plan-guid><plan-external-id>'.$external.'</plan-external-id></switch-subscription></webspace></packet>';
+        $this->xml($body);
+    }
     public function terminateAccount(string $username,string $domain):void
     {
         if(!filter_var($domain,FILTER_VALIDATE_DOMAIN,FILTER_FLAG_HOSTNAME))throw new RuntimeException('Plesk abonelik alan adı geçersiz.');
