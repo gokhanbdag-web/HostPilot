@@ -121,12 +121,12 @@ final class CronController
             $serviceQuery=$this->db->prepare('SELECT * FROM services WHERE id=:id FOR UPDATE');$serviceQuery->execute([':id'=>$job['service_id']]);$service=$serviceQuery->fetch();
             if(!$service)throw new \RuntimeException('Hizmet kaydı bulunamadı.');
             if(preg_match('/^terminate_[0-9]{14}_[a-f0-9]{6}$/',(string)$job['job_type'])){
-                if(!in_array($resolution,['remote_deleted','remote_present'],true))throw new \\RuntimeException('Geçersiz sonlandırma uzlaştırma kararı.');
+                if(!in_array($resolution,['remote_deleted','remote_present'],true))throw new \RuntimeException('Geçersiz sonlandırma uzlaştırma kararı.');
                 if($resolution==='remote_deleted'){
                     $this->db->prepare("UPDATE services SET status='terminated',provisioning_status='terminated',provisioning_error=NULL,remote_password_enc=NULL,suspension_source='none',suspension_invoice_id=NULL,suspended_at=NULL,updated_at=:updated WHERE id=:id AND status IN ('active','suspended')")->execute([':updated'=>$now,':id'=>$service['id']]);
                     $jobStatus='completed';$message='Yönetici uzak hesabın silindiğini doğruladı; HostPilot hizmeti sonlandırıldı.';
                 }else{
-                    if(!in_array($service['status'],['active','suspended'],true))throw new \\RuntimeException('Hizmet yeniden denemeye uygun değil.');
+                    if(!in_array($service['status'],['active','suspended'],true))throw new \RuntimeException('Hizmet yeniden denemeye uygun değil.');
                     $this->db->prepare("UPDATE services SET provisioning_status='completed',provisioning_error=NULL,updated_at=:updated WHERE id=:id")->execute([':updated'=>$now,':id'=>$service['id']]);
                     $jobStatus='queued';$message='Yönetici uzak hesabın hâlâ mevcut olduğunu doğruladı; sonlandırma yeniden kuyruğa alındı.';
                 }
@@ -355,17 +355,17 @@ final class CronController
 
     private function processTerminationJob(array $job,array $service,bool &$remoteCallStarted):void
     {
-        if(!preg_match('/^terminate_[0-9]{14}_[a-f0-9]{6}$/',(string)$job['job_type']))throw new \\RuntimeException('Geçersiz sonlandırma işi.');
-        if(!in_array($service['status'],['active','suspended'],true)||empty($service['provisioned_at'])||empty($service['server_id'])||empty($service['remote_username'])||empty($service['remote_domain']))throw new \\RuntimeException('Hizmet uzak hesap sonlandırmaya uygun değil.');
+        if(!preg_match('/^terminate_[0-9]{14}_[a-f0-9]{6}$/',(string)$job['job_type']))throw new \RuntimeException('Geçersiz sonlandırma işi.');
+        if(!in_array($service['status'],['active','suspended'],true)||empty($service['provisioned_at'])||empty($service['server_id'])||empty($service['remote_username'])||empty($service['remote_domain']))throw new \RuntimeException('Hizmet uzak hesap sonlandırmaya uygun değil.');
         $q=$this->db->prepare('SELECT * FROM servers WHERE id=:id LIMIT 1');$q->execute([':id'=>$service['server_id']]);$server=$q->fetch();
-        if(!$server||!(int)$server['enabled'])throw new \\RuntimeException('Hizmetin sunucusu bulunamadı veya devre dışı.');
+        if(!$server||!(int)$server['enabled'])throw new \RuntimeException('Hizmetin sunucusu bulunamadı veya devre dışı.');
         $server['secret']=$this->vault->decrypt((string)$server['secret_enc']);
         $config=['base_url'=>$server['base_url'],'username'=>$server['username'],'secret'=>$server['secret'],'auth_mode'=>$server['auth_mode'],'shared_ip'=>$server['shared_ip']];
         $adapter=match($server['panel_type']){
             'cpanel'=>new CpanelWhmAdapter($config),
             'directadmin'=>new DirectAdminAdapter($config),
             'plesk'=>new PleskXmlAdapter($config),
-            default=>throw new \\RuntimeException('Desteklenmeyen kontrol paneli.')
+            default=>throw new \RuntimeException('Desteklenmeyen kontrol paneli.')
         };
         $remoteCallStarted=true;
         $adapter->terminateAccount((string)$service['remote_username'],(string)$service['remote_domain']);
@@ -373,7 +373,7 @@ final class CronController
         $this->db->beginTransaction();
         $u=$this->db->prepare("UPDATE services SET status='terminated',provisioning_status='terminated',provisioning_error=NULL,remote_password_enc=NULL,suspension_source='none',suspension_invoice_id=NULL,suspended_at=NULL,updated_at=:updated WHERE id=:id AND status IN ('active','suspended')");
         $u->execute([':updated'=>$now,':id'=>$service['id']]);
-        if($u->rowCount()!==1)throw new \\RuntimeException('Uzak hesap silindi ancak HostPilot hizmet kaydı eşzamanlı değişti; yönetici uzlaştırması gerekli.');
+        if($u->rowCount()!==1)throw new \RuntimeException('Uzak hesap silindi ancak HostPilot hizmet kaydı eşzamanlı değişti; yönetici uzlaştırması gerekli.');
         $this->db->prepare("UPDATE provisioning_jobs SET status='completed',locked_at=NULL,last_error=NULL,updated_at=:updated WHERE id=:id")->execute([':updated'=>$now,':id'=>$job['id']]);
         $this->audit((int)$service['id'],(int)$server['id'],'terminate','success','Uzak hosting hesabı kalıcı olarak sonlandırıldı.');
         $this->db->commit();
