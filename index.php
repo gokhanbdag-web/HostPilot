@@ -47,6 +47,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 try {
     $database = new \HostPilot\Core\Database($config['database']);
     $pdo = $database->connection();
+    \\HostPilot\\Core\\Schema::migrate($pdo);
 } catch (Throwable $exception) {
     error_log('[HostPilot] Database connection failed: ' . $exception->getMessage());
     http_response_code(503);
