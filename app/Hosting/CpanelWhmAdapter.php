@@ -24,6 +24,13 @@ final class CpanelWhmAdapter implements HostingAdapter
     {$this->call('suspendacct',['user'=>$username,'reason'=>$reason,'disallowun'=>1]);}
     public function unsuspendAccount(string $username,string $domain):void
     {$this->call('unsuspendacct',['user'=>$username]);}
+    public function changePackage(string $username,string $domain,string $package,string $packageGuid='',string $packageExternalId=''):void
+    {
+        if(!preg_match('/^[a-z][a-z0-9]{0,15}$/',$username))throw new RuntimeException('cPanel kullanıcı adı geçersiz.');
+        if($package===''||strlen($package)>190||preg_match('/[\\r\\n\\x00]/',$package))throw new RuntimeException('cPanel paket adı geçersiz.');
+        // WHM API 1 changepackage: user + pkg.
+        $this->call('changepackage',['user'=>$username,'pkg'=>$package]);
+    }
     public function terminateAccount(string $username,string $domain):void
     {
         if(!preg_match('/^[a-z][a-z0-9]{0,15}$/',$username))throw new RuntimeException('cPanel kullanıcı adı geçersiz.');
