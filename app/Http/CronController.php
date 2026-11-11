@@ -28,7 +28,7 @@ final class CronController
         if(!$user){$this->go('/admin/login');return;}
         if(!in_array($user['role']??'', ['super_admin','admin'],true)){http_response_code(403);echo 'Yetkisiz erişim.';return;}
         if($this->applicationKey===''){http_response_code(500);echo 'Kurulum anahtarı bulunamadı.';return;}
-        $notice='';$error='';
+        $notice=(string)($_GET['notice']??'');$error=(string)($_GET['error']??'');
         if(($_SERVER['REQUEST_METHOD']??'GET')==='POST'){
             if(!Auth::verifyCsrf($_POST['_token']??null))$error='Güvenlik doğrulaması başarısız.';
             else{
