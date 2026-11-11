@@ -100,7 +100,7 @@ final class ServerController
                 echo '</select><input name="domain" required placeholder="example.com" value="'.$this->e((string)($row['domain']??'')).'"><button>Hesabı oluştur</button></form>';
             }elseif(!empty($row['provisioned_at'])&&in_array($row['status'],['active','suspended'],true)){
                 $op=$row['status']==='active'?'suspend':'unsuspend';$label=$op==='suspend'?'Hizmeti askıya al':'Yeniden etkinleştir';
-                echo '<form method="post" action="'.$this->url('/admin/services/lifecycle').'" onsubmit="return confirm(\\'Bu hizmetin sunucu durumunu değiştirmek istediğinize emin misiniz?\\')"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="service_id" value="'.(int)$row['id'].'"><input type="hidden" name="operation" value="'.$op.'"><button class="secondary">'.$label.'</button></form>';
+                echo '<form method="post" action="'.$this->url('/admin/services/lifecycle').'"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="service_id" value="'.(int)$row['id'].'"><input type="hidden" name="operation" value="'.$op.'"><button class="secondary">'.$label.'</button></form>';
             }else echo '<span class="muted">İşlem bekliyor</span>';
             echo '</td></tr>';
         }
