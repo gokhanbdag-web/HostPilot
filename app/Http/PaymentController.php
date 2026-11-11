@@ -5,6 +5,7 @@ namespace HostPilot\Http;
 use HostPilot\Core\Auth;
 use HostPilot\Core\SecretVault;
 use HostPilot\Payment\GatewayTransport;
+use HostPilot\Payment\PaytrSignature;
 use PDO;
 use Throwable;
 
@@ -163,8 +164,7 @@ final class PaymentController
         $v=$this->settings();if($v['paytr_merchant_key']===''||$v['paytr_merchant_salt']===''){http_response_code(503);echo 'NO_CONFIG';return;}
         try{$key=$this->vault->decrypt($v['paytr_merchant_key']);$salt=$this->vault->decrypt($v['paytr_merchant_salt']);}
         catch(Throwable){http_response_code(503);echo 'NO_CONFIG';return;}
-        $expected=base64_encode(hash_hmac('sha256',$oid.$salt.$status.$total,$key,true));
-        if(!hash_equals($expected,$hash)){http_response_code(400);echo 'BAD_HASH';return;}
+        if(!PaytrSignature::verifyCallback($oid,$salt,$status,$total,$hash,$key)){http_response_code(400);echo 'BAD_HASH';return;}
         $q=$this->db->prepare("SELECT pt.*,i.total AS invoice_total,i.currency AS invoice_currency,i.invoice_number FROM payment_transactions pt JOIN invoices i ON i.id=pt.invoice_id WHERE pt.gateway='paytr' AND pt.request_reference=:ref LIMIT 1");
         $q->execute([':ref'=>$oid]);$tx=$q->fetch();
         if(!$tx){http_response_code(404);echo 'NOT_FOUND';return;}
