@@ -22,6 +22,16 @@ final class DirectAdminAdapter implements HostingAdapter
     }
     public function suspendAccount(string $username,string $domain,string $reason):void{$this->accountAction($username,'suspend');}
     public function unsuspendAccount(string $username,string $domain):void{$this->accountAction($username,'unsuspend');}
+    public function terminateAccount(string $username,string $domain):void
+    {
+        if(!preg_match('/^[a-z][a-z0-9]{3,7}$/',$username))throw new RuntimeException('DirectAdmin kullanıcı adı geçersiz.');
+        $data=['confirmed'=>'Confirm','delete'=>'yes','select0'=>$username,'json'=>'yes'];
+        $r=HostingTransport::request($this->server['base_url'],'/CMD_API_SELECT_USERS?json=yes','POST',['Accept: application/json','Content-Type: application/x-www-form-urlencoded'],http_build_query($data),[$this->server['username'],$this->server['secret']]);
+        $j=$r['json'];
+        if(is_array($j)){
+            if((string)($j['error']??'0')!=='0')throw new RuntimeException((string)($j['text']??$j['details']??'DirectAdmin hesap silme hatası.'));
+        }elseif(preg_match('/(?:^|&)error=1(?:&|$)/',(string)$r['body']))throw new RuntimeException('DirectAdmin hesap silme işlemini reddetti.');
+    }
     public function createAccount(array $a):array
     {
         $username=strtolower((string)$a['username']);
