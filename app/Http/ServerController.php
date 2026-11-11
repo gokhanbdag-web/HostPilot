@@ -158,8 +158,8 @@ final class ServerController
             if($operation==='suspend')$adapter->suspendAccount((string)$service['remote_username'],(string)$service['remote_domain'],'HostPilot billing / administrator action');
             else $adapter->unsuspendAccount((string)$service['remote_username'],(string)$service['remote_domain']);
             $newStatus=$operation==='suspend'?'suspended':'active';$now=gmdate('Y-m-d H:i:s');
-            $u=$this->db->prepare("UPDATE services SET status=:status,updated_at=:updated WHERE id=:id AND status=:old");
-            $u->execute([':status'=>$newStatus,':updated'=>$now,':id'=>$id,':old'=>$service['status']]);
+            $u=$this->db->prepare("UPDATE services SET status=:status,suspension_source=:source,suspension_invoice_id=NULL,suspended_at=:suspended,updated_at=:updated WHERE id=:id AND status=:old");
+            $u->execute([':status'=>$newStatus,':source'=>$operation==='suspend'?'admin':'none',':suspended'=>$operation==='suspend'?$now:null,':updated'=>$now,':id'=>$id,':old'=>$service['status']]);
             if($u->rowCount()!==1)throw new \RuntimeException('Hizmet durumu eşzamanlı değişti; işlem tekrar kontrol edilmeli.');
             $this->log($id,(int)$service['server_id'],$operation,'success','Kontrol paneli hizmet durumu: '.$newStatus);
             $this->go('/admin/services','notice=Sunucu ve HostPilot hizmet durumu güncellendi.');
