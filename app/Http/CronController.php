@@ -124,7 +124,7 @@ final class CronController
                 if($resolution==='remote_applied'){
                     if($action==='suspend'){
                         if(!in_array($invoice['status'],['unpaid','partially_paid','overdue'],true)||(float)$invoice['amount_paid']+0.005>=(float)$invoice['total']||empty($invoice['due_at'])||$invoice['due_at']>$now)throw new \RuntimeException('Fatura artık askıya alma koşullarını karşılamıyor; hizmeti askıda olarak eşitlemek güvenli değil.');
-                        if($service['status']==='active'&&($service['suspension_source']??'none')==='none'){
+                        if($service['status']==='active'&&in_array(($service['suspension_source']??'none'),['none','review'],true)){
                             $this->db->prepare("UPDATE services SET status='suspended',suspension_source='billing',suspension_invoice_id=:invoice,suspended_at=:at,updated_at=:updated WHERE id=:id")->execute([':invoice'=>$invoiceId,':at'=>$now,':updated'=>$now,':id'=>$service['id']]);
                         }elseif(!($service['status']==='suspended'&&($service['suspension_source']??'')==='billing'&&(int)$service['suspension_invoice_id']===$invoiceId))throw new \RuntimeException('Hizmetin mevcut durumu fatura kaynaklı askıya alma ile çelişiyor.');
                     }else{
@@ -135,10 +135,15 @@ final class CronController
                     }
                     $jobStatus='completed';$message='Yönetici uzak kontrol paneli durumunu doğruladı ve HostPilot kaydı eşitlendi.';
                 }else{
+                    if($action==='suspend'&&$service['status']==='active'&&($service['suspension_source']??'none')==='review'){
+                        $this->db->prepare("UPDATE services SET suspension_source='none',updated_at=:updated WHERE id=:id")->execute([':updated'=>$now,':id'=>$service['id']]);
+                    }
                     $jobStatus='queued';$message='Yönetici uzak işlemin uygulanmadığını doğruladı; kuyruk yeniden başlatıldı.';
                 }
                 $this->db->prepare("UPDATE provisioning_jobs SET status=:status,attempts=0,available_at=:available,locked_at=NULL,last_error=NULL,updated_at=:updated WHERE id=:id")->execute([':status'=>$jobStatus,':available'=>$now,':updated'=>$now,':id'=>$id]);
                 $this->audit((int)$service['id'],(int)$service['server_id'],(string)$job['job_type'],'admin_reconciled',$message);
+                $this->db->commit();
+                $this->go('/admin/automation','notice='.$message);
             }elseif($job['job_type']==='create'&&$resolution==='remote_created'){
                 if(empty($service['provisioning_username'])||empty($service['provisioning_password_enc'])||empty($service['domain'])||empty($service['server_id']))throw new \RuntimeException('Kayıtlı hesap oluşturma bilgileri eksik; manuel uzlaştırma yapılamıyor.');
                 $this->db->prepare("UPDATE services SET status='active',provisioning_status='completed',remote_identifier=:username,remote_username=:username,remote_domain=:domain,remote_password_enc=:password,provisioning_username=NULL,provisioning_password_enc=NULL,provisioned_at=:at,provisioning_error=NULL,updated_at=:updated WHERE id=:id")
