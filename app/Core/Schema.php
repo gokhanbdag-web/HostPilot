@@ -195,6 +195,7 @@ final class Schema
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
             $record=$db->prepare('INSERT IGNORE INTO migrations(migration,batch,applied_at) VALUES(:name,4,:applied)');
             $record->execute([':name'=>$queueName,':applied'=>gmdate('Y-m-d H:i:s')]);
+        }
 
         $billingLifecycleName='20261111_0005_service_billing_lifecycle';
         $bl=$db->prepare('SELECT id FROM migrations WHERE migration=:name LIMIT 1');
@@ -218,7 +219,6 @@ final class Schema
             if(!(int)$fk)$db->exec('ALTER TABLE invoices ADD CONSTRAINT fk_invoice_service FOREIGN KEY(service_id) REFERENCES services(id) ON DELETE SET NULL');
             $record=$db->prepare('INSERT IGNORE INTO migrations(migration,batch,applied_at) VALUES(:name,5,:applied)');
             $record->execute([':name'=>$billingLifecycleName,':applied'=>gmdate('Y-m-d H:i:s')]);
-        }
         }
     }
 }
