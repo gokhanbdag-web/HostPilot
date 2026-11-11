@@ -55,6 +55,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $dbUser = trim((string)($_POST['db_user'] ?? ''));
     $dbPass = (string)($_POST['db_pass'] ?? '');
     $adminName = trim((string)($_POST['admin_name'] ?? ''));
+    $adminUsername = trim((string)($_POST['admin_username'] ?? ''));
+    $businessModel = (string)($_POST['business_model'] ?? '');
     $adminEmail = trim((string)($_POST['admin_email'] ?? ''));
     $adminPass = (string)($_POST['admin_pass'] ?? '');
 
@@ -67,7 +69,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'Veritabanı adı yalnızca harf, rakam ve alt çizgi içerebilir.';
     }
     if ($adminName === '' || strlen($adminName) > 80) {
-        $errors[] = 'Yönetici kullanıcı adı zorunludur ve 80 karakteri aşamaz.';
+        $errors[] = 'Yönetici adı zorunludur ve 80 karakteri aşamaz.';
+    }
+    if (!preg_match('/^[a-zA-Z0-9_.-]{3,80}$/', $adminUsername)) {
+        $errors[] = 'Yönetici kullanıcı adı 3-80 karakter olmalı; harf, rakam, nokta, tire ve alt çizgi içermelidir.';
+    }
+    if (!in_array($businessModel, ['single', 'multi'], true)) {
+        $errors[] = 'Lütfen tek işletme veya çoklu satıcı modelini seçin.';
     }
     if (!filter_var($adminEmail, FILTER_VALIDATE_EMAIL)) {
         $errors[] = 'Geçerli bir yönetici e-posta adresi girin.';
@@ -142,7 +150,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([
                 ':name' => $adminName,
                 ':email' => $adminEmail,
-                ':username' => $adminName,
+                ':username' => $adminUsername,
                 ':password_hash' => password_hash($adminPass, PASSWORD_DEFAULT),
                 ':created_at' => $now,
                 ':updated_at' => $now,
@@ -156,6 +164,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'base_path' => $basePath,
                     'timezone' => 'Europe/Istanbul',
                     'locale' => 'tr',
+                    'business_model' => $businessModel,
                     'key' => $appKey,
                 ],
                 'database' => [
@@ -234,7 +243,9 @@ button{border:0;border-radius:10px;padding:14px 20px;background:#1d4ed8;color:#f
 <?php foreach ($errors as $error): ?><div class="error"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div><?php endforeach; ?>
 <form method="post" class="panel" autocomplete="off">
 <input type="hidden" name="_token" value="<?= htmlspecialchars((string)$_SESSION['hostpilot_install_csrf'], ENT_QUOTES, 'UTF-8') ?>">
-<h2>1. Veritabanı bilgileri</h2>
+<h2>1. İşletme modeli</h2>
+<div class="field"><label for="business_model">HostPilot kullanım modeli</label><select id="business_model" name="business_model" required style="width:100%;border:1px solid #cbd5e1;border-radius:9px;padding:12px;font:inherit"><option value="single">Tek işletme — kendi hizmetlerimi satacağım</option><option value="multi">Çoklu satıcı — bayi / hosting pazaryeri</option></select></div>
+<h2 style="margin-top:26px">2. Veritabanı bilgileri</h2>
 <div class="grid">
 <div class="field"><label for="db_host">Veritabanı sunucusu</label><input id="db_host" name="db_host" value="localhost" required></div>
 <div class="field"><label for="db_port">Port</label><input id="db_port" name="db_port" type="number" value="3306" min="1" max="65535" required></div>
@@ -242,9 +253,10 @@ button{border:0;border-radius:10px;padding:14px 20px;background:#1d4ed8;color:#f
 <div class="field"><label for="db_user">Veritabanı kullanıcı adı</label><input id="db_user" name="db_user" required></div>
 </div>
 <div class="field"><label for="db_pass">Veritabanı parolası</label><input id="db_pass" name="db_pass" type="password" autocomplete="new-password"></div>
-<h2 style="margin-top:26px">2. İlk yönetici hesabı</h2>
+<h2 style="margin-top:26px">3. İlk yönetici hesabı</h2>
 <div class="grid">
 <div class="field"><label for="admin_name">Yönetici adı / kullanıcı adı</label><input id="admin_name" name="admin_name" required maxlength="80"></div>
+<div class="field"><label for="admin_username">Yönetici kullanıcı adı</label><input id="admin_username" name="admin_username" required minlength="3" maxlength="80" pattern="[A-Za-z0-9_.-]+"></div>
 <div class="field"><label for="admin_email">Yönetici e-posta adresi</label><input id="admin_email" name="admin_email" type="email" required></div>
 </div>
 <div class="field"><label for="admin_pass">Yönetici parolası (en az 12 karakter)</label><input id="admin_pass" name="admin_pass" type="password" minlength="12" autocomplete="new-password" required></div>
