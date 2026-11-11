@@ -18,3 +18,4 @@ jobs:
             php -l "$file"
           done
           php tests/payment_crypto.php
+          php tests/hosting_adapters.php
