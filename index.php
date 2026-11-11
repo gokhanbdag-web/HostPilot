@@ -91,6 +91,13 @@ if ($requestPath === '/admin' || $requestPath === '/admin/') {
 }
 $catalog = new \HostPilot\Http\CatalogController($pdo, $basePath);
 $payment = new \HostPilot\Http\PaymentController($pdo, $basePath, (string)($config['app']['base_url'] ?? ''), (string)($config['app']['key'] ?? ''));
+$serverController = new \HostPilot\Http\ServerController($pdo, $basePath, (string)($config['app']['key'] ?? ''));
+if ($requestPath === '/admin/servers' && $method === 'GET') { $serverController->servers(); exit; }
+if ($requestPath === '/admin/servers/save' && $method === 'POST') { $serverController->saveServer(); exit; }
+if ($requestPath === '/admin/servers/test' && $method === 'POST') { $serverController->testServer(); exit; }
+if ($requestPath === '/admin/servers/map' && $method === 'POST') { $serverController->saveMapping(); exit; }
+if ($requestPath === '/admin/services' && $method === 'GET') { $serverController->services(); exit; }
+if ($requestPath === '/admin/services/provision' && $method === 'POST') { $serverController->provision(); exit; }
 if ($requestPath === '/admin/payments' && in_array($method, ['GET','POST'], true)) { $payment->adminSettings(); exit; }
 if ($requestPath === '/admin/payment-transactions' && $method === 'GET') { $payment->adminTransactions(); exit; }
 if (preg_match('#^/client/invoices/([0-9]+)/pay$#', $requestPath, $payInvoiceMatch) && in_array($method, ['GET','POST'], true)) { $payment->payInvoice((int)$payInvoiceMatch[1]); exit; }
