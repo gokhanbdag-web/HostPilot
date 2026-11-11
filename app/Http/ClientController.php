@@ -55,7 +55,7 @@ final class ClientController
             echo '<article class="kb"><small>'.$this->e(strtoupper((string)($row['panel_type']??'BEKLEMEDE'))).' · '.$this->e((string)$row['status']).'</small><h2>'.$this->e($row['product_name']).'</h2><p>Domain: <b>'.$this->e((string)($row['remote_domain']??$row['domain']??'Henüz tanımlanmadı')).'</b><br>Sunucu: '.$this->e((string)($row['server_name']??'Henüz atanmadı')).'<br>Hesap durumu: '.$this->e((string)($row['provisioning_status']??'not_started')).'</p>';
             if(($row['provisioning_status']??'')==='completed'&&$row['remote_username']){
                 $password='';try{$password=$this->vault->decrypt((string)$row['remote_password_enc']);}catch(Throwable){}
-                echo '<details><summary>Hosting giriş bilgilerimi göster</summary><p>Kullanıcı adı: <b>'.$this->e((string)$row['remote_username']).'</b><br>Parola: <b>'.$this->e($password!==''?$password:'Parola bilgisi bulunamadı').'</b><br>Kontrol paneli adresi: '.$this->e((string)($row['base_url']??'')).'</p><small>Bu bilgiler yalnızca kendi hesabınızda görüntülenir. Güvenli bir yerde saklayın.</small></details>';
+                echo '<details><summary>Hosting giriş bilgilerimi göster</summary><p>Kullanıcı adı: <b>'.$this->e((string)$row['remote_username']).'</b><br>Parola: <b>'.$this->e($password!==''?$password:'Parola bilgisi bulunamadı').'</b><br>Kontrol paneli adresi: '.$this->e($this->panelUrl($row)).'</p><small>Bu bilgiler yalnızca kendi hesabınızda görüntülenir. Güvenli bir yerde saklayın.</small></details>';
             }
             echo '</article>';
         }
