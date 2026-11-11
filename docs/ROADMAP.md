@@ -61,6 +61,8 @@
 - [x] Plesk XML API connection test and subscription-create adapter (documented XML protocol).
 - [x] HTTPS connection tests and product-to-remote-package mapping UI.
 - [x] Admin-triggered first-time hosting account provisioning with audit log and encrypted customer credentials.
+- [x] Admin-triggered suspend/reactivate lifecycle operations across cPanel/WHM, DirectAdmin, and Plesk XML adapters.
+- [x] Lifecycle actions require CSRF, administrator authorization, a provisioned remote account, and state-transition checks.
 - [ ] Async create/suspend/unsuspend/terminate/package-change workflows.
 - [ ] Reconciliation and manual retry interface.
 
