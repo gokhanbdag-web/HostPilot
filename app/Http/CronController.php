@@ -71,6 +71,71 @@ final class CronController
         echo '</div></div></html>';
     }
 
+    public function retryProvisioningJob():void
+    {
+        $user=Auth::user();
+        if(!$user||!in_array($user['role']??'', ['super_admin','admin'],true)){http_response_code(403);echo 'Yetkisiz erişim.';return;}
+        if(!Auth::verifyCsrf($_POST['_token']??null))$this->go('/admin/automation');
+        $id=(int)($_POST['job_id']??0);$now=gmdate('Y-m-d H:i:s');
+        try{
+            $this->db->beginTransaction();
+            $q=$this->db->prepare('SELECT * FROM provisioning_jobs WHERE id=:id FOR UPDATE');$q->execute([':id'=>$id]);$job=$q->fetch();
+            if(!$job||$job['status']!=='failed')throw new \RuntimeException('Yalnızca güvenli biçimde başarısız olmuş işler yeniden kuyruğa alınabilir.');
+            $serviceQuery=$this->db->prepare('SELECT * FROM services WHERE id=:id FOR UPDATE');$serviceQuery->execute([':id'=>$job['service_id']]);$service=$serviceQuery->fetch();
+            if(!$service)throw new \RuntimeException('Hizmet kaydı bulunamadı.');
+            if($job['job_type']==='create'){
+                if($service['status']!=='pending'||empty($service['domain']))throw new \RuntimeException('Hizmet veya alan adı yeniden denemeye uygun değil.');
+                $this->db->prepare("UPDATE services SET provisioning_status='queued',provisioning_error=NULL,updated_at=:updated WHERE id=:id")->execute([':updated'=>$now,':id'=>$service['id']]);
+            }elseif(!preg_match('/^(suspend|unsuspend)_[0-9]+$/',(string)$job['job_type'])){
+                throw new \RuntimeException('Desteklenmeyen kuyruk işi.');
+            }
+            $this->db->prepare("UPDATE provisioning_jobs SET status='queued',attempts=0,available_at=:available,locked_at=NULL,last_error=NULL,updated_at=:updated WHERE id=:id")
+                ->execute([':available'=>$now,':updated'=>$now,':id'=>$id]);
+            $this->db->commit();
+            $this->go('/admin/automation','notice=İş yeniden kuyruğa alındı.');
+        }catch(Throwable $e){
+            if($this->db->inTransaction())$this->db->rollBack();
+            $this->go('/admin/automation','error='.$e->getMessage());
+        }
+    }
+
+    public function resolveProvisioningJob():void
+    {
+        $user=Auth::user();
+        if(!$user||!in_array($user['role']??'', ['super_admin','admin'],true)){http_response_code(403);echo 'Yetkisiz erişim.';return;}
+        if(!Auth::verifyCsrf($_POST['_token']??null))$this->go('/admin/automation');
+        $id=(int)($_POST['job_id']??0);$resolution=(string)($_POST['resolution']??'');$now=gmdate('Y-m-d H:i:s');
+        try{
+            $this->db->beginTransaction();
+            $q=$this->db->prepare('SELECT * FROM provisioning_jobs WHERE id=:id FOR UPDATE');$q->execute([':id'=>$id]);$job=$q->fetch();
+            if(!$job||$job['status']!=='needs_review'||$job['job_type']!=='create')throw new \RuntimeException('Bu işlem otomatik hesap oluşturma incelemesine uygun değil.');
+            $serviceQuery=$this->db->prepare('SELECT * FROM services WHERE id=:id FOR UPDATE');$serviceQuery->execute([':id'=>$job['service_id']]);$service=$serviceQuery->fetch();
+            if(!$service)throw new \RuntimeException('Hizmet kaydı bulunamadı.');
+            if($resolution==='remote_created'){
+                if(empty($service['provisioning_username'])||empty($service['provisioning_password_enc'])||empty($service['domain'])||empty($service['server_id']))throw new \RuntimeException('Kayıtlı hesap oluşturma bilgileri eksik; manuel uzlaştırma yapılamıyor.');
+                $this->db->prepare("UPDATE services SET status='active',provisioning_status='completed',remote_identifier=provisioning_username,remote_username=provisioning_username,remote_domain=domain,remote_password_enc=provisioning_password_enc,provisioning_username=NULL,provisioning_password_enc=NULL,provisioned_at=:at,provisioning_error=NULL,updated_at=:updated WHERE id=:id")
+                    ->execute([':at'=>$now,':updated'=>$now,':id'=>$service['id']]);
+                $message='Yönetici kontrol panelinde hesabın mevcut olduğunu doğruladı.';
+                $jobStatus='completed';
+            }elseif($resolution==='remote_absent'){
+                if($service['status']!=='pending'||empty($service['domain']))throw new \RuntimeException('Hizmet yeniden denemeye uygun değil.');
+                $this->db->prepare("UPDATE services SET provisioning_status='queued',provisioning_error=NULL,updated_at=:updated WHERE id=:id")->execute([':updated'=>$now,':id'=>$service['id']]);
+                $message='Yönetici kontrol panelinde hesabın bulunmadığını doğruladı; aynı hesap bilgileriyle tekrar kuyruğa alındı.';
+                $jobStatus='queued';
+            }else{
+                throw new \RuntimeException('Geçersiz uzlaştırma kararı.');
+            }
+            $this->db->prepare("UPDATE provisioning_jobs SET status=:status,attempts=0,available_at=:available,locked_at=NULL,last_error=NULL,updated_at=:updated WHERE id=:id")
+                ->execute([':status'=>$jobStatus,':available'=>$now,':updated'=>$now,':id'=>$id]);
+            $this->audit((int)$service['id'],(int)$service['server_id'],'create','admin_reconciled',$message);
+            $this->db->commit();
+            $this->go('/admin/automation','notice='.$message);
+        }catch(Throwable $e){
+            if($this->db->inTransaction())$this->db->rollBack();
+            $this->go('/admin/automation','error='.$e->getMessage());
+        }
+    }
+
     public function runProvisioning():void
     {
         $provided='';
