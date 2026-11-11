@@ -99,6 +99,10 @@ final class CronController
             if($job['job_type']==='create'){
                 if($service['status']!=='pending'||empty($service['domain']))throw new \RuntimeException('Hizmet veya alan adı yeniden denemeye uygun değil.');
                 $this->db->prepare("UPDATE services SET provisioning_status='queued',provisioning_error=NULL,updated_at=:updated WHERE id=:id")->execute([':updated'=>$now,':id'=>$service['id']]);
+            }elseif(preg_match('/^package_([0-9]+)$/',(string)$job['job_type'],$packageRetry)){
+                $change=$this->db->prepare("SELECT id,status FROM service_package_changes WHERE id=:id AND service_id=:service FOR UPDATE");$change->execute([':id'=>(int)$packageRetry[1],':service'=>$service['id']]);$request=$change->fetch();
+                if(!$request||$request['status']!=='failed')throw new \RuntimeException('Paket yükseltme işi güvenli yeniden denemeye uygun değil.');
+                $this->db->prepare("UPDATE service_package_changes SET status='queued',updated_at=:updated WHERE id=:id")->execute([':updated'=>$now,':id'=>$request['id']]);
             }elseif(!preg_match('/^(suspend|unsuspend)_[0-9]+$/',(string)$job['job_type'])){
                 throw new \RuntimeException('Desteklenmeyen kuyruk işi.');
             }
