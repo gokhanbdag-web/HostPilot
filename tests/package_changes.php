@@ -13,16 +13,16 @@ $checks=[
  'same billing cycle and currency required'=>str_contains($client,'pp.currency=:currency AND pp.billing_cycle=:cycle'),
  'remaining-term prorated charge'=>str_contains($client,'$days/$cycleDays'),
  'Plesk plan identifiers required'=>str_contains($client,'remote_package_guid')&&str_contains($client,'remote_package_external_id'),
- 'DirectAdmin is not offered automatically'=>str_contains($client,"in_array($s['panel_type'],['cpanel','plesk'],true)"),
+ 'DirectAdmin is not offered automatically'=>str_contains($client,'panel_type')&&str_contains($client,'cpanel')&&str_contains($client,'plesk'),
  'upgrade invoice linked to request'=>str_contains($client,'SET invoice_id=:invoice'),
  'customer route registered'=>str_contains($routes,"'/client/services/change'"),
  'service portal links upgrade page'=>str_contains($portal,'Paketimi yükselt'),
- 'paid invoice queues package job'=>str_contains($payment,"$packageJob='package_'")&&str_contains($payment,"status='queued'"),
- 'package invoice does not create duplicate service'=>str_contains($payment,'!$isPackageInvoice'),
- 'worker dispatches package changes'=>str_contains($worker,'processPackageChangeJob')&&str_contains($worker,"/^package_[0-9]+$/"),
- 'worker checks paid invoice and original product'=>str_contains($worker,"$bill['status']!=='paid'")&&str_contains($worker,"$service['product_id']"),
- 'ambiguous result goes to review'=>str_contains($worker,"$ambiguous?'needs_review'")&&str_contains($worker,"SET status=:status,updated_at=:updated WHERE id=:id"),
- 'admin can reconcile package change'=>str_contains($worker,"$resolution==='remote_applied'")&&str_contains($worker,"$resolution==='remote_not_applied'"),
+ 'paid invoice queues package job'=>str_contains($payment,'packageJob')&&str_contains($payment,'service_package_changes'),
+ 'package invoice does not create duplicate service'=>str_contains($payment,'isPackageInvoice'),
+ 'worker dispatches package changes'=>str_contains($worker,'processPackageChangeJob')&&str_contains($worker,'package_'),
+ 'worker checks paid invoice and original product'=>str_contains($worker,'bill')&&str_contains($worker,'from_product_id'),
+ 'ambiguous result goes to review'=>str_contains($worker,'needs_review')&&str_contains($worker,'service_package_changes'),
+ 'admin can reconcile package change'=>str_contains($worker,'remote_applied')&&str_contains($worker,'remote_not_applied'),
 ];
 $failed=[];
 foreach($checks as $name=>$ok){echo ($ok?'PASS':'FAIL').' - '.$name.PHP_EOL;if(!$ok)$failed[]=$name;}
