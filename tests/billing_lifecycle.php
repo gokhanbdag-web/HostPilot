@@ -17,7 +17,7 @@ $checks=[
     'lifecycle worker handles suspend and unsuspend'=>str_contains($cron,'processLifecycleJob')&&str_contains($cron,'suspendAccount')&&str_contains($cron,'unsuspendAccount'),
     'full payment queues matching invoice unsuspend'=>str_contains($payment,"$jobType='unsuspend_'")&&str_contains($payment,'$invoice[\'service_id\']'),
     'manual suspension is distinguished from billing'=>str_contains($server,"'admin':'none'"),
-    'automation settings accepts POST'=>str_contains($routes,"in_array($method, ['GET','POST'], true)) { $cronController->adminAutomation(); exit; }"),
+    'automation settings accepts POST'=>str_contains($routes,"in_array(\$method, ['GET','POST'], true)) { \$cronController->adminAutomation(); exit; }"),
 ];
 $failed=[];
 foreach($checks as $name=>$ok){echo ($ok?'PASS':'FAIL').' - '.$name.PHP_EOL;if(!$ok)$failed[]=$name;}
