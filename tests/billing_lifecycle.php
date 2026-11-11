@@ -22,7 +22,7 @@ $checks=[
     'admin can retry safe failed jobs'=>str_contains($cron,"\$job['status']!=='failed'")&&str_contains($cron,"status='queued',attempts=0"),
     'admin can reconcile confirmed created or absent account'=>str_contains($cron,"\$resolution==='remote_created'")&&str_contains($cron,"\$resolution==='remote_absent'"),
     'admin reconciliation endpoints are protected routes'=>str_contains($routes,"'/admin/automation/jobs/retry'")&&str_contains($routes,"'/admin/automation/jobs/resolve'"),
-    'ambiguous suspend/reactivate jobs have explicit admin reconciliation actions'=>str_contains($cron,"resolution\\" value=\\"remote_applied\\"")&&str_contains($cron,"resolution\\" value=\\"remote_not_applied\\""),
+    'ambiguous suspend/reactivate jobs have explicit admin reconciliation actions'=>str_contains($cron,'resolution" value="remote_applied"')&&str_contains($cron,'resolution" value="remote_not_applied"'),
     'lifecycle reconciliation rechecks invoice ownership and state'=>str_contains($cron,"SELECT * FROM invoices WHERE id=:id AND service_id=:service FOR UPDATE")&&str_contains($cron,"Fatura artık askıya alma koşullarını karşılamıyor"),
     'suspend review marker is cleared before safe retry'=>str_contains($cron,"SET suspension_source='none'")&&str_contains($cron,"['none','review']"),
     'lifecycle reconciliation exits before account-creation fallback'=>str_contains($cron,"\$this->go('/admin/automation','notice='.$message);"),
