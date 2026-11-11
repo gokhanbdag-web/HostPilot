@@ -92,6 +92,7 @@ if ($requestPath === '/admin' || $requestPath === '/admin/') {
 $catalog = new \HostPilot\Http\CatalogController($pdo, $basePath);
 $payment = new \HostPilot\Http\PaymentController($pdo, $basePath, (string)($config['app']['base_url'] ?? ''), (string)($config['app']['key'] ?? ''));
 if ($requestPath === '/admin/payments' && in_array($method, ['GET','POST'], true)) { $payment->adminSettings(); exit; }
+if ($requestPath === '/admin/payment-transactions' && $method === 'GET') { $payment->adminTransactions(); exit; }
 if (preg_match('#^/client/invoices/([0-9]+)/pay$#', $requestPath, $payInvoiceMatch) && in_array($method, ['GET','POST'], true)) { $payment->payInvoice((int)$payInvoiceMatch[1]); exit; }
 if ($requestPath === '/payment/paytr/callback' && $method === 'POST') { $payment->paytrCallback(); exit; }
 if ($requestPath === '/payment/iyzico/callback' && $method === 'POST') { $payment->iyzicoCallback(); exit; }
