@@ -180,8 +180,11 @@ final class CronController
             }
             $this->db->commit();
 
+            $this->db->prepare("UPDATE invoices SET status='overdue',updated_at=:updated WHERE status='unpaid' AND due_at IS NOT NULL AND due_at<=:now")
+                ->execute([':updated'=>$now,':now'=>$now]);
+
             // Queue suspension only for a provisioned service with a genuinely outstanding, expired invoice balance.
-            $overdue=$this->db->prepare("SELECT i.id AS invoice_id,s.id AS service_id FROM invoices i JOIN services s ON s.id=i.service_id WHERE i.status IN ('unpaid','partially_paid') AND i.amount_paid+0.005<i.total AND i.due_at IS NOT NULL AND i.due_at<=:now AND s.status='active' AND s.suspension_source='none' AND s.provisioned_at IS NOT NULL ORDER BY i.due_at,i.id LIMIT 1");
+            $overdue=$this->db->prepare("SELECT i.id AS invoice_id,s.id AS service_id FROM invoices i JOIN services s ON s.id=i.service_id WHERE i.status IN ('unpaid','partially_paid','overdue') AND i.amount_paid+0.005<i.total AND i.due_at IS NOT NULL AND i.due_at<=:now AND s.status='active' AND s.suspension_source='none' AND s.provisioned_at IS NOT NULL ORDER BY i.due_at,i.id LIMIT 1");
             $overdue->execute([':now'=>$now]);$item=$overdue->fetch();
             if($item){
                 $type='suspend_'.(int)$item['invoice_id'];
@@ -210,7 +213,7 @@ final class CronController
         if(!$invoice)throw new \RuntimeException('Hizmetle ilişkili fatura bulunamadı.');
 
         if($action==='suspend'){
-            $eligible=in_array($invoice['status'],['unpaid','partially_paid'],true)
+            $eligible=in_array($invoice['status'],['unpaid','partially_paid','overdue'],true)
                 &&(float)$invoice['amount_paid']+0.005<(float)$invoice['total']
                 &&!empty($invoice['due_at'])&&$invoice['due_at']<=$now
                 &&$service['status']==='active'&&($service['suspension_source']??'none')==='none'
