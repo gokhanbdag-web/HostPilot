@@ -19,6 +19,7 @@ final class PaymentController
         if(!$this->isStaff()){http_response_code(403);echo 'Yetkisiz erişim.';return;}
         $notice='';$error='';
         if(($_SERVER['REQUEST_METHOD']??'GET')==='POST'){
+            if(!str_starts_with(strtolower($this->baseUrl),'https://')){http_response_code(400);$this->paymentPage($invoice,$enabled,'Ödeme işlemleri için sitenizde geçerli HTTPS/SSL etkin olmalıdır.');return;}
             if(!Auth::verifyCsrf($_POST['_token']??null))$error='Güvenlik doğrulaması başarısız.';
             else try{
                 $fields=[
@@ -252,7 +253,7 @@ final class PaymentController
     private function clientIp():string
     {$ip=(string)($_SERVER['REMOTE_ADDR']??'');return filter_var($ip,FILTER_VALIDATE_IP)?$ip:'127.0.0.1';}
     private function asciiEmail(string $email):string
-    {$email=iconv('UTF-8','ASCII//TRANSLIT//IGNORE',$email)?:$email;return substr(preg_replace('/[^\\x20-\\x7E]/','',$email)??$email,0,100);}
+    {return substr(preg_replace('/[^\\x20-\\x7E]/','',$email)??$email,0,100);}
     private function normalizeMoney(mixed $v):string
     {$s=rtrim(rtrim(number_format((float)$v,8,'.',''),'0'),'.');return $s===''?'0':$s;}
     private function pageStart(string $title):void
