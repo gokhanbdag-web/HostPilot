@@ -55,7 +55,7 @@ final class CronController
         echo '<div class="box"><h2>İş kuyruğu ve yönetici incelemesi</h2><p>Belirsiz uzak işlemleri panelden doğrulamadan tekrar çalıştırmayın. Hesap oluşturma incelemesinde kullanıcı adıyla kontrol panelinde arama yapın.</p>';
         if(!$jobs)echo '<p>Henüz otomasyon işi yok.</p>';
         foreach($jobs as $job){
-            $type=(string)$job['job_type'];$label=$type==='create'?'Hesap oluşturma':(str_starts_with($type,'package_')?'Paket yükseltme':(str_starts_with($type,'suspend_')?'Fatura nedeniyle askıya alma':(str_starts_with($type,'unsuspend_')?'Ödeme sonrası yeniden açma':$type));
+            $type=(string)$job['job_type'];$label=$type==='create'?'Hesap oluşturma':(str_starts_with($type,'package_')?'Paket yükseltme':(str_starts_with($type,'suspend_')?'Fatura nedeniyle askıya alma':(str_starts_with($type,'unsuspend_')?'Ödeme sonrası yeniden açma':$type)));
             echo '<article style="border-top:1px solid #2b3c56;padding:15px 0"><b>'.$this->e($job['product_name']).' · '.$this->e($label).'</b><p>'.$this->e($job['email']).' · '.$this->e((string)($job['domain']??'Domain yok')).' · Sunucu: '.$this->e((string)($job['server_name']??'Atanmadı')).' · Durum: <b>'.$this->e($job['status']).'</b></p>';
             if(!empty($job['provisioning_username']))echo '<p>Kontrol panelinde aranacak kullanıcı adı: <code>'.$this->e($job['provisioning_username']).'</code></p>';
             if(!empty($job['last_error']))echo '<p class="error">'.$this->e($job['last_error']).'</p>';
@@ -139,19 +139,19 @@ final class CronController
                 $this->db->commit();
                 $this->go('/admin/automation','notice='.$message);
             }elseif(preg_match('/^package_([0-9]+)$/',(string)$job['job_type'],$packageMatch)){
-                if(!in_array($resolution,['remote_applied','remote_not_applied'],true))throw new \\RuntimeException('Geçersiz paket değişikliği uzlaştırma kararı.');
+                if(!in_array($resolution,['remote_applied','remote_not_applied'],true))throw new \RuntimeException('Geçersiz paket değişikliği uzlaştırma kararı.');
                 $changeQuery=$this->db->prepare('SELECT * FROM service_package_changes WHERE id=:id AND service_id=:service FOR UPDATE');
                 $changeQuery->execute([':id'=>(int)$packageMatch[1],':service'=>$service['id']]);$change=$changeQuery->fetch();
-                if(!$change||$change['status']!=='needs_review')throw new \\RuntimeException('Paket değişikliği inceleme kaydı bulunamadı.');
+                if(!$change||$change['status']!=='needs_review')throw new \RuntimeException('Paket değişikliği inceleme kaydı bulunamadı.');
                 $invoiceQuery=$this->db->prepare('SELECT status,total,amount_paid FROM invoices WHERE id=:id');$invoiceQuery->execute([':id'=>$change['invoice_id']]);$bill=$invoiceQuery->fetch();
-                if(!$bill||$bill['status']!=='paid'||(float)$bill['amount_paid']+0.005<(float)$bill['total'])throw new \\RuntimeException('Paket yükseltme faturası tamamen ödenmiş değil.');
+                if(!$bill||$bill['status']!=='paid'||(float)$bill['amount_paid']+0.005<(float)$bill['total'])throw new \RuntimeException('Paket yükseltme faturası tamamen ödenmiş değil.');
                 if($resolution==='remote_applied'){
-                    if((int)$service['product_id']!==(int)$change['from_product_id']||$service['status']!=='active')throw new \\RuntimeException('Hizmetin mevcut durumu paket değişikliğiyle çelişiyor.');
+                    if((int)$service['product_id']!==(int)$change['from_product_id']||$service['status']!=='active')throw new \RuntimeException('Hizmetin mevcut durumu paket değişikliğiyle çelişiyor.');
                     $this->db->prepare('UPDATE services SET product_id=:product,amount=:amount,updated_at=:updated WHERE id=:id')->execute([':product'=>$change['to_product_id'],':amount'=>$change['target_amount'],':updated'=>$now,':id'=>$service['id']]);
                     $this->db->prepare("UPDATE service_package_changes SET status='completed',updated_at=:updated WHERE id=:id")->execute([':updated'=>$now,':id'=>$change['id']]);
                     $jobStatus='completed';$message='Yönetici uzak paketin değiştirildiğini doğruladı; HostPilot hizmeti yeni paketle eşitlendi.';
                 }else{
-                    if((int)$service['product_id']!==(int)$change['from_product_id']||$service['status']!=='active')throw new \\RuntimeException('Hizmet yeniden denemeye uygun değil.');
+                    if((int)$service['product_id']!==(int)$change['from_product_id']||$service['status']!=='active')throw new \RuntimeException('Hizmet yeniden denemeye uygun değil.');
                     $this->db->prepare("UPDATE service_package_changes SET status='queued',updated_at=:updated WHERE id=:id")->execute([':updated'=>$now,':id'=>$change['id']]);
                     $jobStatus='queued';$message='Yönetici eski uzak paketin hâlâ etkin olduğunu doğruladı; işlem yeniden kuyruğa alındı.';
                 }
