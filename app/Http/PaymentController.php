@@ -20,7 +20,6 @@ final class PaymentController
         if(!$this->isStaff()){http_response_code(403);echo 'Yetkisiz erişim.';return;}
         $notice='';$error='';
         if(($_SERVER['REQUEST_METHOD']??'GET')==='POST'){
-            if(!str_starts_with(strtolower($this->baseUrl),'https://')){http_response_code(400);$this->paymentPage($invoice,$enabled,'Ödeme işlemleri için sitenizde geçerli HTTPS/SSL etkin olmalıdır.');return;}
             if(!Auth::verifyCsrf($_POST['_token']??null))$error='Güvenlik doğrulaması başarısız.';
             else try{
                 $fields=[
@@ -61,13 +60,16 @@ final class PaymentController
         $q=$this->db->prepare('SELECT * FROM invoices WHERE id=:id AND user_id=:uid LIMIT 1');$q->execute([':id'=>$invoiceId,':uid'=>$user['id']]);$invoice=$q->fetch();
         if(!$invoice){http_response_code(404);echo 'Fatura bulunamadı.';return;}
         if($invoice['status']==='paid'){$this->redirect('/client/invoices');}
+        if(in_array($invoice['status'],['cancelled','refunded'],true)){http_response_code(409);echo 'İptal edilmiş veya iade edilmiş fatura için ödeme alınamaz.';return;}
         $v=$this->settings();$enabled=[];
         if($v['paytr_enabled']==='1'&&$v['paytr_merchant_id']!==''&&$v['paytr_merchant_key']!==''&&$v['paytr_merchant_salt']!=='')$enabled[]='paytr';
         if($v['iyzico_enabled']==='1'&&$v['iyzico_api_key']!==''&&$v['iyzico_secret_key']!=='')$enabled[]='iyzico';
         if(($_SERVER['REQUEST_METHOD']??'GET')==='POST'){
+            if(!str_starts_with(strtolower($this->baseUrl),'https://')){http_response_code(400);$this->paymentPage($invoice,$enabled,'Ödeme işlemleri için sitenizde geçerli HTTPS/SSL etkin olmalıdır.');return;}
             if(!Auth::verifyCsrf($_POST['_token']??null)){http_response_code(400);echo 'Güvenlik doğrulaması başarısız.';return;}
             $gateway=(string)($_POST['gateway']??'');
             if(!in_array($gateway,$enabled,true)){http_response_code(422);echo 'Bu ödeme yöntemi etkin değil.';return;}
+            $txId=0;
             try{
                 $amount=round((float)$invoice['total']-(float)$invoice['amount_paid'],2);
                 if($amount<=0)throw new \RuntimeException('Ödenecek tutar bulunamadı.');
@@ -79,7 +81,7 @@ final class PaymentController
                 if($gateway==='paytr')$this->startPaytr($txId,$ref,$invoice,$user,$amount,$v);
                 else $this->startIyzico($txId,$ref,$invoice,$user,$amount,$v);
                 return;
-            }catch(Throwable $e){http_response_code(502);$this->paymentPage($invoice,$enabled,'Ödeme başlatılamadı: '.$e->getMessage());return;}
+            }catch(Throwable $e){if($txId>0)$this->updateTransaction($txId,['status'=>'failed','response_code'=>'init_failed','safe_message'=>'Ödeme oturumu başlatılamadı']);error_log('[HostPilot] Payment initialization: '.$e->getMessage());http_response_code(502);$this->paymentPage($invoice,$enabled,'Ödeme başlatılamadı. Bilgileri kontrol edip tekrar deneyin.');return;}
         }
         $this->paymentPage($invoice,$enabled,'');
     }
