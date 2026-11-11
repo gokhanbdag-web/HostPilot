@@ -65,7 +65,11 @@
 - [x] Lifecycle actions require CSRF, administrator authorization, a provisioned remote account, and state-transition checks.
 - [x] Customer domain capture and queued hosting account creation via an authenticated cPanel Cron Jobs worker.
 - [x] One-job bounded worker, automatic mapped-server selection, audit logs, and ambiguous remote-result manual-review protection.
-- [ ] Async suspend/unsuspend/terminate/package-change workflows.
+- [x] Service-linked recurring renewal invoice generation with period-level duplicate protection.
+- [x] Configurable 1–30 day payment grace period and overdue-balance suspension queue.
+- [x] Payment-triggered billing unsuspension with manual-vs-billing suspension source protection.
+- [x] Bounded exponential retries before external calls; ambiguous external lifecycle outcomes enter manual review.
+- [ ] Async terminate/package-change workflows.
 - [ ] Reconciliation and manual retry interface (failed and ambiguous jobs are not blindly replayed).
 
 **Exit criteria:** Sandbox/test server lifecycle operations work with least-privilege credentials and full audit history.
