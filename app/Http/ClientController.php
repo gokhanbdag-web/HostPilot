@@ -53,6 +53,11 @@ final class ClientController
         if(!$rows)echo '<div class="empty">Henüz hesabınıza bağlı bir hosting hizmeti bulunmuyor.</div>';
         foreach($rows as $row){
             echo '<article class="kb"><small>'.$this->e(strtoupper((string)($row['panel_type']??'BEKLEMEDE'))).' · '.$this->e((string)$row['status']).'</small><h2>'.$this->e($row['product_name']).'</h2><p>Domain: <b>'.$this->e((string)($row['remote_domain']??$row['domain']??'Henüz tanımlanmadı')).'</b><br>Sunucu: '.$this->e((string)($row['server_name']??'Henüz atanmadı')).'<br>Hesap durumu: '.$this->e((string)($row['provisioning_status']??'not_started')).'</p>';
+            if($row['status']==='pending'&&empty($row['provisioned_at'])&&!in_array(($row['provisioning_status']??''),['in_progress','completed','needs_review'],true)){
+                echo '<form method="post" action="'.$this->url('/client/services/domain').'"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="service_id" value="'.(int)$row['id'].'"><label>Hosting hesabınız için alan adı<input type="text" name="domain" value="'.$this->e((string)($row['domain']??'')).'" placeholder="ornek.com" required></label><button class="button">Alan adını kaydet ve otomatik kurulumu sıraya al</button></form>';
+            }elseif(($row['provisioning_status']??'')==='needs_review'){
+                echo '<p>Otomatik işlem sonucu kesinleştirilemedi. Yinelenen hesap açılmasını önlemek için yönetici kontrolü bekleniyor.</p>';
+            }
             if(($row['provisioning_status']??'')==='completed'&&$row['remote_username']){
                 $password='';try{$password=$this->vault->decrypt((string)$row['remote_password_enc']);}catch(Throwable){}
                 echo '<details><summary>Hosting giriş bilgilerimi göster</summary><p>Kullanıcı adı: <b>'.$this->e((string)$row['remote_username']).'</b><br>Parola: <b>'.$this->e($password!==''?$password:'Parola bilgisi bulunamadı').'</b><br>Kontrol paneli adresi: '.$this->e($this->panelUrl($row)).'</p><small>Bu bilgiler yalnızca kendi hesabınızda görüntülenir. Güvenli bir yerde saklayın.</small></details>';
@@ -60,6 +65,31 @@ final class ClientController
             echo '</article>';
         }
         echo '</section>';$this->shellEnd();
+    }
+
+    public function saveServiceDomain():void
+    {
+        $u=$this->customer();if(!$u)return;
+        if(!Auth::verifyCsrf($_POST['_token']??null)){$this->go('/client/services');}
+        $id=(int)($_POST['service_id']??0);
+        $domain=strtolower(trim((string)($_POST['domain']??'')));
+        if(!preg_match('/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/',$domain)){$this->go('/client/services');}
+        try{
+            $this->db->beginTransaction();
+            $q=$this->db->prepare("SELECT * FROM services WHERE id=:id AND user_id=:user FOR UPDATE");
+            $q->execute([':id'=>$id,':user'=>$u['id']]);$service=$q->fetch();
+            if(!$service||$service['status']!=='pending'||!empty($service['provisioned_at'])||in_array($service['provisioning_status'],['in_progress','completed','needs_review'],true))throw new \RuntimeException('Bu hizmet için alan adı değiştirilemiyor.');
+            $dupe=$this->db->prepare("SELECT COUNT(*) FROM services WHERE domain=:domain AND id<>:id AND status<>'cancelled'");
+            $dupe->execute([':domain'=>$domain,':id'=>$id]);
+            if((int)$dupe->fetchColumn()>0)throw new \RuntimeException('Bu alan adı başka bir hizmette kullanılıyor.');
+            $now=gmdate('Y-m-d H:i:s');
+            $this->db->prepare("UPDATE services SET domain=:domain,remote_domain=:domain2,provisioning_status='queued',provisioning_error=NULL,updated_at=:updated WHERE id=:id")
+                ->execute([':domain'=>$domain,':domain2'=>$domain,':updated'=>$now,':id'=>$id]);
+            $job=$this->db->prepare("INSERT INTO provisioning_jobs(service_id,job_type,status,attempts,available_at,created_at,updated_at) VALUES(:service,'create','queued',0,:available,:created,:updated) ON DUPLICATE KEY UPDATE status=IF(status IN ('failed','queued'),'queued',status),attempts=IF(status='failed',0,attempts),available_at=IF(status='failed',VALUES(available_at),available_at),last_error=IF(status='failed',NULL,last_error),updated_at=VALUES(updated_at)");
+            $job->execute([':service'=>$id,':available'=>$now,':created'=>$now,':updated'=>$now]);
+            $this->db->commit();
+        }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();}
+        $this->go('/client/services');
     }
 
     public function tickets():void
