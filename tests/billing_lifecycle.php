@@ -19,8 +19,8 @@ $checks=[
     'manual suspension is distinguished from billing'=>str_contains($server,"'admin':'none'"),
     'automation settings accepts POST'=>str_contains($routes,"in_array(\$method, ['GET','POST'], true)) { \$cronController->adminAutomation(); exit; }"),
     'account intent credentials are encrypted before provisioning'=>str_contains($schema,"'provisioning_password_enc'")&&str_contains($cron,'provisioning_password_enc=:password'),
-    'admin can retry safe failed jobs'=>str_contains($cron,"$job['status']!=='failed'")&&str_contains($cron,"status='queued',attempts=0"),
-    'admin can reconcile confirmed created or absent account'=>str_contains($cron,"$resolution==='remote_created'")&&str_contains($cron,"$resolution==='remote_absent'"),
+    'admin can retry safe failed jobs'=>str_contains($cron,"\$job['status']!=='failed'")&&str_contains($cron,"status='queued',attempts=0"),
+    'admin can reconcile confirmed created or absent account'=>str_contains($cron,"\$resolution==='remote_created'")&&str_contains($cron,"\$resolution==='remote_absent'"),
     'admin reconciliation endpoints are protected routes'=>str_contains($routes,"'/admin/automation/jobs/retry'")&&str_contains($routes,"'/admin/automation/jobs/resolve'"),
 ];
 $failed=[];
