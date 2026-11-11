@@ -10,8 +10,8 @@ final class CpanelWhmAdapter implements HostingAdapter
     private function call(string $path,array $params=[],string $method='GET'):array
     {
         $headers=['Accept: application/json','Authorization: whm '.$this->server['username'].':'.$this->server['secret']];
-        $data=['api.version'=>1]+$params;$query=http_build_query($data);
-        if($method==='POST'){$headers[]='Content-Type: application/x-www-form-urlencoded';$r=HostingTransport::request($this->server['base_url'],'/json-api/'.$path,'POST',$headers,$query);}
+        $query=http_build_query(['api.version'=>1]+$params);
+        if($method==='POST'){$headers[]='Content-Type: application/x-www-form-urlencoded';$r=HostingTransport::request($this->server['base_url'],'/json-api/'.$path.'?api.version=1','POST',$headers,http_build_query($params));}
         else $r=HostingTransport::request($this->server['base_url'],'/json-api/'.$path.'?'.$query,'GET',$headers);
         $j=$r['json'];
         if(!is_array($j))throw new RuntimeException('WHM API geçerli JSON döndürmedi.');
