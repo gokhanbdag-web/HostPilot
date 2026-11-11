@@ -242,6 +242,14 @@ final class PaymentController
                     $service=$this->db->prepare("INSERT INTO services(user_id,product_id,order_id,status,billing_cycle,amount,next_due_date,provisioning_status,created_at,updated_at) VALUES(:user,:product,:order_id,'pending',:cycle,:amount,:due,'waiting_input',:created,:updated)");
                     foreach($items->fetchAll() as $item)$service->execute([':user'=>$item['user_id'],':product'=>$item['product_id'],':order_id'=>$invoice['order_id'],':cycle'=>$item['billing_cycle'],':amount'=>$item['line_total'],':due'=>$this->nextDueDate((string)$item['billing_cycle']),':created'=>$now,':updated'=>$now]);
                 }
+                $changeQuery=$this->db->prepare("SELECT * FROM service_package_changes WHERE invoice_id=:invoice AND status='pending_payment' FOR UPDATE");
+                $changeQuery->execute([':invoice'=>$invoice['id']]);$packageChange=$changeQuery->fetch();
+                if($packageChange){
+                    $jobNow=gmdate('Y-m-d H:i:s');$packageJob='package_'.(int)$packageChange['id'];
+                    $this->db->prepare("UPDATE service_package_changes SET status='queued',updated_at=:updated WHERE id=:id")->execute([':updated'=>$jobNow,':id'=>$packageChange['id']]);
+                    $job=$this->db->prepare("INSERT INTO provisioning_jobs(service_id,job_type,status,attempts,available_at,created_at,updated_at) VALUES(:service,:type,'queued',0,:available,:created,:updated) ON DUPLICATE KEY UPDATE status=IF(status IN ('failed','queued'),'queued',status),available_at=IF(status='failed',VALUES(available_at),available_at),last_error=IF(status='failed',NULL,last_error),updated_at=VALUES(updated_at)");
+                    $job->execute([':service'=>$packageChange['service_id'],':type'=>$packageJob,':available'=>$jobNow,':created'=>$jobNow,':updated'=>$jobNow]);
+                }
                 if(!empty($invoice['service_id'])){
                     $jobNow=gmdate('Y-m-d H:i:s');
                     $jobType='unsuspend_'.(int)$invoice['id'];
