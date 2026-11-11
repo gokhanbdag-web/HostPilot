@@ -12,10 +12,12 @@ $checks=[
     'renewal invoices are generated from service due dates'=>str_contains($cron,'advanceBillingDate')&&str_contains($cron,'service_period_start'),
     'only outstanding overdue balances are suspended'=>str_contains($cron,"i.status IN ('unpaid','partially_paid')")&&str_contains($cron,'i.amount_paid+0.005<i.total'),
     'billing worker rechecks invoice before suspend'=>str_contains($cron,'Recheck after the remote call')&&str_contains($cron,'payment_race_recovered'),
+    'safe failures use bounded retry backoff'=>str_contains($cron,'$attempts<5')&&str_contains($cron,'$delay=min(3600,300*'),
+    'ambiguous lifecycle outcomes enter review state'=>str_contains($cron,"suspension_source='review'"),
     'lifecycle worker handles suspend and unsuspend'=>str_contains($cron,'processLifecycleJob')&&str_contains($cron,'suspendAccount')&&str_contains($cron,'unsuspendAccount'),
     'full payment queues matching invoice unsuspend'=>str_contains($payment,"$jobType='unsuspend_'")&&str_contains($payment,'$invoice[\'service_id\']'),
     'manual suspension is distinguished from billing'=>str_contains($server,"'admin':'none'"),
-    'automation settings accepts POST'=>str_contains($routes,"'/admin/automation' && in_array($method, ['GET','POST'], true)"),
+    'automation settings accepts POST'=>str_contains($routes,"in_array($method, ['GET','POST'], true)) { $cronController->adminAutomation(); exit; }"),
 ];
 $failed=[];
 foreach($checks as $name=>$ok){echo ($ok?'PASS':'FAIL').' - '.$name.PHP_EOL;if(!$ok)$failed[]=$name;}
