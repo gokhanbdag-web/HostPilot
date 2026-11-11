@@ -101,6 +101,8 @@ if ($requestPath === '/admin/servers/test' && $method === 'POST') { $serverContr
 if ($requestPath === '/admin/servers/map' && $method === 'POST') { $serverController->saveMapping(); exit; }
 if ($requestPath === '/admin/services' && $method === 'GET') { $serverController->services(); exit; }
 if ($requestPath === '/admin/automation' && in_array($method, ['GET','POST'], true)) { $cronController->adminAutomation(); exit; }
+if ($requestPath === '/admin/automation/jobs/retry' && $method === 'POST') { $cronController->retryProvisioningJob(); exit; }
+if ($requestPath === '/admin/automation/jobs/resolve' && $method === 'POST') { $cronController->resolveProvisioningJob(); exit; }
 if ($requestPath === '/cron/provision' && $method === 'GET') { $cronController->runProvisioning(); exit; }
 if ($requestPath === '/admin/services/provision' && $method === 'POST') { $serverController->provision(); exit; }
 if ($requestPath === '/admin/services/lifecycle' && $method === 'POST') { $serverController->lifecycle(); exit; }
