@@ -63,8 +63,13 @@ final class CronController
                 echo '<form method="post" action="'.$this->e($this->url('/admin/automation/jobs/retry')).'"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="job_id" value="'.(int)$job['id'].'"><button type="submit">Güvenli şekilde yeniden kuyruğa al</button></form>';
             }elseif($job['status']==='needs_review'&&$type==='create'&&!empty($job['provisioning_username'])){
                 echo '<p>Önce kontrol panelinde kullanıcı adının varlığını ve alan adını doğrulayın.</p><form method="post" action="'.$this->e($this->url('/admin/automation/jobs/resolve')).'" style="display:inline-block;margin:4px 6px 4px 0"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="job_id" value="'.(int)$job['id'].'"><input type="hidden" name="resolution" value="remote_created"><button type="submit">Hesap mevcut — etkinleştir</button></form><form method="post" action="'.$this->e($this->url('/admin/automation/jobs/resolve')).'" style="display:inline-block;margin:4px 0"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="job_id" value="'.(int)$job['id'].'"><input type="hidden" name="resolution" value="remote_absent"><button type="submit">Hesap yok — yeniden dene</button></form>';
+            }elseif($job['status']==='needs_review'&&preg_match('/^(suspend|unsuspend)_([0-9]+)$/',$type,$lifeMatch)){
+                $lifeAction=$lifeMatch[1];
+                echo '<p>Kontrol panelinde hesabın durumunu doğrulayın. Uzak işlem uygulanmışsa durumu eşitleyin; uygulanmamışsa güvenli yeniden deneme kuyruğuna alın.</p>';
+                echo '<form method="post" action="'.$this->e($this->url('/admin/automation/jobs/resolve')).'" style="display:inline-block;margin:4px 6px 4px 0"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="job_id" value="'.(int)$job['id'].'"><input type="hidden" name="resolution" value="remote_applied"><button type="submit">'.($lifeAction==='suspend'?'Hesap askıda — HostPilot ile eşitle':'Hesap aktif — HostPilot ile eşitle').'</button></form>';
+                echo '<form method="post" action="'.$this->e($this->url('/admin/automation/jobs/resolve')).'" style="display:inline-block;margin:4px 0"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="job_id" value="'.(int)$job['id'].'"><input type="hidden" name="resolution" value="remote_not_applied"><button type="submit">Uzak işlem uygulanmadı — yeniden kuyruğa al</button></form>';
             }elseif($job['status']==='needs_review'){
-                echo '<p>Uzak hizmet durumu belirsiz. Kontrol panelinde doğrulayıp Hizmetler ekranından manuel durum eşitlemesi yapın; otomatik tekrar kapalıdır.</p>';
+                echo '<p>Uzak hizmet durumu belirsiz. Kontrol panelinde doğrulayıp gerekli manuel durum eşitlemesini yapın; otomatik tekrar kapalıdır.</p>';
             }
             echo '</article>';
         }
@@ -108,10 +113,33 @@ final class CronController
         try{
             $this->db->beginTransaction();
             $q=$this->db->prepare('SELECT * FROM provisioning_jobs WHERE id=:id FOR UPDATE');$q->execute([':id'=>$id]);$job=$q->fetch();
-            if(!$job||$job['status']!=='needs_review'||$job['job_type']!=='create')throw new \RuntimeException('Bu işlem otomatik hesap oluşturma incelemesine uygun değil.');
+            if(!$job||$job['status']!=='needs_review')throw new \RuntimeException('Bu işlem yönetici incelemesinde değil.');
             $serviceQuery=$this->db->prepare('SELECT * FROM services WHERE id=:id FOR UPDATE');$serviceQuery->execute([':id'=>$job['service_id']]);$service=$serviceQuery->fetch();
             if(!$service)throw new \RuntimeException('Hizmet kaydı bulunamadı.');
-            if($resolution==='remote_created'){
+            if(preg_match('/^(suspend|unsuspend)_([0-9]+)$/',(string)$job['job_type'],$lifeMatch)){
+                if(!in_array($resolution,['remote_applied','remote_not_applied'],true))throw new \RuntimeException('Geçersiz uzak hizmet uzlaştırma kararı.');
+                $action=$lifeMatch[1];$invoiceId=(int)$lifeMatch[2];
+                $iq=$this->db->prepare('SELECT * FROM invoices WHERE id=:id AND service_id=:service FOR UPDATE');$iq->execute([':id'=>$invoiceId,':service'=>$service['id']]);$invoice=$iq->fetch();
+                if(!$invoice)throw new \RuntimeException('İşlem faturası bulunamadı.');
+                if($resolution==='remote_applied'){
+                    if($action==='suspend'){
+                        if(!in_array($invoice['status'],['unpaid','partially_paid','overdue'],true)||(float)$invoice['amount_paid']+0.005>=(float)$invoice['total']||empty($invoice['due_at'])||$invoice['due_at']>$now)throw new \RuntimeException('Fatura artık askıya alma koşullarını karşılamıyor; hizmeti askıda olarak eşitlemek güvenli değil.');
+                        if($service['status']==='active'&&($service['suspension_source']??'none')==='none'){
+                            $this->db->prepare("UPDATE services SET status='suspended',suspension_source='billing',suspension_invoice_id=:invoice,suspended_at=:at,updated_at=:updated WHERE id=:id")->execute([':invoice'=>$invoiceId,':at'=>$now,':updated'=>$now,':id'=>$service['id']]);
+                        }elseif(!($service['status']==='suspended'&&($service['suspension_source']??'')==='billing'&&(int)$service['suspension_invoice_id']===$invoiceId))throw new \RuntimeException('Hizmetin mevcut durumu fatura kaynaklı askıya alma ile çelişiyor.');
+                    }else{
+                        if($invoice['status']!=='paid'||(float)$invoice['amount_paid']+0.005<(float)$invoice['total'])throw new \RuntimeException('Fatura tamamen ödenmiş değil; hizmeti aktif olarak eşitlemek güvenli değil.');
+                        if($service['status']==='suspended'&&($service['suspension_source']??'')==='billing'&&(int)$service['suspension_invoice_id']===$invoiceId){
+                            $this->db->prepare("UPDATE services SET status='active',suspension_source='none',suspension_invoice_id=NULL,suspended_at=NULL,updated_at=:updated WHERE id=:id")->execute([':updated'=>$now,':id'=>$service['id']]);
+                        }elseif(!($service['status']==='active'&&($service['suspension_source']??'none')==='none'))throw new \RuntimeException('Hizmetin mevcut durumu fatura kaynaklı yeniden etkinleştirme ile çelişiyor.');
+                    }
+                    $jobStatus='completed';$message='Yönetici uzak kontrol paneli durumunu doğruladı ve HostPilot kaydı eşitlendi.';
+                }else{
+                    $jobStatus='queued';$message='Yönetici uzak işlemin uygulanmadığını doğruladı; kuyruk yeniden başlatıldı.';
+                }
+                $this->db->prepare("UPDATE provisioning_jobs SET status=:status,attempts=0,available_at=:available,locked_at=NULL,last_error=NULL,updated_at=:updated WHERE id=:id")->execute([':status'=>$jobStatus,':available'=>$now,':updated'=>$now,':id'=>$id]);
+                $this->audit((int)$service['id'],(int)$service['server_id'],(string)$job['job_type'],'admin_reconciled',$message);
+            }elseif($job['job_type']==='create'&&$resolution==='remote_created'){
                 if(empty($service['provisioning_username'])||empty($service['provisioning_password_enc'])||empty($service['domain'])||empty($service['server_id']))throw new \RuntimeException('Kayıtlı hesap oluşturma bilgileri eksik; manuel uzlaştırma yapılamıyor.');
                 $this->db->prepare("UPDATE services SET status='active',provisioning_status='completed',remote_identifier=:username,remote_username=:username,remote_domain=:domain,remote_password_enc=:password,provisioning_username=NULL,provisioning_password_enc=NULL,provisioned_at=:at,provisioning_error=NULL,updated_at=:updated WHERE id=:id")
                     ->execute([':username'=>$service['provisioning_username'],':domain'=>$service['domain'],':password'=>$service['provisioning_password_enc'],':at'=>$now,':updated'=>$now,':id'=>$service['id']]);
