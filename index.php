@@ -70,6 +70,7 @@ if ($requestPath === '/client/logout' && $method === 'POST') { $client->logout()
 if ($requestPath === '/client' || $requestPath === '/client/') { $client->dashboard(); exit; }
 if ($requestPath === '/client/services' && $method === 'GET') { $client->services(); exit; }
 if ($requestPath === '/client/services/domain' && $method === 'POST') { $client->saveServiceDomain(); exit; }
+if ($requestPath === '/client/services/domain' && $method === 'POST') { $client->saveServiceDomain(); exit; }
 if ($requestPath === '/client/tickets' && $method === 'GET') { $client->tickets(); exit; }
 if ($requestPath === '/client/tickets/new' && in_array($method, ['GET', 'POST'], true)) { $client->newTicket(); exit; }
 if (preg_match('#^/client/tickets/([0-9]+)$#', $requestPath, $ticketMatch) && in_array($method, ['GET', 'POST'], true)) { $client->viewTicket((int)$ticketMatch[1]); exit; }
@@ -94,11 +95,14 @@ if ($requestPath === '/admin' || $requestPath === '/admin/') {
 $catalog = new \HostPilot\Http\CatalogController($pdo, $basePath);
 $payment = new \HostPilot\Http\PaymentController($pdo, $basePath, (string)($config['app']['base_url'] ?? ''), (string)($config['app']['key'] ?? ''));
 $serverController = new \HostPilot\Http\ServerController($pdo, $basePath, (string)($config['app']['key'] ?? ''));
+$cronController = new \HostPilot\Http\CronController($pdo, $basePath, (string)($config['app']['key'] ?? ''), (string)($config['app']['base_url'] ?? ''));
 if ($requestPath === '/admin/servers' && $method === 'GET') { $serverController->servers(); exit; }
 if ($requestPath === '/admin/servers/save' && $method === 'POST') { $serverController->saveServer(); exit; }
 if ($requestPath === '/admin/servers/test' && $method === 'POST') { $serverController->testServer(); exit; }
 if ($requestPath === '/admin/servers/map' && $method === 'POST') { $serverController->saveMapping(); exit; }
 if ($requestPath === '/admin/services' && $method === 'GET') { $serverController->services(); exit; }
+if ($requestPath === '/admin/automation' && $method === 'GET') { $cronController->adminAutomation(); exit; }
+if ($requestPath === '/cron/provision' && $method === 'GET') { $cronController->runProvisioning(); exit; }
 if ($requestPath === '/admin/services/provision' && $method === 'POST') { $serverController->provision(); exit; }
 if ($requestPath === '/admin/services/lifecycle' && $method === 'POST') { $serverController->lifecycle(); exit; }
 if ($requestPath === '/admin/payments' && in_array($method, ['GET','POST'], true)) { $payment->adminSettings(); exit; }
