@@ -150,7 +150,7 @@ final class PaymentController
         $base=$settings['iyzico_test_mode']==='1'?'https://sandbox-api.iyzipay.com':'https://api.iyzipay.com';
         $phone=preg_replace('/[^0-9+]/','',(string)($_POST['phone']??''));$identity=preg_replace('/\D/','',(string)($_POST['identity_number']??''));
         $address=trim((string)($_POST['address']??''));$city=trim((string)($_POST['city']??''));$zip=trim((string)($_POST['zip']??''));
-        if(strlen($identity)!==11||$phone===''||$address===''||$city===''||$zip==='')throw new \RuntimeException('iyzico için telefon, 11 haneli T.C. kimlik numarası ve adres bilgileri gereklidir.');
+        if(!$this->validTurkishId($identity)||$phone===''||$address===''||$city===''||$zip==='')throw new \RuntimeException('iyzico için geçerli 11 haneli T.C. kimlik numarası, telefon ve adres bilgileri gereklidir.');
         $parts=preg_split('/\s+/',trim((string)$user['name']),2)?:[];$first=$parts[0]??'Müşteri';$last=$parts[1]??'HostPilot';
         $email=(string)$user['email'];$now=gmdate('Y-m-d H:i:s');
         $itemsQ=$this->db->prepare('SELECT id,description,line_total FROM invoice_items WHERE invoice_id=:id');$itemsQ->execute([':id'=>$invoice['id']]);$basket=[];
