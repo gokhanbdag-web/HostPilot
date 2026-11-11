@@ -90,6 +90,13 @@ if ($requestPath === '/admin' || $requestPath === '/admin/') {
     exit;
 }
 $catalog = new \HostPilot\Http\CatalogController($pdo, $basePath);
+$payment = new \HostPilot\Http\PaymentController($pdo, $basePath, (string)($config['app']['base_url'] ?? ''), (string)($config['app']['key'] ?? ''));
+if ($requestPath === '/admin/payments' && in_array($method, ['GET','POST'], true)) { $payment->adminSettings(); exit; }
+if (preg_match('#^/client/invoices/([0-9]+)/pay$#', $requestPath, $payInvoiceMatch) && in_array($method, ['GET','POST'], true)) { $payment->payInvoice((int)$payInvoiceMatch[1]); exit; }
+if ($requestPath === '/payment/paytr/callback' && $method === 'POST') { $payment->paytrCallback(); exit; }
+if ($requestPath === '/payment/iyzico/callback' && $method === 'POST') { $payment->iyzicoCallback(); exit; }
+if ($requestPath === '/payment/return' && $method === 'GET') { $payment->returnPage(); exit; }
+
 if ($requestPath === '/admin/products' && in_array($method, ['GET','POST'], true)) { $catalog->adminProducts(); exit; }
 if ($requestPath === '/admin/orders' && $method === 'GET') { $catalog->adminOrders(); exit; }
 if ($requestPath === '/client/orders' && $method === 'GET') { $catalog->clientOrders(); exit; }
