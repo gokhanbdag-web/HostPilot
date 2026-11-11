@@ -64,3 +64,18 @@
 - Multiple prices per product editing, cart/multi-item checkout, product custom fields, coupons, tax rules, invoices, payment collection, service activation, order review actions, and provisioning adapters.
 - Migration execution currently runs at application bootstrap and needs concurrency locking plus an explicit upgrade UI before production release.
 - GitHub Actions result is pending; source has not been deployed to a live PHP/MySQL host in this turn.
+
+
+## 2026-11-11 — Invoice foundation
+
+### Added
+- Invoice header, invoice-line snapshot, and payment-transaction ledger tables.
+- New idempotent migration for existing installations and matching fresh-installer DDL.
+- Every newly placed pending order receives one unpaid invoice within the same database transaction.
+- Invoice number, issue time, seven-day initial due date, currency, totals, and item description are snapshotted.
+- Customer invoice list and staff invoice overview.
+- Customer dashboard shortcut to invoices.
+
+### Important boundary
+- These are internal billing records, not a claim of statutory e-invoice/e-archive compliance. Tax configuration, official document numbering requirements, legal invoice output, payment capture, refunds, and reconciliation remain to be implemented.
+- No payment is marked successful and no hosting service is activated at this stage.
