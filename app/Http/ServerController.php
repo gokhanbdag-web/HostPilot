@@ -31,10 +31,16 @@ final class ServerController
         foreach($servers as $server){
             $maps=$this->db->prepare("SELECT m.product_id,m.remote_package,p.name FROM server_product_map m JOIN products p ON p.id=m.product_id WHERE m.server_id=:id ORDER BY p.name");$maps->execute([':id'=>$server['id']]);
             echo '<section class="panel server"><div class="serverhead"><div><h2>'.$this->e($server['name']).'</h2><p>'.$this->e(strtoupper($server['panel_type'])).' · '.$this->e($server['base_url']).'</p><small>Son bağlantı: '.$this->e((string)($server['last_test_at']??'Henüz test edilmedi')).' · '.$this->e((string)($server['last_test_message']??'')).'</small></div><span class="pill '.($server['enabled']?'green':'gray').'">'.($server['enabled']?'Etkin':'Pasif').'</span></div><div class="actions"><form method="post" action="'.$this->url('/admin/servers/test').'"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="server_id" value="'.(int)$server['id'].'"><button class="secondary">Bağlantıyı test et</button></form></div><h3>Ürün / uzak paket eşleştirmeleri</h3>';
-            foreach($maps->fetchAll() as $map)echo '<div class="maprow"><span>'.$this->e($map['name']).'</span><code>'.$this->e($map['remote_package']).'</code></div>';
+            foreach($maps->fetchAll() as $map){
+                echo '<div class="maprow"><span>'.$this->e($map['name']).'</span><code>'.$this->e($map['remote_package']).'</code>';
+                if($server['panel_type']==='plesk')echo '<small>Plan GUID: '.$this->e((string)($map['remote_package_guid']??'—')).' · Harici kimlik: '.$this->e((string)($map['remote_package_external_id']??'—')).'</small>';
+                echo '</div>';
+            }
             echo '<form method="post" action="'.$this->url('/admin/servers/map').'" class="mapform"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="server_id" value="'.(int)$server['id'].'"><select name="product_id" required><option value="">Ürün seçin</option>';
             foreach($products as $product)echo '<option value="'.(int)$product['id'].'">'.$this->e($product['name']).'</option>';
-            echo '</select><input name="remote_package" required placeholder="Kontrol panelindeki paket adı"><button class="secondary">Eşleştir</button></form></section>';
+            echo '</select><input name="remote_package" required placeholder="Kontrol panelindeki paket adı">';
+            if($server['panel_type']==='plesk')echo '<input name="remote_package_guid" maxlength="190" placeholder="Plesk plan GUID"><input name="remote_package_external_id" maxlength="190" placeholder="Plesk plan external ID">';
+            echo '<button class="secondary">Eşleştir</button></form></section>';
         }
         if(!$servers)echo '<section class="panel empty">Henüz sunucu tanımlanmamış. İlk bağlantınızı yukarıdan ekleyin.</section>';
         echo '<section class="panel"><h2>Önemli güvenlik notu</h2><p>WHM için API token, DirectAdmin için sınırlı yetkili Login Key, Plesk için IP kısıtlı XML API KEY kullanılması önerilir. API sırları veritabanında şifreli tutulur.</p></section>';
@@ -79,9 +85,13 @@ final class ServerController
         if(!$this->allowed())return;
         if(!$this->csrf())$this->go('/admin/servers','error=Güvenlik doğrulaması başarısız.');
         $server=(int)($_POST['server_id']??0);$product=(int)($_POST['product_id']??0);$package=trim((string)($_POST['remote_package']??''));
-        if($server<1||$product<1||$package==='')$this->go('/admin/servers','error=Ürün ve uzak paket adı zorunludur.');
-        $q=$this->db->prepare("INSERT INTO server_product_map(server_id,product_id,remote_package,created_at,updated_at) VALUES(:server,:product,:package,:created,:updated) ON DUPLICATE KEY UPDATE remote_package=VALUES(remote_package),updated_at=VALUES(updated_at)");
-        $now=gmdate('Y-m-d H:i:s');$q->execute([':server'=>$server,':product'=>$product,':package'=>$package,':created'=>$now,':updated'=>$now]);
+        $guid=trim((string)($_POST['remote_package_guid']??''));$externalId=trim((string)($_POST['remote_package_external_id']??''));
+        if($server<1||$product<1||$package===''||strlen($package)>190||strlen($guid)>190||strlen($externalId)>190||preg_match('/[\\r\\n\\x00]/',$package.$guid.$externalId))$this->go('/admin/servers','error=Ürün veya uzak paket bilgileri geçersiz.');
+        $panelQuery=$this->db->prepare('SELECT panel_type FROM servers WHERE id=:id AND enabled=1 LIMIT 1');$panelQuery->execute([':id'=>$server]);$panel=(string)$panelQuery->fetchColumn();
+        if($panel==='')$this->go('/admin/servers','error=Etkin sunucu bulunamadı.');
+        if($panel==='plesk'&&(($guid==='')!==($externalId==='')))$this->go('/admin/servers','error=Plesk için GUID ve harici plan kimliği birlikte girilmelidir.');
+        $q=$this->db->prepare("INSERT INTO server_product_map(server_id,product_id,remote_package,remote_package_guid,remote_package_external_id,created_at,updated_at) VALUES(:server,:product,:package,:guid,:external_id,:created,:updated) ON DUPLICATE KEY UPDATE remote_package=VALUES(remote_package),remote_package_guid=VALUES(remote_package_guid),remote_package_external_id=VALUES(remote_package_external_id),updated_at=VALUES(updated_at)");
+        $now=gmdate('Y-m-d H:i:s');$q->execute([':server'=>$server,':product'=>$product,':package'=>$package,':guid'=>$guid!==''?$guid:null,':external_id'=>$externalId!==''?$externalId:null,':created'=>$now,':updated'=>$now]);
         $this->go('/admin/servers','notice=Ürün ve sunucu paketi eşleştirildi.');
     }
 
