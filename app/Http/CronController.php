@@ -28,10 +28,29 @@ final class CronController
         if(!$user){$this->go('/admin/login');return;}
         if(!in_array($user['role']??'', ['super_admin','admin'],true)){http_response_code(403);echo 'Yetkisiz erişim.';return;}
         if($this->applicationKey===''){http_response_code(500);echo 'Kurulum anahtarı bulunamadı.';return;}
+        $notice='';$error='';
+        if(($_SERVER['REQUEST_METHOD']??'GET')==='POST'){
+            if(!Auth::verifyCsrf($_POST['_token']??null))$error='Güvenlik doğrulaması başarısız.';
+            else{
+                $grace=(int)($_POST['billing_grace_days']??7);
+                if($grace<1||$grace>30)$error='Ödeme tolerans süresi 1–30 gün arasında olmalıdır.';
+                else{
+                    $q=$this->db->prepare("INSERT INTO settings(setting_group,setting_key,setting_value,is_secret,updated_at) VALUES('billing','grace_days',:value,0,:updated) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value),is_secret=0,updated_at=VALUES(updated_at)");
+                    $q->execute([':value'=>(string)$grace,':updated'=>gmdate('Y-m-d H:i:s')]);
+                    $notice='Fatura tolerans süresi kaydedildi.';
+                }
+            }
+        }
+        $q=$this->db->prepare("SELECT setting_value FROM settings WHERE setting_group='billing' AND setting_key='grace_days' LIMIT 1");$q->execute();
+        $graceDays=max(1,min(30,(int)($q->fetchColumn()?:7)));
         $token=hash_hmac('sha256','HostPilot provisioning cron v1',$this->applicationKey);
         $url=rtrim($this->baseUrl,'/').'/cron/provision';
         $command="curl -fsS -H 'Authorization: Bearer ".$token."' '".$url."' >/dev/null 2>&1";
-        echo '<!doctype html><html lang="tr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Otomasyon · HostPilot</title><style>body{margin:0;background:#0b1220;color:#e8eef9;font:15px system-ui}.wrap{max-width:900px;margin:50px auto;padding:24px}.box{background:#121e31;border:1px solid #2b3c56;border-radius:14px;padding:24px;margin:16px 0}code,pre{display:block;white-space:pre-wrap;overflow-wrap:anywhere;background:#091321;color:#b9ceff;padding:14px;border-radius:8px}a{color:#a9c0ff}</style><div class="wrap"><a href="'.$this->e($this->url('/admin')).'">← Yönetim paneli</a><h1>Otomatik hosting işlemleri</h1><div class="box"><h2>cPanel Cron Jobs</h2><p>Ödeme sonrası müşterinin alan adı girdiği hosting hizmetleri bu görev tarafından sırayla işlenir. Her çağrı en fazla bir hosting hesabı oluşturmayı dener.</p><p>Önerilen çalışma aralığı: dakikada bir.</p><pre>'.$this->e($command).'</pre><p>Komut kurulum anahtarından türetilen gizli erişim bilgisi içerir. Paylaşmayın. Uygulama anahtarı değişirse cron komutunu yeniden alın.</p></div><div class="box"><h2>Güvenli çalışma ilkesi</h2><p>Kontrol paneli hesabı oluşturma isteğinin sonucu belirsiz kalırsa sistem aynı isteği otomatik tekrarlamaz. Yinelenen hesap açılmasını önlemek için hizmet yönetici incelemesine alınır.</p><p>Alan adı girilmeden hiçbir hosting hesabı oluşturulmaz. Uygun sunucu ve ürün-paket eşleştirmesi bulunması gerekir.</p></div></div></html>';
+        echo '<!doctype html><html lang="tr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Otomasyon · HostPilot</title><style>body{margin:0;background:#0b1220;color:#e8eef9;font:15px system-ui}.wrap{max-width:900px;margin:50px auto;padding:24px}.box{background:#121e31;border:1px solid #2b3c56;border-radius:14px;padding:24px;margin:16px 0}code,pre{display:block;white-space:pre-wrap;overflow-wrap:anywhere;background:#091321;color:#b9ceff;padding:14px;border-radius:8px}a{color:#a9c0ff}input,button{padding:11px;border-radius:8px;border:1px solid #344760;background:#091321;color:#fff}button{background:#5579ef;border:0;font-weight:700}.notice{color:#8ce0bb}.error{color:#ff9da8}</style><div class="wrap"><a href="'.$this->e($this->url('/admin')).'">← Yönetim paneli</a><h1>Otomatik hosting ve faturalandırma</h1>';
+        if($notice!=='')echo '<p class="notice">'.$this->e($notice).'</p>';
+        if($error!=='')echo '<p class="error">'.$this->e($error).'</p>';
+        echo '<div class="box"><h2>Ödeme tolerans süresi</h2><p>Yenileme faturası, hizmetin sonraki vade tarihinde oluşturulur. Ödeme bu süre içinde tamamlanmazsa hizmet askıya alma kuyruğuna alınır.</p><form method="post"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><label>Vade sonrası tolerans (gün) <input type="number" name="billing_grace_days" min="1" max="30" value="'.$graceDays.'" required></label> <button type="submit">Ayarı kaydet</button></form></div>';
+        echo '<div class="box"><h2>cPanel Cron Jobs</h2><p>Otomasyon; yenileme faturalarını oluşturur, vadesi geçmiş ve ödenmemiş faturalar için askıya alma işi açar, ödeme sonrası yeniden etkinleştirmeyi işler. Her çağrı en fazla bir kontrol paneli hesabı işlemi yapar.</p><p>Önerilen çalışma aralığı: dakikada bir.</p><pre>'.$this->e($command).'</pre><p>Komut kurulum anahtarından türetilen gizli erişim bilgisi içerir. Paylaşmayın. Uygulama anahtarı değişirse cron komutunu yeniden alın.</p></div><div class="box"><h2>Güvenlik</h2><p>Manuel yönetici askıya alması ile fatura nedeniyle askıya alma ayrı tutulur. Sistem yalnızca faturalandırma nedeniyle askıya aldığı hizmeti otomatik açabilir. Belirsiz uzak sunucu yanıtları yönetici incelemesine alınır.</p><p>Alan adı girilmeden hosting hesabı oluşturulmaz. Uygun sunucu ve ürün-paket eşleştirmesi gerekir.</p></div></div></html>';
     }
 
     public function runProvisioning():void
