@@ -20,6 +20,10 @@ final class CpanelWhmAdapter implements HostingAdapter
     }
     public function testConnection():string
     {$j=$this->call('version');return 'WHM API bağlantısı başarılı · '.(string)($j['data']['version']??'sürüm bilgisi alınamadı');}
+    public function suspendAccount(string $username,string $domain,string $reason):void
+    {$this->call('suspendacct',['user'=>$username,'reason'=>$reason,'disallowun'=>1]);}
+    public function unsuspendAccount(string $username,string $domain):void
+    {$this->call('unsuspendacct',['user'=>$username]);}
     public function createAccount(array $a):array
     {
         $username=strtolower((string)$a['username']);
