@@ -70,7 +70,8 @@
 - [x] Payment-triggered billing unsuspension with manual-vs-billing suspension source protection.
 - [x] Bounded exponential retries before external calls; ambiguous external lifecycle outcomes enter manual review.
 - [ ] Async terminate/package-change workflows.
-- [ ] Reconciliation and manual retry interface (failed and ambiguous jobs are not blindly replayed).
+- [x] Admin automation queue with safe retry for pre-call failures and manual confirmation for ambiguous account creation.
+- [ ] Full remote-state reconciliation UI for ambiguous suspend/reactivate actions and termination/package changes.
 
 **Exit criteria:** Sandbox/test server lifecycle operations work with least-privilege credentials and full audit history.
 
