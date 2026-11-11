@@ -183,11 +183,11 @@ final class ServerController
         try{
             $this->db->beginTransaction();
             $q=$this->db->prepare("SELECT * FROM services WHERE id=:id FOR UPDATE");$q->execute([':id'=>$id]);$service=$q->fetch();
-            if(!$service||empty($service['provisioned_at'])||empty($service['remote_username'])||empty($service['remote_domain'])||empty($service['server_id']))throw new \\RuntimeException('Sonlandırılabilir uzak hosting hesabı bulunamadı.');
-            if(!in_array($service['status'],['active','suspended'],true))throw new \\RuntimeException('Hizmet mevcut durumunda sonlandırılamaz.');
-            if(!hash_equals((string)$service['remote_domain'],$confirmation))throw new \\RuntimeException('Güvenlik için alan adı birebir aynı yazılmalıdır.');
+            if(!$service||empty($service['provisioned_at'])||empty($service['remote_username'])||empty($service['remote_domain'])||empty($service['server_id']))throw new \RuntimeException('Sonlandırılabilir uzak hosting hesabı bulunamadı.');
+            if(!in_array($service['status'],['active','suspended'],true))throw new \RuntimeException('Hizmet mevcut durumunda sonlandırılamaz.');
+            if(!hash_equals((string)$service['remote_domain'],$confirmation))throw new \RuntimeException('Güvenlik için alan adı birebir aynı yazılmalıdır.');
             $pending=$this->db->prepare("SELECT id FROM provisioning_jobs WHERE service_id=:service AND job_type LIKE 'terminate\\\\_%' AND status IN ('queued','processing','needs_review') LIMIT 1 FOR UPDATE");$pending->execute([':service'=>$id]);
-            if($pending->fetchColumn())throw new \\RuntimeException('Bu hizmet için zaten bekleyen bir sonlandırma işi var.');
+            if($pending->fetchColumn())throw new \RuntimeException('Bu hizmet için zaten bekleyen bir sonlandırma işi var.');
             $now=gmdate('Y-m-d H:i:s');$type='terminate_'.gmdate('YmdHis').'_'.bin2hex(random_bytes(3));
             $insert=$this->db->prepare("INSERT INTO provisioning_jobs(service_id,job_type,status,attempts,available_at,created_at,updated_at) VALUES(:service,:type,'queued',0,:available,:created,:updated)");
             $insert->execute([':service'=>$id,':type'=>$type,':available'=>$now,':created'=>$now,':updated'=>$now]);
