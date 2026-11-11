@@ -58,6 +58,9 @@ final class ClientController
             }elseif(($row['provisioning_status']??'')==='needs_review'){
                 echo '<p>Otomatik işlem sonucu kesinleştirilemedi. Yinelenen hesap açılmasını önlemek için yönetici kontrolü bekleniyor.</p>';
             }
+            if(($row['status']??'')==='active'&&($row['provisioning_status']??'')==='completed'&&in_array(($row['panel_type']??''),['cpanel','plesk'],true)){
+                echo '<p><a class="quick" href="'.$this->url('/client/services/change?service_id='.(int)$row['id']).'">Paketimi yükselt →</a></p>';
+            }
             if(($row['provisioning_status']??'')==='completed'&&$row['remote_username']){
                 $password='';try{$password=$this->vault->decrypt((string)$row['remote_password_enc']);}catch(Throwable){}
                 echo '<details><summary>Hosting giriş bilgilerimi göster</summary><p>Kullanıcı adı: <b>'.$this->e((string)$row['remote_username']).'</b><br>Parola: <b>'.$this->e($password!==''?$password:'Parola bilgisi bulunamadı').'</b><br>Kontrol paneli adresi: '.$this->e($this->panelUrl($row)).'</p><small>Bu bilgiler yalnızca kendi hesabınızda görüntülenir. Güvenli bir yerde saklayın.</small></details>';
