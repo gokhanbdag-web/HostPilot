@@ -18,7 +18,7 @@
 - [x] Root front controller and subdirectory-aware route dispatch (initial routes only).
 - [ ] Configuration loader, environment checks, logging, error handling.
 - [x] Browser installer with DB credentials, admin identity, app URL, locale, generated encryption key, and single/multi-vendor selection (initial implementation; hardening remains).
-- [ ] Schema migrations and seed system.
+- [ ] Full migration/seed manager and upgrade UI (initial idempotent catalogue migration runner added).
 - [ ] Installation lock and protected storage.
 - [ ] Root and nested-subdirectory installation test matrix.
 
@@ -35,10 +35,10 @@
 **Exit criteria:** Secure login and role-scoped navigation/actions for admin, staff, and customers.
 
 ## Phase 3 — Catalog, storefront, and order lifecycle
-- [ ] Product groups, products, pricing, billing cycles, configurable options.
-- [ ] Initial storefront theme.
+- [x] Product groups, products, initial pricing and billing-cycle records (multiple price editing and configurable options remain pending).
+- [x] Initial catalogue storefront and product detail pages (theme registry and multiple themes remain pending).
 - [ ] CMS pages, menus, FAQ, knowledge base.
-- [ ] Cart, checkout, order records, coupons.
+- [x] Single-product pending order creation, customer order history, and staff order listing (cart, payment checkout, coupons remain pending).
 - [ ] Theme registry and widget/page builder foundations.
 
 **Exit criteria:** User can browse products and place a pending order end-to-end.
