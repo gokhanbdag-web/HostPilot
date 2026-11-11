@@ -25,3 +25,23 @@
 ### Validation
 - PHP lint workflow has been committed; its GitHub Actions result must be checked after GitHub runs it.
 - No live database, payment, registrar or hosting-panel integration test has been claimed.
+
+
+## 2026-11-11 — Customer portal and support foundation
+
+### Added
+- Customer self-registration and login, with customer-role isolation.
+- Client dashboard and responsive client-side navigation.
+- Customer support ticket creation and customer-owned ticket listing.
+- Ticket thread view and customer replies.
+- Staff ticket inbox, staff replies, and close/reopen controls.
+- Public knowledge base / FAQ listing scaffold.
+- Installer now creates tickets, ticket_messages, and knowledgebase_articles tables.
+- Front-controller routes for client area, ticket threads, knowledge base, and staff ticket inbox.
+
+### Hardening notes
+- Ticket ownership is enforced in customer queries; customers cannot view another account's ticket by changing its numeric ID.
+- Form actions use the shared CSRF token.
+- Ticket creation and first message are wrapped in a database transaction.
+- Email notifications, file attachments, staff assignment, SLA, canned replies, and article administration are not implemented yet.
+- Existing installations will need a schema migration mechanism before these new tables can be applied; the browser installer creates them for fresh installs only.
