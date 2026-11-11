@@ -88,7 +88,7 @@ final class ServerController
     public function services():void
     {
         if(!$this->allowed())return;
-        $rows=$this->db->query("SELECT s.*,u.name AS customer_name,u.email,p.name AS product_name,sv.name AS server_name FROM services s JOIN users u ON u.id=s.user_id JOIN products p ON p.id=s.product_id LEFT JOIN servers sv ON sv.id=s.server_id ORDER BY s.id DESC LIMIT 300")->fetchAll();
+        $rows=$this->db->query("SELECT s.*,u.name AS customer_name,u.email,p.name AS product_name,sv.name AS server_name,EXISTS(SELECT 1 FROM provisioning_jobs pj WHERE pj.service_id=s.id AND pj.job_type LIKE 'terminate\\_%' AND pj.status IN ('queued','processing','needs_review')) AS termination_pending FROM services s JOIN users u ON u.id=s.user_id JOIN products p ON p.id=s.product_id LEFT JOIN servers sv ON sv.id=s.server_id ORDER BY s.id DESC LIMIT 300")->fetchAll();
         $servers=$this->db->query("SELECT id,name FROM servers WHERE enabled=1 ORDER BY name")->fetchAll();
         $this->start('Hizmetler','services');
         echo '<div class="hero"><div><small>OPERASYON / HOSTING HİZMETLERİ</small><h1>Hizmet yönetimi</h1><p>Ödenmiş siparişlerden oluşan bekleyen hizmetleri sunuculara atayın ve hesapları otomatik oluşturun.</p></div><span class="pill">'.count($rows).' hizmet</span></div><section class="panel"><div class="tablewrap"><table><thead><tr><th>Müşteri / Ürün</th><th>Domain</th><th>Durum</th><th>Sunucu</th><th>İşlem</th></tr></thead><tbody>';
@@ -101,7 +101,12 @@ final class ServerController
             }elseif(!empty($row['provisioned_at'])&&in_array($row['status'],['active','suspended'],true)){
                 $op=$row['status']==='active'?'suspend':'unsuspend';$label=$op==='suspend'?'Hizmeti askıya al':'Yeniden etkinleştir';
                 echo '<form method="post" action="'.$this->url('/admin/services/lifecycle').'"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="service_id" value="'.(int)$row['id'].'"><input type="hidden" name="operation" value="'.$op.'"><button class="secondary">'.$label.'</button></form>';
-            }else echo '<span class="muted">İşlem bekliyor</span>';
+            }elseif(!empty($row['provisioned_at'])&&in_array($row['status'],['active','suspended'],true)){
+                if(!(int)$row['termination_pending']){
+                    echo '<details class="provision"><summary style="color:#ff9da8;cursor:pointer">Hesabı kalıcı olarak sonlandır</summary><form method="post" action="'.$this->url('/admin/services/terminate').'" onsubmit="return confirm(\'Bu işlem uzak hosting hesabını ve içeriğini kalıcı olarak silecek. Devam edilsin mi?\')"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="service_id" value="'.(int)$row['id'].'"><label>Onay için domain adını aynen yazın<input name="confirm_domain" required autocomplete="off" placeholder="'.$this->e((string)$row['remote_domain']).'"></label><button style="background:#a93248">Kalıcı sonlandırma kuyruğuna al</button></form></details>';
+                }else echo '<span class="muted">Sonlandırma işi kuyrukta / incelemede</span>';
+            }elseif($row['status']==='terminated')echo '<span class="muted">Sonlandırıldı</span>';
+            else echo '<span class="muted">İşlem bekliyor</span>';
             echo '</td></tr>';
         }
         if(!$rows)echo '<tr><td colspan="5">Henüz hizmet bulunmuyor.</td></tr>';
@@ -166,6 +171,31 @@ final class ServerController
         }catch(Throwable $e){
             if($this->db->inTransaction())$this->db->rollBack();
             $this->log($id,0,$operation,'failed',substr($e->getMessage(),0,900));
+            $this->go('/admin/services','error='.$e->getMessage());
+        }
+    }
+
+    public function terminate():void
+    {
+        if(!$this->allowed())return;
+        if(!$this->csrf())$this->go('/admin/services','error=Güvenlik doğrulaması başarısız.');
+        $id=(int)($_POST['service_id']??0);$confirmation=trim((string)($_POST['confirm_domain']??''));
+        try{
+            $this->db->beginTransaction();
+            $q=$this->db->prepare("SELECT * FROM services WHERE id=:id FOR UPDATE");$q->execute([':id'=>$id]);$service=$q->fetch();
+            if(!$service||empty($service['provisioned_at'])||empty($service['remote_username'])||empty($service['remote_domain'])||empty($service['server_id']))throw new \\RuntimeException('Sonlandırılabilir uzak hosting hesabı bulunamadı.');
+            if(!in_array($service['status'],['active','suspended'],true))throw new \\RuntimeException('Hizmet mevcut durumunda sonlandırılamaz.');
+            if(!hash_equals((string)$service['remote_domain'],$confirmation))throw new \\RuntimeException('Güvenlik için alan adı birebir aynı yazılmalıdır.');
+            $pending=$this->db->prepare("SELECT id FROM provisioning_jobs WHERE service_id=:service AND job_type LIKE 'terminate\\\\_%' AND status IN ('queued','processing','needs_review') LIMIT 1 FOR UPDATE");$pending->execute([':service'=>$id]);
+            if($pending->fetchColumn())throw new \\RuntimeException('Bu hizmet için zaten bekleyen bir sonlandırma işi var.');
+            $now=gmdate('Y-m-d H:i:s');$type='terminate_'.gmdate('YmdHis').'_'.bin2hex(random_bytes(3));
+            $insert=$this->db->prepare("INSERT INTO provisioning_jobs(service_id,job_type,status,attempts,available_at,created_at,updated_at) VALUES(:service,:type,'queued',0,:available,:created,:updated)");
+            $insert->execute([':service'=>$id,':type'=>$type,':available'=>$now,':created'=>$now,':updated'=>$now]);
+            $this->db->commit();
+            $this->log($id,(int)$service['server_id'],'terminate_queued','success','Yönetici domain doğrulamasıyla kalıcı sonlandırma kuyruğa alındı.');
+            $this->go('/admin/services','notice=Sonlandırma işi kuyruğa alındı. Cron worker uzak işlemi gerçekleştirecek.');
+        }catch(Throwable $e){
+            if($this->db->inTransaction())$this->db->rollBack();
             $this->go('/admin/services','error='.$e->getMessage());
         }
     }
