@@ -71,7 +71,8 @@
 - [x] Bounded exponential retries before external calls; ambiguous external lifecycle outcomes enter manual review.
 - [ ] Async terminate/package-change workflows.
 - [x] Admin automation queue with safe retry for pre-call failures and manual confirmation for ambiguous account creation.
-- [ ] Full remote-state reconciliation UI for ambiguous suspend/reactivate actions and termination/package changes.
+- [x] Invoice-aware admin reconciliation for ambiguous suspend/reactivate jobs, with explicit remote-applied vs remote-not-applied confirmation and safe invoice revalidation.
+- [ ] Full remote-state querying adapters and reconciliation for termination/package changes.
 
 **Exit criteria:** Sandbox/test server lifecycle operations work with least-privilege credentials and full audit history.
 
