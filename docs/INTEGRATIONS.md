@@ -1,0 +1,110 @@
+# HostPilot — Provider Integration Research
+
+**Status:** Initial research register v0.1  
+**Rule:** HostPilot ships the adapter code. Each HostPilot operator supplies their own provider account, API credentials, server access, and any required reseller/merchant permissions.
+
+## 1. Hosting control panels
+
+### cPanel / WHM
+
+- Primary API: WHM API 1 over HTTPS/JSON.
+- Official docs: https://api.docs.cpanel.net/whm/introduction
+- Account creation reference: https://api.docs.cpanel.net/specifications/whm.openapi/account-creation
+- Suspend reference: https://api.docs.cpanel.net/specifications/whm.openapi/operation/suspendacct/
+- Verified documented use cases include WHM server administration, account management, service management, account creation, and suspension.
+- Implementation: WHM adapter with API token authentication, TLS verification, connection test, server version/capability probe, account create/suspend/unsuspend/terminate/package-change/detail operations as supported.
+- Constraints: reseller ACLs, server profile, WHM version, and token permissions may limit available operations. Test using the actual configured reseller/root scope; never assume root-level access.
+
+### DirectAdmin
+
+- Official docs: https://docs.directadmin.dev/developer/api/
+- Official docs describe two modes: newer JSON API under `/api/...` and legacy API under `/CMD_API_...`.
+- The current server exposes its supported OpenAPI/Swagger description at `/static/swagger.json`.
+- Implementation: prefer new JSON endpoints where present; maintain narrowly scoped legacy fallbacks for operations not yet available in the JSON API. Discover capabilities from the connected server's own API schema.
+- Constraints: DirectAdmin API surface evolves; endpoint availability and permission scope depend on installed version/configuration.
+
+### Plesk
+
+- Official REST docs: https://docs.plesk.com/en-US/obsidian/api-rpc/about-rest-api.79359
+- Official API introduction: https://docs.plesk.com/en-US/obsidian/api-rpc/introduction.79358/
+- Plesk documents both REST and XML APIs. REST uses HTTPS and OpenAPI; API keys are recommended by Plesk. Current REST access starts with Obsidian 18.0.79 for admin/reseller/customer roles when permission is granted.
+- Plesk explicitly notes REST coverage is still limited compared with XML API. New integrations should prefer REST; use XML only for required operations not yet available in REST.
+- Implementation: version-aware REST adapter, optional XML adapter for documented missing operations, capability map, role/permission test.
+- Constraints: role permissions, Plesk version, platform (Linux/Windows), and endpoint coverage. Do not assume a reseller has administrator capabilities.
+
+## 2. Payment gateways
+
+### PayTR
+
+- Official iFrame docs: https://dev.paytr.com/iframe-api
+- Official docs describe a server-side token request followed by rendering the hosted iFrame and a separate callback/notification URL receiving payment results.
+- Credentials (merchant ID/key/salt) are obtained by the merchant from the PayTR merchant panel.
+- Implementation scope: iFrame checkout, callback endpoint, hash/signature verification exactly per current PayTR docs, duplicate notification protection, payment transaction record, sandbox/live configuration if provided by PayTR, reconciliation logs.
+- Security rule: browser redirect/query parameters are never sufficient proof of payment. Only a verified server notification or a separate authenticated verification flow may transition an invoice/order to paid.
+- Open verification item: confirm current PayTR Direct API and recurring/automatic collection availability, eligibility, and contractual prerequisites before promising those features. Do not equate stored card support with a generic recurring billing permission.
+
+### iyzico
+
+- Official developer docs: https://docs.iyzico.com/
+- Integration candidates: Checkout Form, API/3D Secure flows, refund/cancel operations, and Subscription API where enabled.
+- Credentials are supplied by each HostPilot operator's own merchant account.
+- Implementation scope: modular gateway adapter, sandbox/live mode, callback/token verification per exact flow, transaction mapping, refunds where permitted, duplicate callback protection, reconciliation, structured logs.
+- Open verification item: Subscription product availability and merchant enablement must be checked. Recurring billing is not automatically available to every merchant or every product; do not promise it without account eligibility and current docs validation.
+- Security rule: never trust a client-side success page; verify server-side state.
+
+## 3. Domain registrars
+
+### ResellerClub
+
+- Official developer portal: https://www.resellerclub.com/developer-portal
+- Planned operations: availability, registration, transfer, renewal, nameservers, contact details, lock, auth/EPP code, DNS where supported, TLD price sync.
+- Verify reseller account, API credentials, test environment, supported TLD operation matrix, premium domain handling, and billing/credit requirements.
+
+### OpenSRS
+
+- Official docs: https://opensrs.com/resources/documentation
+- API overview: https://opensrs.com/api/overview
+- Current product overview describes a Domains + TLS/SSL API and a separate Email API; the domain API is XML-based and includes registration, renewals, transfers, WHOIS/contact updates, and domain management.
+- Some Storefront API functions require an active Storefront with API access enabled and client credentials; do not assume every OpenSRS account has every API product.
+- Implementation: separate XML Domains API adapter and optional Storefront API adapter only if the account's product/access matches.
+
+### CentralNic Reseller
+
+- Official platform: https://www.centralnicreseller.com/
+- Prior branding and product naming have changed over time; confirm the current official API documentation and account portal before implementation.
+- Planned adapter must be based on current official API documentation supplied by the provider account. Do not infer exact endpoint formats from older Hexonet examples without validation.
+
+## 4. Internal integration architecture
+
+- One independent adapter per provider.
+- Provider credentials stored encrypted, masked in UI, and never returned in normal API responses.
+- “Test connection” validates authentication and a harmless read-only operation.
+- Capability discovery controls which UI actions are enabled.
+- Each external operation writes an integration log with correlation ID, sanitized request metadata, provider reference, duration, and retryability.
+- External side effects use idempotency keys where provider supports them; otherwise maintain an operation ledger and reconcile before retrying.
+- All provider HTTP calls use TLS certificate verification, timeouts, response-size limits, strict host validation, and redaction.
+- Webhook endpoints are provider-specific and verify each provider's documented signature/secret scheme.
+- Sandbox and production credentials are separate settings.
+
+## 5. Explicit prerequisites
+
+The HostPilot operator must obtain:
+- A licensed/authorized cPanel/WHM, DirectAdmin, or Plesk server with API access and sufficient permissions.
+- PayTR and/or iyzico merchant accounts approved for the intended payment flow.
+- Reseller accounts and API access for each domain registrar.
+- HTTPS certificate and a supported PHP/MySQL hosting environment.
+- Cron access for reliable scheduled automation, preferably cPanel Cron Jobs.
+
+## 6. Research sources
+
+- WHMCS developer feature map (themes, provisioning, addon modules, payment gateways, registrars, hooks, API): https://developers.whmcs.com/
+- WHMCS product documentation: https://docs.whmcs.com/
+- cPanel WHM API 1: https://api.docs.cpanel.net/whm/introduction
+- DirectAdmin API: https://docs.directadmin.dev/developer/api/
+- Plesk REST API: https://docs.plesk.com/en-US/obsidian/api-rpc/about-rest-api.79359
+- PayTR iFrame API: https://dev.paytr.com/iframe-api
+- iyzico: https://docs.iyzico.com/
+- OpenSRS docs: https://opensrs.com/resources/documentation
+- OpenSRS API overview: https://opensrs.com/api/overview
+
+This document is a research baseline, not a claim that adapters have already been implemented or certified. Each adapter must pass sandbox and live-account acceptance tests before being marked production-ready.
