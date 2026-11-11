@@ -60,6 +60,8 @@ if ($basePath !== '' && ($requestPath === $basePath || str_starts_with($requestP
 $requestPath = '/' . trim($requestPath, '/');
 if ($requestPath === '//') $requestPath = '/';
 
+$method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+
 $client = new \HostPilot\Http\ClientController($pdo, $basePath);
 if ($requestPath === '/client/login' && in_array($method, ['GET', 'POST'], true)) { $client->login(); exit; }
 if ($requestPath === '/client/register' && in_array($method, ['GET', 'POST'], true)) { $client->register(); exit; }
@@ -71,7 +73,6 @@ if (preg_match('#^/client/tickets/([0-9]+)$#', $requestPath, $ticketMatch) && in
 if ($requestPath === '/knowledgebase' && $method === 'GET') { $client->knowledgebase(); exit; }
 
 $controller = new \HostPilot\Http\AdminController($pdo, $basePath);
-$method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
 if ($requestPath === '/admin/login' && in_array($method, ['GET', 'POST'], true)) {
     $controller->login();
