@@ -160,7 +160,7 @@ final class CronController
                 if($next===null)throw new \RuntimeException('Desteklenmeyen hizmet faturalandırma dönemi.');
                 $number='HPF'.gmdate('ymd').strtoupper(bin2hex(random_bytes(4)));
                 $dueAt=(new \DateTimeImmutable($now,new \DateTimeZone('UTC')))->modify('+'.$grace.' days')->format('Y-m-d H:i:s');
-                $invoice=$this->db->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,service_id,service_period_start,status,currency,subtotal,tax_total,total,amount_paid,issued_at,due_at,created_at,updated_at) SELECT :number,:order_id,user_id,:service,:period,'unpaid','TRY',:amount,0,:total,0,:issued,:due,:created,:updated FROM services WHERE id=:id");
+                $invoice=$this->db->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,service_id,service_period_start,status,currency,subtotal,tax_total,total,amount_paid,issued_at,due_at,created_at,updated_at) SELECT :number,:order_id,s.user_id,:service,:period,'unpaid',o.currency,:amount,0,:total,0,:issued,:due,:created,:updated FROM services s JOIN orders o ON o.id=s.order_id WHERE s.id=:id");
                 $invoice->execute([':number'=>$number,':order_id'=>$service['order_id'],':service'=>$service['id'],':period'=>$period,':amount'=>$service['amount'],':total'=>$service['amount'],':issued'=>$now,':due'=>$dueAt,':created'=>$now,':updated'=>$now,':id'=>$service['id']]);
                 $invoiceId=(int)$this->db->lastInsertId();
                 $line=$this->db->prepare("INSERT INTO invoice_items(invoice_id,description,quantity,unit_price,tax_rate,tax_amount,line_total,created_at) VALUES(:invoice,:description,1,:price,0,0,:total,:created)");
