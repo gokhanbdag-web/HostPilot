@@ -73,6 +73,8 @@ if (preg_match('#^/client/tickets/([0-9]+)$#', $requestPath, $ticketMatch) && in
 if ($requestPath === '/knowledgebase' && $method === 'GET') { $client->knowledgebase(); exit; }
 
 $controller = new \HostPilot\Http\AdminController($pdo, $basePath);
+if ($requestPath === '/admin/tickets' && $method === 'GET') { $controller->tickets(); exit; }
+if (preg_match('#^/admin/tickets/([0-9]+)$#', $requestPath, $adminTicketMatch) && in_array($method, ['GET','POST'], true)) { $controller->viewTicket((int)$adminTicketMatch[1]); exit; }
 
 if ($requestPath === '/admin/login' && in_array($method, ['GET', 'POST'], true)) {
     $controller->login();
