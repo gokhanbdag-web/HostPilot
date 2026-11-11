@@ -50,6 +50,7 @@ final class ClientController
         $q->execute([':user'=>$u['id']]);$rows=$q->fetchAll();
         $this->shell($u,'Hizmetlerim');
         echo '<section class="panel"><div class="panelhead"><div><h1>Hosting hizmetlerim</h1><p>Aktif hizmetleriniz ve kontrol paneli erişim bilgileriniz</p></div><a class="back" href="'.$this->url('/client').'">← Müşteri paneli</a></div>';
+        if(!empty($_GET['error']))echo '<div class="error">'.$this->e((string)$_GET['error']).'</div>';
         if(!$rows)echo '<div class="empty">Henüz hesabınıza bağlı bir hosting hizmeti bulunmuyor.</div>';
         foreach($rows as $row){
             echo '<article class="kb"><small>'.$this->e(strtoupper((string)($row['panel_type']??'BEKLEMEDE'))).' · '.$this->e((string)$row['status']).'</small><h2>'.$this->e($row['product_name']).'</h2><p>Domain: <b>'.$this->e((string)($row['remote_domain']??$row['domain']??'Henüz tanımlanmadı')).'</b><br>Sunucu: '.$this->e((string)($row['server_name']??'Henüz atanmadı')).'<br>Hesap durumu: '.$this->e((string)($row['provisioning_status']??'not_started')).'</p>';
