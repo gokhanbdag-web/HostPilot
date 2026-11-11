@@ -12,7 +12,7 @@ $checks=[
     'customer domain submission enqueues job'=>str_contains($client,"INSERT INTO provisioning_jobs"),
     'paid services await domain input'=>str_contains($payment,"'waiting_input'"),
     'worker bearer authorization'=>str_contains($worker,'HTTP_AUTHORIZATION'),
-    'worker avoids blind retry after remote call'=>str_contains($worker,"\$jobStatus=\$ambiguous?'needs_review':'failed'"),
+    'worker avoids blind retry after remote call'=>str_contains($worker,"\$jobStatus=\$ambiguous?'needs_review'")&&str_contains($worker,"suspension_source='review'"),
     'worker supports all three hosting panels'=>str_contains($worker,'new CpanelWhmAdapter')&&str_contains($worker,'new DirectAdminAdapter')&&str_contains($worker,'new PleskXmlAdapter'),
     'worker route registered'=>str_contains($routes,"'/cron/provision'"),
     'customer domain route registered'=>str_contains($routes,"'/client/services/domain'"),
