@@ -60,6 +60,16 @@ if ($basePath !== '' && ($requestPath === $basePath || str_starts_with($requestP
 $requestPath = '/' . trim($requestPath, '/');
 if ($requestPath === '//') $requestPath = '/';
 
+$client = new \HostPilot\Http\ClientController($pdo, $basePath);
+if ($requestPath === '/client/login' && in_array($method, ['GET', 'POST'], true)) { $client->login(); exit; }
+if ($requestPath === '/client/register' && in_array($method, ['GET', 'POST'], true)) { $client->register(); exit; }
+if ($requestPath === '/client/logout' && $method === 'POST') { $client->logout(); exit; }
+if ($requestPath === '/client' || $requestPath === '/client/') { $client->dashboard(); exit; }
+if ($requestPath === '/client/tickets' && $method === 'GET') { $client->tickets(); exit; }
+if ($requestPath === '/client/tickets/new' && in_array($method, ['GET', 'POST'], true)) { $client->newTicket(); exit; }
+if (preg_match('#^/client/tickets/([0-9]+)$#', $requestPath, $ticketMatch) && in_array($method, ['GET', 'POST'], true)) { $client->viewTicket((int)$ticketMatch[1]); exit; }
+if ($requestPath === '/knowledgebase' && $method === 'GET') { $client->knowledgebase(); exit; }
+
 $controller = new \HostPilot\Http\AdminController($pdo, $basePath);
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
@@ -83,7 +93,7 @@ if ($requestPath === '/health') {
 
 if ($requestPath === '/') {
     header('Content-Type: text/html; charset=utf-8');
-    echo '<!doctype html><html lang="tr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>HostPilot</title><body><main><h1>HostPilot</h1><p>Satış sitesi ve müşteri portalı geliştirme aşamasındadır.</p><a href="' . htmlspecialchars($basePath . '/admin', ENT_QUOTES, 'UTF-8') . '">Yönetim paneli</a></main></body></html>';
+    echo '<!doctype html><html lang="tr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>HostPilot</title><body><main><h1>HostPilot</h1><p>Hosting ve domain hizmetlerinizi keşfedin.</p><a href="' . htmlspecialchars($basePath . '/client', ENT_QUOTES, 'UTF-8') . '">Müşteri paneli</a> · <a href="' . htmlspecialchars($basePath . '/knowledgebase', ENT_QUOTES, 'UTF-8') . '">Yardım merkezi</a> · <a href="' . htmlspecialchars($basePath . '/admin', ENT_QUOTES, 'UTF-8') . '">Yönetim paneli</a></main></body></html>';
     exit;
 }
 
