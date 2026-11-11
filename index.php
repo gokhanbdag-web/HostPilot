@@ -99,6 +99,7 @@ if ($requestPath === '/admin/servers/test' && $method === 'POST') { $serverContr
 if ($requestPath === '/admin/servers/map' && $method === 'POST') { $serverController->saveMapping(); exit; }
 if ($requestPath === '/admin/services' && $method === 'GET') { $serverController->services(); exit; }
 if ($requestPath === '/admin/services/provision' && $method === 'POST') { $serverController->provision(); exit; }
+if ($requestPath === '/admin/services/lifecycle' && $method === 'POST') { $serverController->lifecycle(); exit; }
 if ($requestPath === '/admin/payments' && in_array($method, ['GET','POST'], true)) { $payment->adminSettings(); exit; }
 if ($requestPath === '/admin/payment-transactions' && $method === 'GET') { $payment->adminTransactions(); exit; }
 if (preg_match('#^/client/invoices/([0-9]+)/pay$#', $requestPath, $payInvoiceMatch) && in_array($method, ['GET','POST'], true)) { $payment->payInvoice((int)$payInvoiceMatch[1]); exit; }
