@@ -15,9 +15,9 @@
 **Exit criteria:** Reviewed requirements, database model, route/module boundaries, and test plan.
 
 ## Phase 1 — Core framework and installer
-- [ ] Root front controller and subdirectory-aware router.
+- [x] Root front controller and subdirectory-aware route dispatch (initial routes only).
 - [ ] Configuration loader, environment checks, logging, error handling.
-- [ ] Browser installer with DB credentials, admin identity, app URL, locale, and generated encryption key.
+- [x] Browser installer with DB credentials, admin identity, app URL, locale, generated encryption key, and single/multi-vendor selection (initial implementation; hardening remains).
 - [ ] Schema migrations and seed system.
 - [ ] Installation lock and protected storage.
 - [ ] Root and nested-subdirectory installation test matrix.
@@ -27,7 +27,7 @@
 ## Phase 2 — Identity and administration shell
 - [ ] Customer and staff authentication.
 - [ ] Role/permission system.
-- [ ] Full-screen responsive admin shell.
+- [x] Initial full-screen responsive admin shell and navigation (module routes remain pending).
 - [ ] Client Area shell.
 - [ ] Locale and settings framework.
 - [ ] Audit log.
@@ -84,7 +84,7 @@
 **Exit criteria:** Complete customer support workflow from ticket creation through closure.
 
 ## Phase 8 — Monitoring, analytics, and reports
-- [ ] Chart.js admin dashboard.
+- [x] Initial Chart.js customer-growth dashboard chart; financial and server telemetry charts remain pending.
 - [ ] Financial, customer, service, and support aggregates.
 - [ ] Server availability/latency checks.
 - [ ] Optional host metrics agent/endpoint design and security review.
