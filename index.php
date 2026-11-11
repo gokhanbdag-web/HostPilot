@@ -88,6 +88,13 @@ if ($requestPath === '/admin' || $requestPath === '/admin/') {
     $controller->dashboard();
     exit;
 }
+$catalog = new \HostPilot\Http\CatalogController($pdo, $basePath);
+if ($requestPath === '/admin/products' && in_array($method, ['GET','POST'], true)) { $catalog->adminProducts(); exit; }
+if ($requestPath === '/admin/orders' && $method === 'GET') { $catalog->adminOrders(); exit; }
+if ($requestPath === '/client/orders' && $method === 'GET') { $catalog->clientOrders(); exit; }
+if ($requestPath === '/order/create' && $method === 'POST') { $catalog->createOrder(); exit; }
+if (preg_match('#^/product/([a-z0-9-]+)$#', $requestPath, $productMatch) && $method === 'GET') { $catalog->product($productMatch[1]); exit; }
+
 if ($requestPath === '/health') {
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode(['application' => 'HostPilot', 'status' => 'core_initialized', 'database' => 'connected'], JSON_UNESCAPED_SLASHES);
@@ -95,8 +102,7 @@ if ($requestPath === '/health') {
 }
 
 if ($requestPath === '/') {
-    header('Content-Type: text/html; charset=utf-8');
-    echo '<!doctype html><html lang="tr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>HostPilot</title><body><main><h1>HostPilot</h1><p>Hosting ve domain hizmetlerinizi keşfedin.</p><a href="' . htmlspecialchars($basePath . '/client', ENT_QUOTES, 'UTF-8') . '">Müşteri paneli</a> · <a href="' . htmlspecialchars($basePath . '/knowledgebase', ENT_QUOTES, 'UTF-8') . '">Yardım merkezi</a> · <a href="' . htmlspecialchars($basePath . '/admin', ENT_QUOTES, 'UTF-8') . '">Yönetim paneli</a></main></body></html>';
+    $catalog->storefront();
     exit;
 }
 
