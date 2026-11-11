@@ -79,3 +79,25 @@
 ### Important boundary
 - These are internal billing records, not a claim of statutory e-invoice/e-archive compliance. Tax configuration, official document numbering requirements, legal invoice output, payment capture, refunds, and reconciliation remain to be implemented.
 - No payment is marked successful and no hosting service is activated at this stage.
+
+
+## 2026-11-11 — PayTR and iyzico payment adapter foundation
+
+### Added
+- Administrator-only payment configuration page for PayTR and iyzico.
+- Payment credentials encrypted at rest using AES-256-GCM and the installation application key; blank secret fields preserve existing credentials.
+- PayTR iFrame token request with HMAC-SHA256 request token, merchant callback hash validation, and exact amount check.
+- iyzico Checkout Form initialization and server-side retrieve flow using IYZWSv2 request signing.
+- iyzico response signature, fraud approval, basket ID, conversation ID, currency, and amount checks before settlement.
+- Customer invoice payment page and payment-method choice.
+- Payment callbacks settle invoices idempotently under database row locks, mark linked orders paid, and create pending service records only after full payment.
+- Service next-due dates derive from the selected billing cycle; one-time services have no renewal date.
+- HTTPS required for checkout; HTTP transport supports cURL or verified TLS stream fallback.
+- Provider callback routes and payment settings navigation.
+
+### Remaining / not yet verified
+- No merchant credentials were supplied, so sandbox or live transactions were not executed.
+- No payment is marked paid by a browser return URL; provider callback/retrieve verification is required.
+- Recurring/subscription billing, refunds, partial payments, tax calculation, reconciliation, email notifications, and formal accounting/e-invoice compliance remain pending.
+- Payment settings require OpenSSL support; outbound HTTPS requires cURL or PHP HTTPS stream support.
+- PHP lint workflow is present but its run result has not been confirmed in this turn.
