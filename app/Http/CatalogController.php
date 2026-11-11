@@ -39,7 +39,15 @@ final class CatalogController
         $q=$this->db->prepare("SELECT p.id,p.name,pp.price,pp.currency,pp.billing_cycle FROM products p JOIN product_pricing pp ON pp.product_id=p.id WHERE p.id=:id AND p.status='active' AND pp.billing_cycle=:cycle AND pp.is_active=1 LIMIT 1");$q->execute([':id'=>$productId,':cycle'=>$cycle]);$p=$q->fetch();
         if(!$p){http_response_code(422);echo 'Seçilen paket veya fiyat artık satışta değil. Lütfen yeniden deneyin.';return;}
         $now=gmdate('Y-m-d H:i:s');$total=(string)$p['price'];$number='HP'.gmdate('ymd').strtoupper(bin2hex(random_bytes(4)));
-        try{$this->db->beginTransaction();$o=$this->db->prepare("INSERT INTO orders(order_number,user_id,status,currency,subtotal,tax_total,total,created_at,updated_at) VALUES(:number,:uid,'pending',:currency,:subtotal,0,:total,:created,:updated)");$o->execute([':number'=>$number,':uid'=>$user['id'],':currency'=>$p['currency'],':subtotal'=>$total,':total'=>$total,':created'=>$now,':updated'=>$now]);$orderId=(int)$this->db->lastInsertId();$i=$this->db->prepare('INSERT INTO order_items(order_id,product_id,product_name,billing_cycle,quantity,unit_price,line_total,created_at) VALUES(:oid,:pid,:name,:cycle,1,:price,:line,:created)');$i->execute([':oid'=>$orderId,':pid'=>$p['id'],':name'=>$p['name'],':cycle'=>$p['billing_cycle'],':price'=>$total,':line'=>$total,':created'=>$now]);$this->db->commit();$this->redirect('/client/orders');}catch(Throwable){if($this->db->inTransaction())$this->db->rollBack();http_response_code(500);echo 'Sipariş oluşturulamadı. Lütfen tekrar deneyin.';}
+        try{$this->db->beginTransaction();$o=$this->db->prepare("INSERT INTO orders(order_number,user_id,status,currency,subtotal,tax_total,total,created_at,updated_at) VALUES(:number,:uid,'pending',:currency,:subtotal,0,:total,:created,:updated)");$o->execute([':number'=>$number,':uid'=>$user['id'],':currency'=>$p['currency'],':subtotal'=>$total,':total'=>$total,':created'=>$now,':updated'=>$now]);$orderId=(int)$this->db->lastInsertId();$i=$this->db->prepare('INSERT INTO order_items(order_id,product_id,product_name,billing_cycle,quantity,unit_price,line_total,created_at) VALUES(:oid,:pid,:name,:cycle,1,:price,:line,:created)');$i->execute([':oid'=>$orderId,':pid'=>$p['id'],':name'=>$p['name'],':cycle'=>$p['billing_cycle'],':price'=>$total,':line'=>$total,':created'=>$now]);
+            $invoiceNumber='HPF'.gmdate('ymd').strtoupper(bin2hex(random_bytes(4)));
+            $invoice=$this->db->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,status,currency,subtotal,tax_total,total,amount_paid,issued_at,due_at,created_at,updated_at) VALUES(:number,:order_id,:user_id,'unpaid',:currency,:subtotal,0,:total,0,:issued,:due,:created,:updated)");
+            $due=(new \\DateTimeImmutable('now',new \\DateTimeZone('UTC')))->modify('+7 days')->format('Y-m-d H:i:s');
+            $invoice->execute([':number'=>$invoiceNumber,':order_id'=>$orderId,':user_id'=>$user['id'],':currency'=>$p['currency'],':subtotal'=>$total,':total'=>$total,':issued'=>$now,':due'=>$due,':created'=>$now,':updated'=>$now]);
+            $invoiceId=(int)$this->db->lastInsertId();
+            $line=$this->db->prepare('INSERT INTO invoice_items(invoice_id,description,quantity,unit_price,tax_rate,tax_amount,line_total,created_at) VALUES(:invoice,:description,1,:price,0,0,:total,:created)');
+            $line->execute([':invoice'=>$invoiceId,':description'=>$p['name'].' · '.$this->cycle($p['billing_cycle']),':price'=>$total,':total'=>$total,':created'=>$now]);
+            $this->db->commit();$this->redirect('/client/invoices');}catch(Throwable){if($this->db->inTransaction())$this->db->rollBack();http_response_code(500);echo 'Sipariş oluşturulamadı. Lütfen tekrar deneyin.';}
     }
 
     public function clientOrders():void
@@ -52,6 +60,29 @@ final class CatalogController
         foreach($rows as $o){$items=$this->db->prepare('SELECT product_name,billing_cycle,quantity,line_total FROM order_items WHERE order_id=:id');$items->execute([':id'=>$o['id']]);echo '<article class="order"><b>#'.$this->e($o['order_number']).'</b><span>'.$this->e($o['status']).'</span><p>'.number_format((float)$o['total'],2,',','.').' '.$this->e($o['currency']).' · '.date('d.m.Y H:i',strtotime($o['created_at'])).'</p>';foreach($items->fetchAll() as $i)echo '<small>'.$this->e($i['product_name']).' · '.$this->e($this->cycle($i['billing_cycle'])).' · '.number_format((float)$i['line_total'],2,',','.').'</small>';echo '</article>';}
         echo '</section></main>';$this->end();
     }
+
+    public function clientInvoices():void
+    {
+        if(!Auth::check()){$this->redirect('/client/login');}
+        $u=Auth::user();if(($u['role']??'')!=='customer'){http_response_code(403);echo 'Müşteri hesabı gerekli.';return;}
+        $q=$this->db->prepare('SELECT id,invoice_number,status,currency,total,amount_paid,issued_at,due_at FROM invoices WHERE user_id=:uid ORDER BY issued_at DESC');$q->execute([':uid'=>$u['id']]);$rows=$q->fetchAll();
+        $this->start('Faturalarım');echo '<main class="detail"><a class="brand" href="'.$this->url('/').'">HOST<span>PILOT</span></a><a class="back" href="'.$this->url('/client').'">← Müşteri paneli</a><section class="productdetail"><h1>Faturalarım</h1>';
+        if(!$rows)echo '<p>Henüz faturanız bulunmuyor.</p>';
+        foreach($rows as $v)echo '<article class="order"><b>#'.$this->e($v['invoice_number']).'</b><span>'.$this->e($this->invoiceStatus($v['status'])).'</span><p>'.number_format((float)$v['total'],2,',','.').' '.$this->e($v['currency']).' · Düzenlenme: '.date('d.m.Y',strtotime($v['issued_at'])).'</p><small>Son ödeme: '.($v['due_at']?date('d.m.Y',strtotime($v['due_at'])):'—').' · Ödenen: '.number_format((float)$v['amount_paid'],2,',','.').' '.$this->e($v['currency']).'</small></article>';
+        echo '</section></main>';$this->end();
+    }
+
+    public function adminInvoices():void
+    {
+        $staff=$this->staff();if(!$staff)return;
+        $rows=$this->db->query('SELECT i.invoice_number,i.status,i.currency,i.total,i.amount_paid,i.issued_at,u.name,u.email FROM invoices i JOIN users u ON u.id=i.user_id ORDER BY i.issued_at DESC LIMIT 300')->fetchAll();
+        $this->start('Faturalar');echo '<div class="admin"><aside><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a href="'.$this->url('/admin').'">← Kontrol merkezi</a><a href="'.$this->url('/admin/orders').'">Siparişler</a><a class="active" href="'.$this->url('/admin/invoices').'">Faturalar</a></aside><main><header><small>FİNANS / FATURALAR</small><h1>Faturalar</h1><p>Oluşturulan müşteri faturaları ve tahsilat durumları.</p></header><section class="box"><div class="tablewrap"><table><thead><tr><th>Fatura</th><th>Müşteri</th><th>Toplam</th><th>Ödenen</th><th>Durum</th><th>Tarih</th></tr></thead><tbody>';
+        if(!$rows)echo '<tr><td colspan="6">Henüz fatura bulunmuyor.</td></tr>';
+        foreach($rows as $v)echo '<tr><td>#'.$this->e($v['invoice_number']).'</td><td>'.$this->e($v['name']).'<small>'.$this->e($v['email']).'</small></td><td>'.number_format((float)$v['total'],2,',','.').' '.$this->e($v['currency']).'</td><td>'.number_format((float)$v['amount_paid'],2,',','.').' '.$this->e($v['currency']).'</td><td>'.$this->e($this->invoiceStatus($v['status'])).'</td><td>'.date('d.m.Y',strtotime($v['issued_at'])).'</td></tr>';
+        echo '</tbody></table></div></section></main></div>';$this->end();
+    }
+
+    private function invoiceStatus(string $s):string{return ['unpaid'=>'Ödenmedi','paid'=>'Ödendi','partially_paid'=>'Kısmi ödendi','overdue'=>'Vadesi geçti','cancelled'=>'İptal','refunded'=>'İade edildi'][$s]??$s;}
 
     public function adminProducts():void
     {
