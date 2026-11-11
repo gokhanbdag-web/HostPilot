@@ -24,7 +24,7 @@ It is intended to provide three integrated experiences:
 
 ## Current status
 
-This repository has just been initialized. The first milestone is the product specification, architecture, integration contracts, and implementation roadmap. No production-ready billing, payment, provisioning, or monitoring functionality is claimed until implemented and tested.
+The repository now contains the initial browser-installer flow, PDO connection layer, admin authentication, and a responsive full-screen dashboard with a Chart.js customer-registration chart. Billing, payment, provisioning, registrar, ticketing, storefront themes, visual builder, and infrastructure monitoring are still under development and are not yet production-ready.
 
 ## Documentation
 
