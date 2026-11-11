@@ -24,6 +24,7 @@ final class SecretVault
     public function decrypt(string $stored):string
     {
         if($stored==='')return '';
+        if(!function_exists('openssl_decrypt'))throw new \\RuntimeException('Gizli ayarları çözmek için OpenSSL desteği gerekli.');
         if(!str_starts_with($stored,'v1:'))throw new \RuntimeException('Gizli ayar biçimi tanınmıyor.');
         $raw=base64_decode(substr($stored,3),true);
         if($raw===false||strlen($raw)<29)throw new \RuntimeException('Gizli ayar verisi bozuk.');
