@@ -239,7 +239,7 @@ final class PaymentController
                 if((int)$exists->fetchColumn()===0){
                     $items=$this->db->prepare('SELECT o.user_id,oi.product_id,oi.billing_cycle,oi.line_total FROM orders o JOIN order_items oi ON oi.order_id=o.id WHERE o.id=:order_id');
                     $items->execute([':order_id'=>$invoice['order_id']]);
-                    $service=$this->db->prepare("INSERT INTO services(user_id,product_id,order_id,status,billing_cycle,amount,next_due_date,created_at,updated_at) VALUES(:user,:product,:order_id,'pending',:cycle,:amount,:due,:created,:updated)");
+                    $service=$this->db->prepare("INSERT INTO services(user_id,product_id,order_id,status,billing_cycle,amount,next_due_date,provisioning_status,created_at,updated_at) VALUES(:user,:product,:order_id,'pending',:cycle,:amount,:due,'waiting_input',:created,:updated)");
                     foreach($items->fetchAll() as $item)$service->execute([':user'=>$item['user_id'],':product'=>$item['product_id'],':order_id'=>$invoice['order_id'],':cycle'=>$item['billing_cycle'],':amount'=>$item['line_total'],':due'=>$this->nextDueDate((string)$item['billing_cycle']),':created'=>$now,':updated'=>$now]);
                 }
             }
