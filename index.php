@@ -51,7 +51,7 @@ try {
 } catch (Throwable $exception) {
     error_log('[HostPilot] Database connection failed: ' . $exception->getMessage());
     http_response_code(503);
-    exit('HostPilot veritabanına bağlanamıyor. Yapılandırmayı kontrol edin.');
+    exit('HostPilot veritabanına bağlanamıyor veya veritabanı güncellemesini tamamlayamıyor. Yapılandırmayı ve hata kayıtlarını kontrol edin.');
 }
 
 $requestPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
