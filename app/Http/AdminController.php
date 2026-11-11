@@ -36,6 +36,7 @@ final class AdminController
         $this->startPage('Genel Bakış');
         echo '<div class="layout"><aside class="sidebar"><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><div class="nav-label">YÖNETİM</div>';
         $items=[['Genel Bakış','/admin','▦'],['Müşteriler','/admin/customers','♙'],['Ürün & Paketler','/admin/products','▤'],['Siparişler','/admin/orders','⇄'],['Faturalar','/admin/invoices','▧'],['Ödeme Yöntemleri','/admin/payments','₺'],['Sunucular','/admin/servers','▣'],['Domainler','/admin/domains','◎'],['Destek Talepleri','/admin/tickets','✉'],['Raporlar','/admin/reports','▥'],['Entegrasyonlar','/admin/integrations','⌘'],['Tema & Sayfa Editörü','/admin/themes','✧'],['Ayarlar','/admin/settings','⚙']];
+        if(($user['role']??'')==='staff') $items=array_values(array_filter($items,static fn($item)=>$item[1]!=='/admin/payments'));
         foreach($items as $item) echo '<a class="nav-item'.($item[1]==='/admin'?' active':'').'" href="'.$this->url($item[1]).'"><span>'.$item[2].'</span>'.$this->e($item[0]).'</a>';
         echo '</aside><main class="main"><header class="topbar"><div><small>YÖNETİM / GENEL BAKIŞ</small><h1>Kontrol merkezi</h1></div><div class="user">'.$this->e((string)$user['name']).'<form method="post" action="'.$this->url('/admin/logout').'"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><button class="logout">Çıkış</button></form></div></header>';
         echo '<section class="welcome"><div><div class="eyebrow">İŞLETME ÖZETİ</div><h2>Hoş geldiniz, '.$this->e((string)$user['name']).'</h2><p>İşletmenizin temel göstergeleri tek ekranda.</p></div><span class="date">'.date('d.m.Y').'</span></section><section class="cards">';
@@ -45,7 +46,7 @@ final class AdminController
         echo '<article class="panel"><div class="panel-head"><div><h3>Operasyon durumu</h3><p>Kurulu modüllerden alınan sayımlar</p></div></div>';
         $this->status('Destek talepleri',$tickets); $this->status('Tanımlı sunucular',$servers); $this->status('Müşteri hesapları',$users);
         echo '<div class="notice">CPU, RAM, disk ve ağ metrikleri yalnızca bağlı sunucu API’si veya yetkili izleme ajanı veri sağladığında gösterilir. Sahte sunucu verisi üretilmez.</div></article></section>';
-        echo '<article class="panel roadmap"><h3>Modül geliştirme durumu</h3><p>Henüz bağlanmamış modüller</p><div class="chips"><span>Billing Engine</span><span>PayTR / iyzico</span><span>Provisioning</span><span>Domain Registrars</span><span>Ticketing</span><span>Theme Builder</span><span>Monitoring Engine</span></div></article><footer>HostPilot · Yönetim çalışma alanı</footer></main></div>';
+        echo '<article class="panel roadmap"><h3>Modül geliştirme durumu</h3><p>Henüz bağlanmamış modüller</p><div class="chips"><span>Billing Engine</span><span>Ödeme sağlayıcıları</span><span>Provisioning</span><span>Domain Registrars</span><span>Ticketing</span><span>Theme Builder</span><span>Monitoring Engine</span></div></article><footer>HostPilot · Yönetim çalışma alanı</footer></main></div>';
         $this->endPage($growth);
     }
 
