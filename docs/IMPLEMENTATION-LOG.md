@@ -113,3 +113,6 @@
 - Staff roles cannot access payment credential settings or payment transaction history.
 - Cancelled/refunded invoices are blocked from online payment; failed checkout initialization is recorded as a failed transaction.
 - iyzico fraud-review outcomes remain pending rather than being incorrectly marked as failed.
+
+- iyzico fraud-review states are kept pending only after the retrieve response signature and invoice/conversation/amount data all match.
+- iyzico buyer identity number is checksum-validated before checkout initialization.
