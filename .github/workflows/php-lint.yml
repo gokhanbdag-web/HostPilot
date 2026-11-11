@@ -19,3 +19,4 @@ jobs:
           done
           php tests/payment_crypto.php
           php tests/hosting_adapters.php
+          php tests/provisioning_queue.php
