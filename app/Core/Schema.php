@@ -71,7 +71,7 @@ final class Schema
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
         ];
         foreach($statements as $sql)$db->exec($sql);
-        $s=$db->prepare('INSERT INTO migrations(migration,batch,applied_at) VALUES(:name,1,:applied)');
+        $s=$db->prepare('INSERT IGNORE INTO migrations(migration,batch,applied_at) VALUES(:name,1,:applied)');
         $s->execute([':name'=>$name,':applied'=>gmdate('Y-m-d H:i:s')]);
         }
 
@@ -117,7 +117,7 @@ final class Schema
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
             ];
             foreach($billingTables as $sql)$db->exec($sql);
-            $record=$db->prepare('INSERT INTO migrations(migration,batch,applied_at) VALUES(:name,2,:applied)');
+            $record=$db->prepare('INSERT IGNORE INTO migrations(migration,batch,applied_at) VALUES(:name,2,:applied)');
             $record->execute([':name'=>$billingName,':applied'=>gmdate('Y-m-d H:i:s')]);
         }
     }
