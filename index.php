@@ -106,6 +106,7 @@ if ($requestPath === '/admin/automation/jobs/resolve' && $method === 'POST') { $
 if ($requestPath === '/cron/provision' && $method === 'GET') { $cronController->runProvisioning(); exit; }
 if ($requestPath === '/admin/services/provision' && $method === 'POST') { $serverController->provision(); exit; }
 if ($requestPath === '/admin/services/lifecycle' && $method === 'POST') { $serverController->lifecycle(); exit; }
+if ($requestPath === '/admin/services/terminate' && $method === 'POST') { $serverController->terminate(); exit; }
 if ($requestPath === '/admin/payments' && in_array($method, ['GET','POST'], true)) { $payment->adminSettings(); exit; }
 if ($requestPath === '/admin/payment-transactions' && $method === 'GET') { $payment->adminTransactions(); exit; }
 if (preg_match('#^/client/invoices/([0-9]+)/pay$#', $requestPath, $payInvoiceMatch) && in_array($method, ['GET','POST'], true)) { $payment->payInvoice((int)$payInvoiceMatch[1]); exit; }
