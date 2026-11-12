@@ -18,12 +18,14 @@ final class EmailService
     {
         $subjects=[
             'scheduled'=>'Paket düşürme talebiniz planlandı',
+            'requested'=>'Paket yükseltme talebiniz oluşturuldu',
             'cancelled'=>'Paket düşürme talebiniz iptal edildi',
             'payment'=>'Paket yükseltme ödemeniz onaylandı',
             'completed'=>'Hosting paketiniz güncellendi',
         ];
         $messages=[
             'scheduled'=>'Bir sonraki yenileme tarihinizde uygulanmak üzere paket düşürme talebiniz kaydedildi. Mevcut paketiniz bu tarihe kadar aktif kalacaktır.',
+            'requested'=>'Paket yükseltme talebiniz alındı. Kalan dönem farkı için oluşturulan faturayı müşteri panelinizden ödeyebilirsiniz. Paketiniz, ödeme doğrulandıktan sonra değiştirilecektir.',
             'cancelled'=>'Planlanmış paket düşürme talebiniz iptal edildi. Mevcut paketiniz ve yenileme düzeniniz değişmedi.',
             'payment'=>'Paket yükseltme ödemeniz doğrulandı. Yeni paketiniz kontrol panelinize uygulanmak üzere işleme alındı.',
             'completed'=>'Hosting paket değişikliğiniz başarıyla tamamlandı.',
