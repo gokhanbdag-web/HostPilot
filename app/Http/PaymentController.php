@@ -242,11 +242,13 @@ final class PaymentController
                 $packageInvoice=$this->db->prepare('SELECT id FROM service_package_changes WHERE invoice_id=:invoice LIMIT 1');$packageInvoice->execute([':invoice'=>$invoice['id']]);$isPackageInvoice=(bool)$packageInvoice->fetchColumn();
                 $exists=$this->db->prepare('SELECT COUNT(*) FROM services WHERE order_id=:id');$exists->execute([':id'=>$invoice['order_id']]);
                 if(!$isPackageInvoice&&(int)$exists->fetchColumn()===0){
-                    $items=$this->db->prepare('SELECT o.user_id,oi.product_id,oi.billing_cycle,oi.line_total FROM orders o JOIN order_items oi ON oi.order_id=o.id WHERE o.id=:order_id');
+                    $items=$this->db->prepare('SELECT o.user_id,oi.product_id,oi.billing_cycle,oi.line_total FROM orders o JOIN order_items oi ON oi.order_id=o.id JOIN products pr ON pr.id=oi.product_id WHERE o.id=:order_id AND pr.product_type<>'domain'');
                     $items->execute([':order_id'=>$invoice['order_id']]);
                     $service=$this->db->prepare("INSERT INTO services(user_id,product_id,order_id,status,billing_cycle,amount,next_due_date,provisioning_status,created_at,updated_at) VALUES(:user,:product,:order_id,'pending',:cycle,:amount,:due,'waiting_input',:created,:updated)");
                     foreach($items->fetchAll() as $item)$service->execute([':user'=>$item['user_id'],':product'=>$item['product_id'],':order_id'=>$invoice['order_id'],':cycle'=>$item['billing_cycle'],':amount'=>$item['line_total'],':due'=>$this->nextDueDate((string)$item['billing_cycle']),':created'=>$now,':updated'=>$now]);
                 }
+                $domainQueue=$this->db->prepare("UPDATE domain_registrations SET status='queued',available_at=:available,updated_at=:updated WHERE invoice_id=:invoice AND status='awaiting_payment'");
+                $domainQueue->execute([':available'=>$now,':updated'=>$now,':invoice'=>$invoice['id']]);
                 $changeQuery=$this->db->prepare("SELECT * FROM service_package_changes WHERE invoice_id=:invoice AND status='pending_payment' FOR UPDATE");
                 $changeQuery->execute([':invoice'=>$invoice['id']]);$packageChange=$changeQuery->fetch();
                 if($packageChange){
