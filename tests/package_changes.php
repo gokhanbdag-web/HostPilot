@@ -50,6 +50,9 @@ $checks=[
  'email worker uses bounded locked claims and retry backoff'=>str_contains($email,'FOR UPDATE')&&str_contains($email,'needs_review')&&str_contains($email,'2**min'),
  'email cron endpoint is authenticated'=>str_contains($worker,'HostPilot email cron v1')&&str_contains($routes,"'/cron/email'"),
  'admin can review and retry failed email'=>str_contains($routes,"'/admin/email-queue'")&&str_contains($routes,'EmailQueueController')&&str_contains($worker,'email-queue'),
+ 'renewal invoice notification queued transactionally'=>str_contains($worker,'queueInvoiceNotice')&&str_contains($worker,'o.currency AS currency'),
+ 'verified invoice payment notification queued'=>str_contains($payment,'queueInvoiceNotice')&&str_contains($payment,"'paid'"),
+ 'hosting provisioning and billing lifecycle notices queued'=>str_contains($worker,"'provisioned'")&&str_contains($worker,"'suspended'")&&str_contains($worker,"'reactivated'"),
 
 ];
 $failed=[];
