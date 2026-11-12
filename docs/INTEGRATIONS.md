@@ -194,3 +194,10 @@ Configure the domain cron token using the same HMAC-SHA256 derivation as the dom
 - The action-tracking migration moves legacy pending_remote rows without a stored EAQ ID into needs_review, because their exact registrar operation cannot safely be inferred.
 - Registrar expiry values are parsed from either Unix timestamps (seconds or milliseconds) or date strings, then checked to be later than the recorded pre-renewal expiry.
 - ResellerClub's current API reference specifies that .AI domains can only be renewed for two years. HostPilot enforces this in both the customer form and POST validation.
+
+
+## Domain expiry reminder notifications
+
+The authenticated `/cron/email` worker also checks registrar-synchronized domain expiry dates and queues customer reminders 30, 15, and 7 days before expiry. Only active domains with a registrar sync performed within the previous 30 days are eligible; the reminder date is never estimated from the purchase date. Reminder messages include the registrar-reported expiry date and the current auto-renew flag.
+
+The email outbox idempotency key is scoped to the domain registration, reminder interval, and exact stored expiry timestamp. Repeated cron runs therefore do not enqueue the same reminder twice, while a registrar-confirmed expiry change creates a new reminder schedule. A versioned migration (`20261112_0016_domain_expiry_reminder_index`) adds an index for the active-domain expiry lookup. Run the existing email cron once per minute; messages continue through the existing SMTP retry and admin review workflow. SMTP delivery requires valid operator credentials and a successful test message.
