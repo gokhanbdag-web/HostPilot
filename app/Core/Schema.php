@@ -282,5 +282,15 @@ final class Schema
             $record->execute([':name'=>$packageChangeName,':applied'=>gmdate('Y-m-d H:i:s')]);
         }
 
+        $packageChangeTypeName='20261112_0009_service_package_change_type';
+        $pct=$db->prepare('SELECT id FROM migrations WHERE migration=:name LIMIT 1');
+        $pct->execute([':name'=>$packageChangeTypeName]);
+        if(!$pct->fetchColumn()){
+            $column=$db->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='service_package_changes' AND COLUMN_NAME='change_type'");
+            if(!(int)$column->fetchColumn())$db->exec("ALTER TABLE service_package_changes ADD COLUMN change_type VARCHAR(16) NOT NULL DEFAULT 'upgrade' AFTER service_id");
+            $record=$db->prepare('INSERT IGNORE INTO migrations(migration,batch,applied_at) VALUES(:name,9,:applied)');
+            $record->execute([':name'=>$packageChangeTypeName,':applied'=>gmdate('Y-m-d H:i:s')]);
+        }
+
     }
 }
