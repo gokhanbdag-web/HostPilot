@@ -63,7 +63,7 @@ final class PackageChangeController
             $now=gmdate('Y-m-d H:i:s');
             if((float)$plan['price']<(float)$s['amount']){
                 $effective=(string)$s['next_due_date'].' 00:00:00';
-                $c=$this->db->prepare("INSERT INTO service_package_changes(service_id,from_product_id,to_product_id,target_package,target_package_guid,target_package_external_id,target_amount,charge_amount,currency,status,effective_at,created_at,updated_at) VALUES(:sid,:from,:to,:package,:guid,:external,:target,0,:currency,'scheduled',:effective,:created,:updated)");
+                $c=$this->db->prepare("INSERT INTO service_package_changes(service_id,from_product_id,to_product_id,target_package,target_package_guid,target_package_external_id,target_amount,charge_amount,currency,change_type,status,effective_at,created_at,updated_at) VALUES(:sid,:from,:to,:package,:guid,:external,:target,0,:currency,'downgrade','scheduled',:effective,:created,:updated)");
                 $c->execute([':sid'=>$sid,':from'=>$s['product_id'],':to'=>$pid,':package'=>$plan['remote_package'],':guid'=>$plan['remote_package_guid']?:null,':external'=>$plan['remote_package_external_id']?:null,':target'=>$plan['price'],':currency'=>$currency,':effective'=>$effective,':created'=>$now,':updated'=>$now]);
                 $this->db->commit();
                 $this->go('/client/services','notice='.rawurlencode('Paket düşürme isteğiniz kaydedildi. Yeni paket '.$s['next_due_date'].' tarihindeki yenilemede uygulanacak; mevcut döneminiz değişmeyecek.'));
@@ -78,7 +78,7 @@ final class PackageChangeController
             if($days<1||$cycleDays<1||$periodStart>$today)throw new \RuntimeException('Kalan fatura dönemi hesaplanamadı.');
             $amount=round(((float)$plan['price']-(float)$s['amount'])*min(1,$days/$cycleDays),2);if($amount<=0)throw new \RuntimeException('Yükseltme farkı tahsilata uygun değil.');
             $due=gmdate('Y-m-d H:i:s',time()+604800);
-            $c=$this->db->prepare("INSERT INTO service_package_changes(service_id,from_product_id,to_product_id,target_package,target_package_guid,target_package_external_id,target_amount,charge_amount,currency,status,effective_at,created_at,updated_at) VALUES(:sid,:from,:to,:package,:guid,:external,:target,:charge,:currency,'pending_payment',:effective,:created,:updated)");
+            $c=$this->db->prepare("INSERT INTO service_package_changes(service_id,from_product_id,to_product_id,target_package,target_package_guid,target_package_external_id,target_amount,charge_amount,currency,change_type,status,effective_at,created_at,updated_at) VALUES(:sid,:from,:to,:package,:guid,:external,:target,:charge,:currency,'upgrade','pending_payment',:effective,:created,:updated)");
             $c->execute([':sid'=>$sid,':from'=>$s['product_id'],':to'=>$pid,':package'=>$plan['remote_package'],':guid'=>$plan['remote_package_guid']?:null,':external'=>$plan['remote_package_external_id']?:null,':target'=>$plan['price'],':charge'=>$amount,':currency'=>$currency,':effective'=>$now,':created'=>$now,':updated'=>$now]);$changeId=(int)$this->db->lastInsertId();
             $orderNo='HP'.gmdate('ymd').strtoupper(bin2hex(random_bytes(4)));
             $o=$this->db->prepare("INSERT INTO orders(order_number,user_id,status,currency,subtotal,tax_total,total,notes,created_at,updated_at) VALUES(:no,:uid,'pending',:currency,:total,0,:total,:notes,:now,:now)");
