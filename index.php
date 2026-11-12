@@ -104,6 +104,7 @@ if (in_array($requestPath, ['/admin/domains','/admin/domains/registrar'], true) 
 if ($requestPath === '/domains/search' && in_array($method, ['GET','POST'], true)) { $domains->search(); exit; }
 if ($requestPath === '/client/domains' && $method === 'GET') { $domains->myDomains(); exit; }
 if ($requestPath === '/admin/domains/orders' && $method === 'GET') { $domains->adminOrders(); exit; }
+if ($requestPath === '/admin/domains/reconcile' && $method === 'POST') { $domains->reconcileOrder(); exit; }
 $payment = new \HostPilot\Http\PaymentController($pdo, $basePath, (string)($config['app']['base_url'] ?? ''), (string)($config['app']['key'] ?? ''));
 $serverController = new \HostPilot\Http\ServerController($pdo, $basePath, (string)($config['app']['key'] ?? ''));
 $cronController = new \HostPilot\Http\CronController($pdo, $basePath, (string)($config['app']['key'] ?? ''), (string)($config['app']['base_url'] ?? ''));
