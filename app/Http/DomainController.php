@@ -106,17 +106,17 @@ final class DomainController
             $this->db->commit();
 
             $cfg=$this->load();
-            if(($cfg['enabled']??'0')!=='1'||empty($cfg['api_key_enc'])||empty($cfg['user_id']))throw new \\RuntimeException('Domain registrar bağlantısı etkin değil veya eksik.');
+            if(($cfg['enabled']??'0')!=='1'||empty($cfg['api_key_enc'])||empty($cfg['user_id']))throw new \RuntimeException('Domain registrar bağlantısı etkin değil veya eksik.');
             $api=new ResellerClubClient((string)$cfg['user_id'],$this->vault->decrypt((string)$cfg['api_key_enc']),(string)($cfg['environment']??'sandbox'));
             if(in_array($stage,['queued','customer_created','contact_created'],true)){
                 $payload=json_decode($this->vault->decrypt((string)$row['registrar_payload_enc']),true,32,JSON_THROW_ON_ERROR);
-                if(!is_array($payload)||($stage!=='contact_created'&&(empty($payload['customer'])||empty($payload['contact']))))throw new \\RuntimeException('Şifreli domain kayıt bilgileri okunamadı.');
+                if(!is_array($payload)||($stage!=='contact_created'&&(empty($payload['customer'])||empty($payload['contact']))))throw new \RuntimeException('Şifreli domain kayıt bilgileri okunamadı.');
                 $customerId=(string)($row['registrar_customer_id']??'');
                 $contactId=(string)($row['registrar_contact_id']??'');
                 if($stage==='queued'){
                     $remoteCallStarted=true;
                     $availability=$api->checkAvailability((string)$row['domain_name']);
-                    if(empty($availability['available']))throw new \\RuntimeException('Ödeme tamamlandı ancak alan adı son kontrol sırasında artık uygun değil. Yönetici incelemesi gerekli.');
+                    if(empty($availability['available']))throw new \RuntimeException('Ödeme tamamlandı ancak alan adı son kontrol sırasında artık uygun değil. Yönetici incelemesi gerekli.');
                     $remoteCallStarted=true;
                     $customerId=$api->createCustomer((array)$payload['customer']);
                     unset($payload['customer']['password'],$payload['customer']['username']);
@@ -126,7 +126,7 @@ final class DomainController
                     $stage='customer_created';
                 }
                 if($stage==='customer_created'){
-                    if($customerId===''||!ctype_digit($customerId))throw new \\RuntimeException('Registrar customerId kaydı eksik; manuel kontrol gerekli.');
+                    if($customerId===''||!ctype_digit($customerId))throw new \RuntimeException('Registrar customerId kaydı eksik; manuel kontrol gerekli.');
                     $payload['contact']['customerId']=$customerId;
                     $remoteCallStarted=true;
                     $contactId=$api->createContact((array)$payload['contact']);
@@ -136,7 +136,7 @@ final class DomainController
                     $stage='contact_created';
                 }
                 if($stage==='contact_created'){
-                    if($customerId===''||$contactId===''||!ctype_digit($customerId)||!ctype_digit($contactId))throw new \\RuntimeException('Registrar müşteri/iletişim kimliği eksik; manuel kontrol gerekli.');
+                    if($customerId===''||$contactId===''||!ctype_digit($customerId)||!ctype_digit($contactId))throw new \RuntimeException('Registrar müşteri/iletişim kimliği eksik; manuel kontrol gerekli.');
                     $remoteCallStarted=true;
                     $result=$api->registerDomain((string)$row['domain_name'],(int)$row['years'],$customerId,$contactId,(array)($payload['nameservers']??[]),(string)($payload['invoiceOption']??'OnlyAdd'),(bool)($payload['autoRenew']??false));
                     $this->db->prepare("UPDATE domain_registrations SET registrar_order_id=:order_id,status='pending_remote',action_status=:action,action_message=:message,locked_at=NULL,available_at=:available,updated_at=:updated WHERE id=:id")
@@ -146,7 +146,7 @@ final class DomainController
             }
             if($stage==='pending_remote'){
                 $orderId=(string)($row['registrar_order_id']??'');
-                if($orderId==='')throw new \\RuntimeException('Registrar orderId eksik; otomatik tekrar güvenli değil.');
+                if($orderId==='')throw new \RuntimeException('Registrar orderId eksik; otomatik tekrar güvenli değil.');
                 $remoteCallStarted=true;$statusData=$api->actionStatus($orderId);
                 $actions=$statusData['actions']??[];$action=is_array($actions)&&isset($actions[0])&&is_array($actions[0])?$actions[0]:null;
                 $actionStatus=(string)($action['actionStatus']??'');
