@@ -87,7 +87,7 @@ $checks=[
  'renewal is queued only after verified payment'=>str_contains($payment,"UPDATE domain_renewals SET status='queued'")&&str_contains($payment,"status='awaiting_payment'"),
  'renewal worker checks paid invoice and unchanged registrar expiry'=>str_contains($domainController,'runRenewalQueue')&&str_contains($domainController,"invoice_status']!=='paid'")&&str_contains($domainController,'expiry_before'),
  'renewal worker polls registrar and syncs confirmed new expiry'=>str_contains($domainController,'actionStatus')&&str_contains($domainController,'renewed_expiry')&&str_contains($domainController,"status='completed'"),
- 'renewal ambiguous remote outcomes are not retried automatically'=>str_contains($domainController,'$status=$remoteCallStarted?'needs_review':'failed')&&str_contains($domainController,'belirsiz registrar yanıtı otomatik tekrarlanmayacak'),
+ 'renewal ambiguous remote outcomes are not retried automatically'=>str_contains($domainController,'$status=$remoteCallStarted?\'needs_review\':\'failed\'')&&str_contains($domainController,'belirsiz registrar yanıtı otomatik tekrarlanmayacak'),
  'customer renewal request and authenticated worker routes registered'=>str_contains($routes,"'/client/domains/renew'")&&str_contains($routes,"'/cron/domain-renewals'")
 
 ];
