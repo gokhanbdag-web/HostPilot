@@ -115,7 +115,7 @@ $checks=[
  'daily registrar sync command is visible in automation screen'=>str_contains($worker,'domain-expiry-sync')&&str_contains($worker,'domainSyncCommand'),
  'admin domain list shows registrar sync history and next run'=>str_contains($domainController,'Son başarılı eşitleme')&&str_contains($domainController,'Sonraki otomatik deneme')&&str_contains($domainController,'registrar_sync_error'),
  'manual registrar sync queue is admin-only, csrf-protected and lock-safe'=>str_contains($domainController,'function queueExpirySync')&&str_contains($domainController,'Auth::verifyCsrf')&&str_contains($domainController,'FOR UPDATE')&&str_contains($domainController,'registrar_sync_attempted_at=NULL')&&str_contains($routes,"'/admin/domains/expiry-sync/queue'"),
- 'admin domain list supports search status expiry filters and pagination'=>str_contains($domainController,'d.domain_name LIKE :q')&&str_contains($domainController,'d.status=:status')&&str_contains($domainController,'DATE_ADD(CURDATE(),INTERVAL 30 DAY)')&&str_contains($domainController,'LIMIT :limit OFFSET :offset')&&str_contains($domainController,'http_build_query($base')
+ 'admin domain list supports search status expiry filters and pagination'=>str_contains($domainController,'d.domain_name LIKE :q_domain')&&str_contains($domainController,'d.status=:status')&&str_contains($domainController,'DATE_ADD(CURDATE(),INTERVAL 30 DAY)')&&str_contains($domainController,'LIMIT :limit OFFSET :offset')&&str_contains($domainController,'http_build_query($base')
 
 ];
 $failed=[];
