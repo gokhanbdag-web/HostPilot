@@ -12,8 +12,8 @@ use Throwable;
 final class PaymentController
 {
     private SecretVault $vault;
-    public function __construct(private readonly PDO $db,private readonly string $basePath,private readonly string $baseUrl,string $appKey)
-    {$this->vault=new SecretVault($appKey);}
+    public function __construct(private readonly PDO $db,private readonly string $basePath,private readonly string $baseUrl,private readonly string $applicationKey)
+    {$this->vault=new SecretVault($applicationKey);}
 
     public function adminSettings():void
     {
@@ -222,6 +222,7 @@ final class PaymentController
 
     private function settle(array $tx,string $status,string $gatewayId,string $message):void
     {
+        $packageNotice=null;
         $this->db->beginTransaction();
         try{
             $lock=$this->db->prepare('SELECT * FROM payment_transactions WHERE id=:id FOR UPDATE');$lock->execute([':id'=>$tx['id']]);$current=$lock->fetch();
@@ -246,6 +247,8 @@ final class PaymentController
                 $changeQuery=$this->db->prepare("SELECT * FROM service_package_changes WHERE invoice_id=:invoice AND status='pending_payment' FOR UPDATE");
                 $changeQuery->execute([':invoice'=>$invoice['id']]);$packageChange=$changeQuery->fetch();
                 if($packageChange){
+                    $noticeQuery=$this->db->prepare('SELECT u.email,u.name,s.remote_domain,fp.name AS from_name,tp.name AS to_name FROM services s JOIN users u ON u.id=s.user_id JOIN products fp ON fp.id=:from_product JOIN products tp ON tp.id=:to_product WHERE s.id=:service LIMIT 1');
+                    $noticeQuery->execute([':from_product'=>$packageChange['from_product_id'],':to_product'=>$packageChange['to_product_id'],':service'=>$packageChange['service_id']]);$packageNotice=$noticeQuery->fetch()?:null;
                     $jobNow=gmdate('Y-m-d H:i:s');$packageJob='package_'.(int)$packageChange['id'];
                     $this->db->prepare("UPDATE service_package_changes SET status='queued',updated_at=:updated WHERE id=:id")->execute([':updated'=>$jobNow,':id'=>$packageChange['id']]);
                     $job=$this->db->prepare("INSERT INTO provisioning_jobs(service_id,job_type,status,attempts,available_at,created_at,updated_at) VALUES(:service,:type,'queued',0,:available,:created,:updated) ON DUPLICATE KEY UPDATE status=IF(status IN ('failed','queued'),'queued',status),available_at=IF(status='failed',VALUES(available_at),available_at),last_error=IF(status='failed',NULL,last_error),updated_at=VALUES(updated_at)");
@@ -259,6 +262,7 @@ final class PaymentController
                 }
             }
             $this->db->commit();
+            if($newStatus==='paid'&&is_array($packageNotice))(new EmailService($this->db,$this->applicationKey))->sendPackageChange((string)$packageNotice['email'],(string)$packageNotice['name'],(string)($packageNotice['remote_domain']??''),(string)$packageNotice['from_name'],(string)$packageNotice['to_name'],'payment');
         }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();throw $e;}
     }
 
