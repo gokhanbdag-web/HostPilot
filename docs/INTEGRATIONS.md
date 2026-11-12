@@ -46,7 +46,14 @@
 - Product IDs must be mapped to exact remote package/service-plan names before account creation. Provider success is not assumed from an HTTP status alone; adapters inspect each panel's response.
 - Current account creation is administrator-triggered. Payment-to-queue automation, scheduled workers, retry/reconciliation, and lifecycle actions are still pending.
 
-## 2. Payment gateways
+## 2. Outbound email notifications
+
+- Implemented: native PHP SMTP transport with STARTTLS or implicit SSL/TLS, certificate and hostname verification, bounded socket timeouts, SMTP AUTH LOGIN, UTF-8 messages, and no Composer dependency.
+- Admins configure SMTP host, port, encryption mode, username, password, sender address, and sender name at Admin → Settings. SMTP password is encrypted at rest using the installation key and is never redisplayed. A test-send action is available.
+- Package lifecycle emails are sent after the database commit: scheduled downgrade, cancelled downgrade, upgrade request created, verified upgrade payment, and successful remote package change. Delivery errors are logged and do not roll back billing or provisioning state.
+- SMTP credentials and provider delivery must be tested using the operator's own mail host. SPF, DKIM, DMARC, sender-domain policy, and mailbox delivery remain operator prerequisites.
+
+## 3. Payment gateways
 
 ### PayTR
 
@@ -66,7 +73,7 @@
 - Open verification item: Subscription product availability and merchant enablement must be checked. Recurring billing is not automatically available to every merchant or every product; do not promise it without account eligibility and current docs validation.
 - Security rule: never trust a client-side success page; verify server-side state.
 
-## 3. Domain registrars
+## 4. Domain registrars
 
 ### ResellerClub
 
@@ -88,7 +95,7 @@
 - Prior branding and product naming have changed over time; confirm the current official API documentation and account portal before implementation.
 - Planned adapter must be based on current official API documentation supplied by the provider account. Do not infer exact endpoint formats from older Hexonet examples without validation.
 
-## 4. Internal integration architecture
+## 5. Internal integration architecture
 
 - One independent adapter per provider.
 - Provider credentials stored encrypted, masked in UI, and never returned in normal API responses.
@@ -100,7 +107,7 @@
 - Webhook endpoints are provider-specific and verify each provider's documented signature/secret scheme.
 - Sandbox and production credentials are separate settings.
 
-## 5. Explicit prerequisites
+## 6. Explicit prerequisites
 
 The HostPilot operator must obtain:
 - A licensed/authorized cPanel/WHM, DirectAdmin, or Plesk server with API access and sufficient permissions.
@@ -120,7 +127,7 @@ Customer-facing cPanel/WHM and Plesk upgrades create a prorated remaining-term i
 - DirectAdmin is deliberately fail-closed for package changes. DirectAdmin publishes the actual OpenAPI/Swagger contract at `/static/swagger.json` per server, but HostPilot does not guess an endpoint or mutate user configuration files. A server-specific documented operation must be verified before enabling it.
 - The customer workflow supports immediate paid upgrades and next-renewal scheduled downgrades. Downgrades require an active service, no outstanding service invoice, a lower-priced product on the same server/currency/billing cycle, and a valid remote mapping. Plesk additionally requires both plan GUID and external ID. The scheduled operation does not create an invoice; after successful remote application, the next renewal invoice is generated using the new service amount.
 
-## 6. Research sources
+## 7. Research sources
 
 - WHMCS developer feature map (themes, provisioning, addon modules, payment gateways, registrars, hooks, API): https://developers.whmcs.com/
 - WHMCS product documentation: https://docs.whmcs.com/
