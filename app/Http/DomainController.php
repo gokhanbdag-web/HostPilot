@@ -231,7 +231,7 @@ final class DomainController
         $out=fopen('php://output','wb');
         if($out===false){http_response_code(500);return;}
         fwrite($out,"\xEF\xBB\xBF");
-        $safe=static function($value):string{$value=(string)($value??'');$probe=ltrim($value," \\t\\n\\r\\0\\x0B\\xC2\\xA0\\xEF\\xBB\\xBF");return $probe!==''&&str_contains('=+-@',$probe[0])?"'".$value:$value;};
+        $safe=static function($value):string{$value=(string)($value??'');$probe=ltrim($value," \t\n\r\0\x0B\xC2\xA0\xEF\xBB\xBF");return $probe!==''&&str_contains('=+-@',$probe[0])?"'".$value:$value;};
         fputcsv($out,['Domain','Müşteri','E-posta','Kayıt durumu','Fatura no','Fatura durumu','Bitiş tarihi','Otomatik yenileme','Son registrar eşitlemesi','Son eşitleme hatası']);
         $statusLabels=['awaiting_payment'=>'Ödeme bekleniyor','queued'=>'Kuyrukta','processing'=>'İşleniyor','customer_created'=>'Müşteri kaydı','contact_created'=>'İletişim kaydı','pending_remote'=>'Registrar bekleniyor','active'=>'Aktif','failed'=>'Başarısız','needs_review'=>'İnceleme gerekli','cancelled'=>'İptal'];
         while($row=$stmt->fetch(PDO::FETCH_ASSOC)){
