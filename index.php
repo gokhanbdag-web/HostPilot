@@ -99,6 +99,9 @@ if ($requestPath === '/admin' || $requestPath === '/admin/') {
     exit;
 }
 $catalog = new \HostPilot\Http\CatalogController($pdo, $basePath);
+$domains = new \HostPilot\Http\DomainController($pdo, $basePath, (string)($config['app']['key'] ?? ''));
+if ($requestPath === '/admin/domains/registrar' && in_array($method, ['GET','POST'], true)) { $domains->settings(); exit; }
+if ($requestPath === '/domains/search' && in_array($method, ['GET','POST'], true)) { $domains->search(); exit; }
 $payment = new \HostPilot\Http\PaymentController($pdo, $basePath, (string)($config['app']['base_url'] ?? ''), (string)($config['app']['key'] ?? ''));
 $serverController = new \HostPilot\Http\ServerController($pdo, $basePath, (string)($config['app']['key'] ?? ''));
 $cronController = new \HostPilot\Http\CronController($pdo, $basePath, (string)($config['app']['key'] ?? ''), (string)($config['app']['base_url'] ?? ''));
