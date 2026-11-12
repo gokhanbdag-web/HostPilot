@@ -236,6 +236,8 @@ final class PaymentController
             $p=$this->db->prepare("UPDATE payment_transactions SET status='success',gateway_transaction_id=:gateway_id,response_code='success',safe_message=:message,updated_at=:updated WHERE id=:id");
             $p->execute([':gateway_id'=>$gatewayId,':message'=>$message,':updated'=>$now,':id'=>$tx['id']]);
             if($newStatus==='paid'){
+                $customerQuery=$this->db->prepare('SELECT name,email FROM users WHERE id=:id LIMIT 1');$customerQuery->execute([':id'=>$invoice['user_id']]);$invoiceCustomer=$customerQuery->fetch();
+                if($invoiceCustomer)(new EmailService($this->db,$this->applicationKey))->queueInvoiceNotice((string)$invoiceCustomer['email'],(string)$invoiceCustomer['name'],(string)$invoice['invoice_number'],(float)$invoice['total'],(string)$invoice['currency'],'','paid',(int)$invoice['id']);
                 $this->db->prepare("UPDATE orders SET status='paid',updated_at=:updated WHERE id=:id")->execute([':updated'=>$now,':id'=>$invoice['order_id']]);
                 $packageInvoice=$this->db->prepare('SELECT id FROM service_package_changes WHERE invoice_id=:invoice LIMIT 1');$packageInvoice->execute([':invoice'=>$invoice['id']]);$isPackageInvoice=(bool)$packageInvoice->fetchColumn();
                 $exists=$this->db->prepare('SELECT COUNT(*) FROM services WHERE order_id=:id');$exists->execute([':id'=>$invoice['order_id']]);
