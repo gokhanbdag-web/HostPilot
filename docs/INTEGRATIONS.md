@@ -161,3 +161,10 @@ The registration payload currently uses the conservative `OnlyAdd` invoice optio
 ## Domain expiry metadata synchronization
 
 For active ResellerClub domain orders, the customer portal can refresh registrar-owned expiry and auto-renew metadata. The request is customer-authenticated, CSRF-protected, and scoped to the customer's own active domain registration. HostPilot calls the documented `GET /domains/{orderId}?options=OrderDetails,StatusDetails` endpoint and stores the registrar's Unix `expiryDate` and `isAutoRenew` values; it does not estimate expiry from the original purchase date. A missing or malformed expiry timestamp is rejected rather than guessed. The versioned migration is `20261112_0013_domain_expiry_sync`. This is a read-only synchronization feature; paid domain renewals are a separate workflow and are not yet enabled.
+
+
+## Domain renewal API operation
+
+The ResellerClub adapter exposes a guarded `renewDomain()` operation for the asynchronous renewal workflow. It requires a numeric registrar order ID, a 1–10 year term, and the registrar-synchronized current expiry timestamp. Requests use the official `POST /domains/{orderId}/renew` endpoint with `expDate`, `years`, `autoRenew`, and `invoiceOption=OnlyAdd`. The `OnlyAdd` setting avoids silently debiting the reseller balance; any registrar-side invoice remains a separate obligation.
+
+**Important:** this adapter method is not yet wired to customer renewal checkout, HostPilot invoice creation, payment settlement, or a renewal worker. Do not expose it as a customer-facing renewal feature until those steps are implemented and tested. Ambiguous registrar responses must be reconciled rather than blindly retried.
