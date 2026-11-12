@@ -60,13 +60,14 @@ final class EmailService
             'created'=>['Yeni faturanız oluşturuldu','Yeni faturanız oluşturuldu.'],
             'paid'=>['Ödemeniz alındı','Faturanızın ödemesi başarıyla doğrulandı.'],
             'overdue'=>['Faturanızın vadesi geçti','Faturanızın son ödeme tarihi geçti. Hizmetinizin etkilenmemesi için lütfen müşteri panelinden ödeme durumunu kontrol edin.'],
+            'failed'=>['Ödeme işlemi tamamlanamadı','Ödeme sağlayıcısı işleminizi onaylamadı. Fatura bakiyenizi ve ödeme yönteminizi kontrol edip yeniden deneyebilirsiniz.'],
         ];
         if(!isset($labels[$event])||$invoiceId<1)return false;
         [$subject,$message]=$labels[$event];
         $body="Merhaba ".($customerName!==''?$customerName:'Müşterimiz').",\n\n".$message."\n\nFatura: ".$invoiceNumber."\nTutar: ".number_format($amount,2,',','.')." ".$currency;
         if($dueAt!=='')$body.="\nSon ödeme tarihi: ".$dueAt;
         $body.="\n\nFaturalarınızı HostPilot müşteri panelinizden görüntüleyebilirsiniz.";
-        return $this->queue($recipient,$subject,$body,'invoice:'.$event.':'.$invoiceId,'invoice_'.$event);
+        return $this->queue($recipient,$subject,$body,($event==='failed'?'payment-failed:':'invoice:'.$event.':').$invoiceId,'invoice_'.$event);
     }
 
     public function queueServiceNotice(string $recipient,string $customerName,string $domain,string $event,int $serviceId):bool
