@@ -77,6 +77,30 @@ final class DomainController
         }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();$this->go('/client/domains','error='.rawurlencode($e->getMessage()));}
     }
 
+    public function syncDomainDetails():void
+    {
+        $user=Auth::user();if(!$user){$this->go('/client/login');return;}if(($user['role']??'')!=='customer'){http_response_code(403);echo 'Müşteri hesabı gerekli.';return;}
+        if(($_SERVER['REQUEST_METHOD']??'GET')!=='POST'){http_response_code(405);echo 'Method not allowed';return;}
+        if(!Auth::verifyCsrf($_POST['_token']??null)){http_response_code(419);echo 'Güvenlik doğrulaması başarısız.';return;}
+        $id=(int)($_POST['domain_id']??0);
+        try{
+            $q=$this->db->prepare("SELECT id,registrar_order_id,status FROM domain_registrations WHERE id=:id AND user_id=:user LIMIT 1");
+            $q->execute([':id'=>$id,':user'=>$user['id']]);$row=$q->fetch(PDO::FETCH_ASSOC);
+            if(!$row||$row['status']!=='active'||empty($row['registrar_order_id']))throw new \RuntimeException('Yalnızca aktif ve registrar orderId bilgisi bulunan domainler eşitlenebilir.');
+            $cfg=$this->load();if(($cfg['enabled']??'0')!=='1'||empty($cfg['api_key_enc'])||empty($cfg['user_id']))throw new \RuntimeException('Domain registrar bağlantısı etkin değil veya eksik.');
+            $api=new ResellerClubClient((string)$cfg['user_id'],$this->vault->decrypt((string)$cfg['api_key_enc']),(string)($cfg['environment']??'sandbox'));
+            $details=$api->domainDetails((string)$row['registrar_order_id']);
+            $expiryRaw=$details['expiryDate']??$details['endTime']??$details['domainEndTime']??null;
+            if(!is_numeric($expiryRaw)||(int)$expiryRaw<=0)throw new \RuntimeException('Registrar yanıtında doğrulanabilir son kullanma tarihi bulunamadı.');
+            $expiry=(new \DateTimeImmutable('@'.(int)$expiryRaw))->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+            $autoRenew=array_key_exists('isAutoRenew',$details)?(filter_var($details['isAutoRenew'],FILTER_VALIDATE_BOOLEAN)?1:0):null;
+            $now=gmdate('Y-m-d H:i:s');
+            $this->db->prepare('UPDATE domain_registrations SET expiry_date=:expiry,registrar_auto_renew=:auto_renew,registrar_synced_at=:synced,updated_at=:updated WHERE id=:id')
+                ->execute([':expiry'=>$expiry,':auto_renew'=>$autoRenew,':synced'=>$now,':updated'=>$now,':id'=>$id]);
+            $this->go('/client/domains','notice='.rawurlencode('Domain bitiş tarihi ve otomatik yenileme bilgisi registrar üzerinden güncellendi.'));
+        }catch(Throwable $e){$this->go('/client/domains','error='.rawurlencode($e->getMessage()));}
+    }
+
     public function myDomains():void
     {
         $user=Auth::user();if(!$user){$this->go('/client/login');return;}if(($user['role']??'')!=='customer'){http_response_code(403);echo 'Müşteri hesabı gerekli.';return;}
@@ -86,7 +110,7 @@ final class DomainController
         $notice=(string)($_GET['notice']??'');$error=(string)($_GET['error']??'');
         echo '<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Domainlerim · HostPilot</title><style>body{margin:0;background:#0a1020;color:#e8edf7;font:15px system-ui}main{max-width:1000px;margin:30px auto;padding:20px}.panel{background:#111c2f;border:1px solid #26354c;border-radius:14px;padding:22px;margin-top:20px}.muted,small{color:#9aabc2}.item{padding:16px 0;border-bottom:1px solid #26354c}.item:last-child{border:0}a{color:#9eb7fa}</style></head><body><main><a href="'.$this->url('/client').'">← Müşteri paneli</a><section class="panel"><h1>Domainlerim</h1><p class="muted">Satın aldığınız alan adlarının ödeme ve registrar kayıt durumları.</p>';if($notice!=='')echo '<div class="notice">'.$this->e($notice).'</div>';if($error!=='')echo '<div class="error">'.$this->e($error).'</div>';
         if(!$rows)echo '<p>Henüz domain siparişiniz bulunmuyor. <a href="'.$this->url('/domains/search').'">Alan adı sorgulayın.</a></p>';
-        foreach($rows as $row){$status=$labels[$row['status']]??(string)$row['status'];echo '<article class="item"><h2>'.$this->e((string)$row['domain_name']).'</h2><b>'.$this->e($status).'</b><p class="muted">'.$this->e((string)$row['years']).' yıl · Fatura #'.$this->e((string)$row['invoice_number']).' · Fatura: '.$this->e((string)$row['invoice_status']).'</p>';if(!empty($row['action_message']))echo '<p>'.$this->e((string)$row['action_message']).'</p>';if($row['status']==='needs_review'||$row['status']==='failed')echo '<p>İşlem destek ekibinin kontrolüne alındı. Yinelenen kayıt oluşturmamak için otomatik yeniden gönderim yapılmayacak.</p>';
+        foreach($rows as $row){$status=$labels[$row['status']]??(string)$row['status'];echo '<article class="item"><h2>'.$this->e((string)$row['domain_name']).'</h2><b>'.$this->e($status).'</b><p class="muted">'.$this->e((string)$row['years']).' yıl · Fatura #'.$this->e((string)$row['invoice_number']).' · Fatura: '.$this->e((string)$row['invoice_status']).'</p>';if(!empty($row['expiry_date']))echo '<p>Registrar bitiş tarihi: <b>'.date('d.m.Y H:i',strtotime((string)$row['expiry_date'])).' UTC</b> · Otomatik yenileme: '.($row['registrar_auto_renew']===null?'Bilinmiyor':((int)$row['registrar_auto_renew']===1?'Açık':'Kapalı')).'</p>';if($row['status']==='active')echo '<form method="post" action="'.$this->url('/client/domains/sync').'" style="margin:10px 0"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="domain_id" value="'.(int)$row['id'].'"><button>Registrar bilgilerini güncelle</button></form>';if(!empty($row['action_message']))echo '<p>'.$this->e((string)$row['action_message']).'</p>';if($row['status']==='needs_review'||$row['status']==='failed')echo '<p>İşlem destek ekibinin kontrolüne alındı. Yinelenen kayıt oluşturmamak için otomatik yeniden gönderim yapılmayacak.</p>';
             $nsStatus=(string)($row['nameserver_status']??'');$nsLabels=['queued'=>'Değişiklik kuyruğa alındı','processing'=>'Nameserver güncelleniyor','completed'=>'Nameserver güncellendi','failed'=>'Nameserver işlemi başarısız','needs_review'=>'Nameserver işlemi yönetici incelemesinde'];
             if($nsStatus!=='')echo '<p>Nameserver durumu: '.$this->e($nsLabels[$nsStatus]??$nsStatus).(!empty($row['nameserver_error'])?' · '.$this->e((string)$row['nameserver_error']):'').'</p>';
             if($row['status']==='active'&&!in_array($nsStatus,['queued','processing','needs_review'],true)){echo '<form method="post" action="'.$this->url('/client/domains/nameservers').'" style="margin-top:14px"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="domain_id" value="'.(int)$row['id'].'"><label>Nameserver adresleri (her satıra bir tane)<textarea name="nameservers" rows="3" placeholder="ns1.example.com&#10;ns2.example.com" required></textarea></label><button>Nameserver değişikliğini sıraya al</button></form>';}
