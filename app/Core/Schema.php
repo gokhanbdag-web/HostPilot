@@ -427,5 +427,22 @@ final class Schema
             $record->execute([':name'=>$domainRenewalName,':applied'=>gmdate('Y-m-d H:i:s')]);
         }
 
+        $domainRenewalActionName='20261112_0015_domain_renewal_action_tracking';
+        $dran=$db->prepare('SELECT id FROM migrations WHERE migration=:name LIMIT 1');
+        $dran->execute([':name'=>$domainRenewalActionName]);
+        if(!$dran->fetchColumn()){
+            $addRenewalColumn=static function(string $column,string $definition)use($db):void{
+                $check=$db->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='domain_renewals' AND COLUMN_NAME=:column");
+                $check->execute([':column'=>$column]);
+                if(!(int)$check->fetchColumn())$db->exec('ALTER TABLE domain_renewals ADD COLUMN '.$column.' '.$definition);
+            };
+            $addRenewalColumn('action_eaq_id','VARCHAR(40) NULL');
+            $addRenewalColumn('action_type','VARCHAR(80) NULL');
+            $db->exec("UPDATE domain_renewals SET status='needs_review',locked_at=NULL,last_error='Önceki worker sürümünde registrar işlem kimliği saklanmadı; registrar panelinde doğrulama gerekli.',updated_at=UTC_TIMESTAMP() WHERE status='pending_remote' AND action_eaq_id IS NULL");
+            $record=$db->prepare('INSERT IGNORE INTO migrations(migration,batch,applied_at) VALUES(:name,15,:applied)');
+            $record->execute([':name'=>$domainRenewalActionName,':applied'=>gmdate('Y-m-d H:i:s')]);
+        }
+
+
     }
 }
