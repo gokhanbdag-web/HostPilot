@@ -39,6 +39,35 @@ final class EmailService
     }
 
 
+
+    public function queueInvoiceNotice(string $recipient,string $customerName,string $invoiceNumber,float $amount,string $currency,string $dueAt,string $event,int $invoiceId):bool
+    {
+        $labels=[
+            'created'=>['Yeni faturanız oluşturuldu','Yeni faturanız oluşturuldu.'],
+            'paid'=>['Ödemeniz alındı','Faturanızın ödemesi başarıyla doğrulandı.'],
+            'overdue'=>['Faturanızın vadesi geçti','Faturanızın son ödeme tarihi geçti. Hizmetinizin etkilenmemesi için lütfen müşteri panelinden ödeme durumunu kontrol edin.'],
+        ];
+        if(!isset($labels[$event])||$invoiceId<1)return false;
+        [$subject,$message]=$labels[$event];
+        $body="Merhaba ".($customerName!==''?$customerName:'Müşterimiz').",\n\n".$message."\n\nFatura: ".$invoiceNumber."\nTutar: ".number_format($amount,2,',','.')." ".$currency;
+        if($dueAt!=='')$body.="\nSon ödeme tarihi: ".$dueAt;
+        $body.="\n\nFaturalarınızı HostPilot müşteri panelinizden görüntüleyebilirsiniz.";
+        return $this->queue($recipient,$subject,$body,'invoice:'.$event.':'.$invoiceId,'invoice_'.$event);
+    }
+
+    public function queueServiceNotice(string $recipient,string $customerName,string $domain,string $event,int $serviceId):bool
+    {
+        $labels=[
+            'provisioned'=>['Hosting hesabınız hazır','Hosting hesabınız başarıyla oluşturuldu ve kullanıma hazır.'],
+            'suspended'=>['Hosting hizmetiniz askıya alındı','Vadesi geçmiş ödenmemiş fatura nedeniyle hosting hizmetiniz askıya alındı. Ödeme sonrası yeniden etkinleştirme otomasyonu çalışacaktır.'],
+            'reactivated'=>['Hosting hizmetiniz yeniden etkinleştirildi','Ödeme doğrulandı ve hosting hizmetiniz yeniden etkinleştirildi.'],
+        ];
+        if(!isset($labels[$event])||$serviceId<1)return false;
+        [$subject,$message]=$labels[$event];
+        $body="Merhaba ".($customerName!==''?$customerName:'Müşterimiz').",\n\n".$message."\n\nDomain: ".$domain."\n\nHizmet durumunuzu müşteri panelinizden takip edebilirsiniz.";
+        return $this->queue($recipient,$subject,$body,'service:'.$event.':'.$serviceId,'service_'.$event);
+    }
+
     public function queue(string $recipient,string $subject,string $body,string $idempotencyKey,string $eventType='general'):bool
     {
         if(!filter_var($recipient,FILTER_VALIDATE_EMAIL)||$subject===''||strlen($subject)>255||preg_match('/[\\r\\n]/',$subject))return false;
