@@ -73,13 +73,48 @@ final class DomainController
     public function adminOrders():void
     {
         if(!$this->admin())return;
-        $rows=$this->db->query('SELECT d.*,u.name,u.email,i.invoice_number,i.status AS invoice_status FROM domain_registrations d JOIN users u ON u.id=d.user_id JOIN invoices i ON i.id=d.invoice_id ORDER BY d.created_at DESC LIMIT 300')->fetchAll(PDO::FETCH_ASSOC);
+        $notice=(string)($_GET['notice']??'');$error=(string)($_GET['error']??'');
+        $rows=$this->db->query('SELECT d.*,u.name,u.email,i.invoice_number,i.status AS invoice_status FROM domain_registrations d JOIN users u ON u.id=d.user_id JOIN invoices i ON i.id=d.invoice_id ORDER BY CASE WHEN d.status IN (\'needs_review\',\'failed\') THEN 0 ELSE 1 END,d.created_at DESC LIMIT 300')->fetchAll(PDO::FETCH_ASSOC);
         $labels=['awaiting_payment'=>'Ödeme bekleniyor','queued'=>'Kuyrukta','processing'=>'İşleniyor','customer_created'=>'Müşteri kaydı','contact_created'=>'İletişim kaydı','pending_remote'=>'Registrar bekleniyor','active'=>'Aktif','failed'=>'Başarısız','needs_review'=>'İnceleme gerekli','cancelled'=>'İptal'];
         $this->page('Domain siparişleri');
-        echo '<div class="layout"><aside class="sidebar"><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a class="nav-item" href="'.$this->url('/admin/domains/registrar').'">Registrar ayarları</a><a class="nav-item active" href="'.$this->url('/admin/domains/orders').'">Domain siparişleri</a></aside><main class="main"><header class="topbar"><div><small>DOMAIN / SİPARİŞLER</small><h1>Domain kayıt kuyruğu</h1></div><a href="'.$this->url('/admin/domains/registrar').'">Registrar ayarları</a></header><article class="panel"><p>Belirsiz registrar yanıtları otomatik tekrar gönderilmez; manuel doğrulama gerektirir.</p>';
+        echo '<div class="layout"><aside class="sidebar"><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a class="nav-item" href="'.$this->url('/admin/domains/registrar').'">Registrar ayarları</a><a class="nav-item active" href="'.$this->url('/admin/domains/orders').'">Domain siparişleri</a></aside><main class="main"><header class="topbar"><div><small>DOMAIN / SİPARİŞLER</small><h1>Domain kayıt kuyruğu</h1></div><a href="'.$this->url('/admin/domains/registrar').'">Registrar ayarları</a></header><article class="panel"><p>Belirsiz registrar yanıtları otomatik tekrar gönderilmez; manuel doğrulama gerektirir. Aşağıdaki uzlaştırma işlemleri yalnızca registrar panelinde kontrol yaptıktan sonra kullanılmalıdır.</p>';if($notice!=='')echo '<div class="notice">'.$this->e($notice).'</div>';if($error!=='')echo '<div class="alert">'.$this->e($error).'</div>';
         if(!$rows)echo '<p>Henüz domain siparişi yok.</p>';
-        foreach($rows as $row)echo '<div style="padding:14px 0;border-bottom:1px solid #26354c"><b>'.$this->e((string)$row['domain_name']).'</b> · '.$this->e($labels[$row['status']]??(string)$row['status']).'<p>'.$this->e((string)$row['name']).' · '.$this->e((string)$row['email']).' · #'.$this->e((string)$row['invoice_number']).' · '.$this->e((string)$row['invoice_status']).'</p><small>Registrar order: '.$this->e((string)($row['registrar_order_id']??'—')).' · Action: '.$this->e((string)($row['action_status']??'—')).'</small>'.(!empty($row['last_error'])?'<p class="alert">'.$this->e((string)$row['last_error']).'</p>':'').'</div>';
+        foreach($rows as $row){echo '<div style="padding:14px 0;border-bottom:1px solid #26354c"><b>'.$this->e((string)$row['domain_name']).'</b> · '.$this->e($labels[$row['status']]??(string)$row['status']).'<p>'.$this->e((string)$row['name']).' · '.$this->e((string)$row['email']).' · #'.$this->e((string)$row['invoice_number']).' · '.$this->e((string)$row['invoice_status']).'</p><small>Registrar order: '.$this->e((string)($row['registrar_order_id']??'—')).' · Action: '.$this->e((string)($row['action_status']??'—')).'</small>'.(!empty($row['last_error'])?'<p class="alert">'.$this->e((string)$row['last_error']).'</p>':'').'</div>';
+            if(in_array($row['status'],['needs_review','failed'],true)){echo '<form method="post" action="'.$this->url('/admin/domains/reconcile').'" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0 25px"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="id" value="'.(int)$row['id'].'"><label>Doğrulanmış customerId<input name="customer_id" inputmode="numeric"></label><label>Doğrulanmış contactId<input name="contact_id" inputmode="numeric"></label><label>Doğrulanmış registrar orderId<input name="registrar_order_id" inputmode="numeric"></label><label>Başarısızlık açıklaması<input name="reason" maxlength="1000"></label><button name="decision" value="resume_customer">Müşteri kaydı var → devam et</button><button name="decision" value="resume_contact">İletişim kaydı var → devam et</button><button name="decision" value="resume_action">Domain kayıt emri var → durumunu sorgula</button><button name="decision" value="mark_active" onclick="return confirm(\'Registrar panelinde domainin aktif olduğunu doğruladınız mı?\')">Aktif olarak işaretle</button><button name="decision" value="mark_failed">Başarısız olarak kapat</button></form>';}
+        }
         echo '</article></main></div>';$this->end();
+    }
+
+    public function reconcileOrder():void
+    {
+        if(!$this->admin())return;
+        if(($_SERVER['REQUEST_METHOD']??'GET')!=='POST'){http_response_code(405);echo 'Method not allowed';return;}
+        if(!Auth::verifyCsrf($_POST['_token']??null)){http_response_code(419);echo 'Güvenlik doğrulaması başarısız.';return;}
+        $id=(int)($_POST['id']??0);$decision=(string)($_POST['decision']??'');$customerId=trim((string)($_POST['customer_id']??''));$contactId=trim((string)($_POST['contact_id']??''));$orderId=trim((string)($_POST['registrar_order_id']??''));$now=gmdate('Y-m-d H:i:s');
+        if($id<1){http_response_code(422);echo 'Geçersiz domain siparişi.';return;}
+        try{
+            $this->db->beginTransaction();
+            $q=$this->db->prepare("SELECT * FROM domain_registrations WHERE id=:id FOR UPDATE");$q->execute([':id'=>$id]);$row=$q->fetch(PDO::FETCH_ASSOC);
+            if(!$row||!in_array($row['status'],['needs_review','failed'],true))throw new \\RuntimeException('Yalnızca inceleme veya başarısız durumundaki kayıtlar uzlaştırılabilir.');
+            if($decision==='resume_customer'){
+                if(!ctype_digit($customerId))throw new \\RuntimeException('Registrar panelinden doğruladığınız customerId sayısal olmalı.');
+                $this->db->prepare("UPDATE domain_registrations SET registrar_customer_id=:customer,status='customer_created',attempts=0,locked_at=NULL,available_at=:now,last_error=NULL,action_message='Yönetici registrar müşteri kaydını doğruladı.',updated_at=:now WHERE id=:id")->execute([':customer'=>$customerId,':now'=>$now,':id'=>$id]);
+            }elseif($decision==='resume_contact'){
+                if(!ctype_digit($customerId)||!ctype_digit($contactId))throw new \\RuntimeException('Doğrulanmış customerId ve contactId gerekli.');
+                $this->db->prepare("UPDATE domain_registrations SET registrar_customer_id=:customer,registrar_contact_id=:contact,status='contact_created',attempts=0,locked_at=NULL,available_at=:now,last_error=NULL,action_message='Yönetici registrar iletişim kaydını doğruladı.',updated_at=:now WHERE id=:id")->execute([':customer'=>$customerId,':contact'=>$contactId,':now'=>$now,':id'=>$id]);
+            }elseif($decision==='resume_action'){
+                if(!ctype_digit($orderId))throw new \\RuntimeException('Registrar panelinden doğruladığınız orderId sayısal olmalı.');
+                $this->db->prepare("UPDATE domain_registrations SET registrar_order_id=:order_id,status='pending_remote',attempts=0,locked_at=NULL,available_at=:now,last_error=NULL,action_message='Yönetici registrar kayıt emrini doğruladı.',updated_at=:now WHERE id=:id")->execute([':order_id'=>$orderId,':now'=>$now,':id'=>$id]);
+            }elseif($decision==='mark_active'){
+                if($orderId!==''&&!ctype_digit($orderId))throw new \\RuntimeException('Registrar orderId sayısal olmalı.');
+                $this->db->prepare("UPDATE domain_registrations SET registrar_order_id=COALESCE(NULLIF(:order_id,''),registrar_order_id),status='active',registered_at=COALESCE(registered_at,:now),attempts=0,locked_at=NULL,last_error=NULL,action_status='Completed',action_message='Yönetici registrar panelinden tamamlandığını doğruladı.',updated_at=:now WHERE id=:id")->execute([':order_id'=>$orderId,':now'=>$now,':id'=>$id]);
+            }elseif($decision==='mark_failed'){
+                $reason=trim((string)($_POST['reason']??'Registrar panelinde başarısız olduğu yönetici tarafından doğrulandı.'));
+                $this->db->prepare("UPDATE domain_registrations SET status='failed',locked_at=NULL,last_error=:reason,action_status='Failed',action_message=:reason,updated_at=:now WHERE id=:id")->execute([':reason'=>substr($reason,0,1000),':now'=>$now,':id'=>$id]);
+            }else throw new \\RuntimeException('Geçersiz uzlaştırma kararı.');
+            $this->db->commit();
+            $this->go('/admin/domains/orders','notice='.rawurlencode('Domain siparişi uzlaştırıldı. Verdiğiniz karar kaydedildi.'));
+        }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();$this->go('/admin/domains/orders','error='.rawurlencode($e->getMessage()));}
     }
 
     public function runRegistrationQueue():void
