@@ -98,7 +98,7 @@ if ($requestPath === '/admin' || $requestPath === '/admin/') {
     $controller->dashboard();
     exit;
 }
-$catalog = new \HostPilot\Http\CatalogController($pdo, $basePath);
+$catalog = new \HostPilot\Http\CatalogController($pdo, $basePath, (string)($config['app']['key'] ?? ''));
 $domains = new \HostPilot\Http\DomainController($pdo, $basePath, (string)($config['app']['key'] ?? ''));
 if (in_array($requestPath, ['/admin/domains','/admin/domains/registrar'], true) && in_array($method, ['GET','POST'], true)) { $domains->settings(); exit; }
 if ($requestPath === '/domains/search' && in_array($method, ['GET','POST'], true)) { $domains->search(); exit; }
