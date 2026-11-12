@@ -71,6 +71,7 @@ $checks=[
  'domain worker resumes stages and reviews ambiguous outcomes'=>str_contains($domainController,'customer_created')&&str_contains($domainController,'contact_created')&&str_contains($domainController,'needs_review')&&str_contains($domainController,'HostPilot domain cron v1'),
  'customer and admin can track domain registrations'=>str_contains($domainController,'myDomains')&&str_contains($domainController,'adminOrders')&&str_contains($routes,"'/client/domains'")&&str_contains($routes,"'/admin/domains/orders'"),
  'domain reconciliation requires admin csrf and explicit registrar identifiers'=>str_contains($domainController,'function reconcileOrder')&&str_contains($domainController,'Auth::verifyCsrf')&&str_contains($domainController,'resume_customer')&&str_contains($domainController,'resume_contact')&&str_contains($domainController,'resume_action')&&str_contains($domainController,'mark_active')&&str_contains($routes,"'/admin/domains/reconcile'"),
+ 'admin automation exposes authenticated domain cron command'=>str_contains(file_get_contents(__DIR__.'/../app/Http/CronController.php'),'HostPilot domain cron v1')&&str_contains(file_get_contents(__DIR__.'/../app/Http/CronController.php'),'domainCommand')&&str_contains(file_get_contents(__DIR__.'/../app/Http/CronController.php'),'/cron/domains'),
 
 ];
 $failed=[];
