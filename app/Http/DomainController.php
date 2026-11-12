@@ -95,23 +95,23 @@ final class DomainController
         try{
             $this->db->beginTransaction();
             $q=$this->db->prepare("SELECT * FROM domain_registrations WHERE id=:id FOR UPDATE");$q->execute([':id'=>$id]);$row=$q->fetch(PDO::FETCH_ASSOC);
-            if(!$row||!in_array($row['status'],['needs_review','failed'],true))throw new \\RuntimeException('Yalnızca inceleme veya başarısız durumundaki kayıtlar uzlaştırılabilir.');
+            if(!$row||!in_array($row['status'],['needs_review','failed'],true))throw new \RuntimeException('Yalnızca inceleme veya başarısız durumundaki kayıtlar uzlaştırılabilir.');
             if($decision==='resume_customer'){
-                if(!ctype_digit($customerId))throw new \\RuntimeException('Registrar panelinden doğruladığınız customerId sayısal olmalı.');
+                if(!ctype_digit($customerId))throw new \RuntimeException('Registrar panelinden doğruladığınız customerId sayısal olmalı.');
                 $this->db->prepare("UPDATE domain_registrations SET registrar_customer_id=:customer,status='customer_created',attempts=0,locked_at=NULL,available_at=:now,last_error=NULL,action_message='Yönetici registrar müşteri kaydını doğruladı.',updated_at=:now WHERE id=:id")->execute([':customer'=>$customerId,':now'=>$now,':id'=>$id]);
             }elseif($decision==='resume_contact'){
-                if(!ctype_digit($customerId)||!ctype_digit($contactId))throw new \\RuntimeException('Doğrulanmış customerId ve contactId gerekli.');
+                if(!ctype_digit($customerId)||!ctype_digit($contactId))throw new \RuntimeException('Doğrulanmış customerId ve contactId gerekli.');
                 $this->db->prepare("UPDATE domain_registrations SET registrar_customer_id=:customer,registrar_contact_id=:contact,status='contact_created',attempts=0,locked_at=NULL,available_at=:now,last_error=NULL,action_message='Yönetici registrar iletişim kaydını doğruladı.',updated_at=:now WHERE id=:id")->execute([':customer'=>$customerId,':contact'=>$contactId,':now'=>$now,':id'=>$id]);
             }elseif($decision==='resume_action'){
-                if(!ctype_digit($orderId))throw new \\RuntimeException('Registrar panelinden doğruladığınız orderId sayısal olmalı.');
+                if(!ctype_digit($orderId))throw new \RuntimeException('Registrar panelinden doğruladığınız orderId sayısal olmalı.');
                 $this->db->prepare("UPDATE domain_registrations SET registrar_order_id=:order_id,status='pending_remote',attempts=0,locked_at=NULL,available_at=:now,last_error=NULL,action_message='Yönetici registrar kayıt emrini doğruladı.',updated_at=:now WHERE id=:id")->execute([':order_id'=>$orderId,':now'=>$now,':id'=>$id]);
             }elseif($decision==='mark_active'){
-                if($orderId!==''&&!ctype_digit($orderId))throw new \\RuntimeException('Registrar orderId sayısal olmalı.');
+                if($orderId!==''&&!ctype_digit($orderId))throw new \RuntimeException('Registrar orderId sayısal olmalı.');
                 $this->db->prepare("UPDATE domain_registrations SET registrar_order_id=COALESCE(NULLIF(:order_id,''),registrar_order_id),status='active',registered_at=COALESCE(registered_at,:now),attempts=0,locked_at=NULL,last_error=NULL,action_status='Completed',action_message='Yönetici registrar panelinden tamamlandığını doğruladı.',updated_at=:now WHERE id=:id")->execute([':order_id'=>$orderId,':now'=>$now,':id'=>$id]);
             }elseif($decision==='mark_failed'){
                 $reason=trim((string)($_POST['reason']??'Registrar panelinde başarısız olduğu yönetici tarafından doğrulandı.'));
                 $this->db->prepare("UPDATE domain_registrations SET status='failed',locked_at=NULL,last_error=:reason,action_status='Failed',action_message=:reason,updated_at=:now WHERE id=:id")->execute([':reason'=>substr($reason,0,1000),':now'=>$now,':id'=>$id]);
-            }else throw new \\RuntimeException('Geçersiz uzlaştırma kararı.');
+            }else throw new \RuntimeException('Geçersiz uzlaştırma kararı.');
             $this->db->commit();
             $this->go('/admin/domains/orders','notice='.rawurlencode('Domain siparişi uzlaştırıldı. Verdiğiniz karar kaydedildi.'));
         }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();$this->go('/admin/domains/orders','error='.rawurlencode($e->getMessage()));}
