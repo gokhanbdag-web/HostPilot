@@ -56,6 +56,8 @@ $checks=[
  'hosting provisioning and billing lifecycle notices queued'=>str_contains($worker,"'provisioned'")&&str_contains($worker,"'suspended'")&&str_contains($worker,"'reactivated'"),
  'customer ticket creation and replies notify support staff'=>str_contains($portal,'notifyTicketStaff')&&str_contains($portal,"'created'")&&str_contains($portal,"'customer_reply'"),
  'staff ticket replies notify the customer'=>str_contains($admin,'queueTicketNotice')&&str_contains($admin,"'staff_reply'")&&str_contains($admin,'applicationKey'),
+ 'overdue invoice notifications are queued'=>str_contains($worker,"'overdue'")&&str_contains($worker,'queueInvoiceNotice'),
+ 'failed payment notifications are queued idempotently'=>str_contains($payment,"'failed',$id")&&str_contains($email,"'payment-failed:'"),
 
 ];
 $failed=[];
