@@ -70,6 +70,21 @@ final class ResellerClubClient
         return $this->request('PUT','/domains/'.$orderId.'/nameservers',['ns'=>$servers]);
     }
 
+    public function renewDomain(string $orderId,int $years,int $currentExpiryTimestamp,bool $autoRenew=false):array
+    {
+        if(!ctype_digit($orderId))throw new RuntimeException('Geçersiz registrar orderId.');
+        if($years<1||$years>10)throw new RuntimeException('Domain yenileme süresi 1 ile 10 yıl arasında olmalı.');
+        if($currentExpiryTimestamp<=time())throw new RuntimeException('Registrar tarafından doğrulanmış geçerli bitiş tarihi gerekli.');
+        // ResellerClub expects the currently registered expiry date as a UNIX timestamp.
+        // OnlyAdd prevents an unexpected debit from the reseller balance.
+        return $this->request('POST','/domains/'.$orderId.'/renew',[
+            'years'=>$years,
+            'expDate'=>$currentExpiryTimestamp,
+            'invoiceOption'=>'OnlyAdd',
+            'autoRenew'=>$autoRenew
+        ]);
+    }
+
     public function domainDetails(string $orderId):array
     {
         if(!ctype_digit($orderId))throw new RuntimeException('Geçersiz registrar orderId.');
