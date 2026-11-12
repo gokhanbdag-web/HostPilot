@@ -177,3 +177,13 @@ Customers can request a 1-, 2-, or 3-year renewal from the domain portal after s
 The renewal worker checks the invoice is paid and the expiry date has not changed since the request. It submits the registrar renewal with `OnlyAdd`, polls the registrar action, and updates the local expiry only after both a completed action and a later registrar detail lookup confirm a newer expiry timestamp. An ambiguous submission or stale worker is moved to `needs_review` and is not automatically resubmitted.
 
 Configure the domain cron token using the same HMAC-SHA256 derivation as the domain registration worker (`HostPilot domain cron v1`). Run `/cron/domain-renewals?token=...` periodically. Live renewal remains dependent on a correctly configured ResellerClub account and should first be exercised in sandbox. Registrar invoices created under `OnlyAdd` may still require separate reseller-side payment.
+
+
+### Domain renewal administration and reconciliation
+
+- Admin renewal review is available at /admin/domains/renewals; the renewal worker command is exposed on /admin/automation as /cron/domain-renewals.
+- needs_review renewals are never blindly resubmitted. An administrator must compare the registrar order/action and domain expiry in the ResellerClub control panel.
+- If the registrar confirms completion, enter the verified new expiry date. HostPilot accepts the reconciliation only when the related invoice is paid, the locally stored expiry still matches the request's recorded expiry_before, and the verified new date is later than the old expiry. Both the renewal record and domain expiry are then synchronized.
+- If the registrar confirms that the renewal was not applied, an administrator may explicitly requeue it. The same paid-invoice and unchanged-expiry checks apply. This decision can trigger a new registrar call, so it must only be used after checking the registrar panel.
+- An administrator may also close an item as failed with a note. Reconciliation is CSRF-protected and restricted to admin roles.
+- The GitHub workflow runs PHP syntax checks and repository regression scripts. It does not replace sandbox verification with real ResellerClub credentials.
