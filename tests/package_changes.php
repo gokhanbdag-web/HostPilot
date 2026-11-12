@@ -105,7 +105,14 @@ $checks=[
  'domain expiry reminder idempotency includes domain term and expiry date'=>str_contains($email,'domain-expiry:')&&str_contains($email,'INSERT IGNORE INTO email_outbox'),
  'domain expiry reminders require active domain and fresh registrar sync'=>str_contains($worker,"d.status='active'")&&str_contains($worker,'registrar_synced_at>=:fresh_since')&&str_contains($worker,'expiry_date>=:from30'),
  'domain expiry reminders are queued by authenticated email cron'=>str_contains($worker,'queueDomainExpiryReminders')&&str_contains($worker,'HostPilot email cron v1')&&str_contains($routes,"'/cron/email'"),
- 'domain expiry reminder worker reports queue counts'=>str_contains($worker,'queued_domain_expiry_reminders')&&str_contains($worker,'already_queued_or_sent')
+ 'domain expiry reminder worker reports queue counts'=>str_contains($worker,'queued_domain_expiry_reminders')&&str_contains($worker,'already_queued_or_sent'),
+ 'daily domain sync migration tracks attempts and errors'=>str_contains($schema,'20261112_0017_domain_expiry_sync_queue')&&str_contains($schema,'registrar_sync_attempted_at')&&str_contains($schema,'registrar_sync_error'),
+ 'registrar sync cron route is registered'=>str_contains($routes,"'/cron/domain-expiry-sync'")&&str_contains($domainController,'runExpirySyncQueue'),
+ 'daily registrar sync is bounded and read-only'=>str_contains($domainController,'HostPilot domain sync cron v1')&&str_contains($domainController,'for($n=0;$n<10;$n++)')&&str_contains($domainController,'domainDetails('),
+ 'registrar sync retries failures after one hour and successes daily'=>str_contains($domainController,'time()-86400')&&str_contains($domainController,'time()-3600'),
+ 'registrar sync protects nameserver queue locks'=>str_contains($domainController,"nameserver_status NOT IN ('queued','processing')")&&str_contains($domainController,"nameserver_status<>'processing'"),
+ 'registrar sync parses seconds milliseconds and date strings'=>str_contains($domainController,'parseRegistrarExpiry')&&str_contains($domainController,'floor($timestamp/1000)'),
+ 'daily registrar sync command is visible in automation screen'=>str_contains($worker,'domain-expiry-sync')&&str_contains($worker,'domainSyncCommand')
 
 ];
 $failed=[];
