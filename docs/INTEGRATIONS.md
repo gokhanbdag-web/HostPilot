@@ -168,3 +168,12 @@ For active ResellerClub domain orders, the customer portal can refresh registrar
 The ResellerClub adapter exposes a guarded `renewDomain()` operation for the asynchronous renewal workflow. It requires a numeric registrar order ID, a 1–10 year term, and the registrar-synchronized current expiry timestamp. Requests use the official `POST /domains/{orderId}/renew` endpoint with `expDate`, `years`, `autoRenew`, and `invoiceOption=OnlyAdd`. The `OnlyAdd` setting avoids silently debiting the reseller balance; any registrar-side invoice remains a separate obligation.
 
 **Important:** this adapter method is not yet wired to customer renewal checkout, HostPilot invoice creation, payment settlement, or a renewal worker. Do not expose it as a customer-facing renewal feature until those steps are implemented and tested. Ambiguous registrar responses must be reconciled rather than blindly retried.
+
+
+## Customer domain renewal workflow
+
+Customers can request a 1-, 2-, or 3-year renewal from the domain portal after synchronizing an active domain's expiry details. The matching active term price must exist on the original domain product in the catalog. HostPilot creates a separate order and invoice; the renewal remains `awaiting_payment` until the payment provider has verified full settlement. The payment settlement transaction then moves it to the authenticated `/cron/domain-renewals` queue.
+
+The renewal worker checks the invoice is paid and the expiry date has not changed since the request. It submits the registrar renewal with `OnlyAdd`, polls the registrar action, and updates the local expiry only after both a completed action and a later registrar detail lookup confirm a newer expiry timestamp. An ambiguous submission or stale worker is moved to `needs_review` and is not automatically resubmitted.
+
+Configure the domain cron token using the same HMAC-SHA256 derivation as the domain registration worker (`HostPilot domain cron v1`). Run `/cron/domain-renewals?token=...` periodically. Live renewal remains dependent on a correctly configured ResellerClub account and should first be exercised in sandbox. Registrar invoices created under `OnlyAdd` may still require separate reseller-side payment.
