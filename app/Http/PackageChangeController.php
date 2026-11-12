@@ -2,6 +2,7 @@
 declare(strict_types=1);
 namespace HostPilot\Http;
 use HostPilot\Core\Auth;
+use HostPilot\Core\EmailService;
 use PDO;
 use Throwable;
 
@@ -105,10 +106,10 @@ final class PackageChangeController
             $this->db->beginTransaction();
             $q=$this->db->prepare("SELECT c.*,s.user_id,s.status AS service_status,s.product_id,s.next_due_date,s.remote_domain,fp.name AS from_name,tp.name AS to_name,u.name AS customer_name,u.email AS customer_email FROM service_package_changes c JOIN services s ON s.id=c.service_id JOIN products fp ON fp.id=c.from_product_id JOIN products tp ON tp.id=c.to_product_id JOIN users u ON u.id=s.user_id WHERE c.id=:id AND s.user_id=:user FOR UPDATE");
             $q->execute([':id'=>$changeId,':user'=>$u['id']]);$change=$q->fetch();
-            if(!$change||$change['change_type']!=='downgrade'||$change['status']!=='scheduled'||$change['service_status']!=='active'||(int)$change['product_id']!==(int)$change['from_product_id']||$change['effective_at']<=gmdate('Y-m-d H:i:s')||$change['next_due_date']<=gmdate('Y-m-d'))throw new \\RuntimeException('Bu paket düşürme artık iptal edilemiyor; işlem yenileme kuyruğuna alınmış veya tarihi geçmiş olabilir.');
+            if(!$change||$change['change_type']!=='downgrade'||$change['status']!=='scheduled'||$change['service_status']!=='active'||(int)$change['product_id']!==(int)$change['from_product_id']||$change['effective_at']<=gmdate('Y-m-d H:i:s')||$change['next_due_date']<=gmdate('Y-m-d'))throw new \RuntimeException('Bu paket düşürme artık iptal edilemiyor; işlem yenileme kuyruğuna alınmış veya tarihi geçmiş olabilir.');
             $u1=$this->db->prepare("UPDATE service_package_changes SET status='cancelled',updated_at=:updated WHERE id=:id AND status='scheduled'");
             $u1->execute([':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$changeId]);
-            if($u1->rowCount()!==1)throw new \\RuntimeException('Paket düşürme talebi eşzamanlı olarak değişti; sayfayı yenileyin.');
+            if($u1->rowCount()!==1)throw new \RuntimeException('Paket düşürme talebi eşzamanlı olarak değişti; sayfayı yenileyin.');
             $this->db->commit();
             (new EmailService($this->db,$this->applicationKey))->sendPackageChange((string)$change['customer_email'],(string)$change['customer_name'],(string)($change['remote_domain']??''),(string)$change['from_name'],(string)$change['to_name'],'cancelled');
             $this->go('/client/services','notice=Planlanmış paket düşürme talebiniz iptal edildi.');
