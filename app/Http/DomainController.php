@@ -149,24 +149,37 @@ final class DomainController
         $expected=hash_hmac('sha256','HostPilot domain cron v1',$this->applicationKey);
         if($this->applicationKey===''||$provided===''||!hash_equals($expected,$provided)){http_response_code(403);echo 'Forbidden';return;}
         header('Content-Type: application/json; charset=utf-8');
-        $row=null;$stage='';$remoteCallStarted=false;
+        $row=null;$stage='';$remoteCallStarted=false;$nameserverOperation=false;
         try{
             $now=gmdate('Y-m-d H:i:s');
             $this->db->beginTransaction();
+            $cutoff=gmdate('Y-m-d H:i:s',time()-900);
             $this->db->prepare("UPDATE domain_registrations SET status='needs_review',locked_at=NULL,last_error='Worker yanıtı zaman aşımına uğradı; registrar tarafındaki son durum doğrulanmalı.',updated_at=:now WHERE status='processing' AND locked_at IS NOT NULL AND locked_at<:cutoff")
-                ->execute([':now'=>$now,':cutoff'=>gmdate('Y-m-d H:i:s',time()-900)]);
-            $pick=$this->db->prepare("SELECT * FROM domain_registrations WHERE status IN ('queued','customer_created','contact_created','pending_remote') AND available_at<=:now AND (locked_at IS NULL OR locked_at<:stale) ORDER BY available_at,id LIMIT 1 FOR UPDATE");
+                ->execute([':now'=>$now,':cutoff'=>$cutoff]);
+            $this->db->prepare("UPDATE domain_registrations SET nameserver_status='needs_review',locked_at=NULL,nameserver_error='Nameserver worker zaman aşımına uğradı; registrar tarafı kontrol edilmeli.',updated_at=:now WHERE nameserver_status='processing' AND locked_at IS NOT NULL AND locked_at<:cutoff")
+                ->execute([':now'=>$now,':cutoff'=>$cutoff]);
+            $pick=$this->db->prepare("SELECT * FROM domain_registrations WHERE ((status IN ('queued','customer_created','contact_created','pending_remote') AND available_at<=:now) OR (nameserver_status='queued' AND status='active')) AND (locked_at IS NULL OR locked_at<:stale) ORDER BY CASE WHEN nameserver_status='queued' THEN 0 ELSE 1 END,available_at,id LIMIT 1 FOR UPDATE");
             $pick->execute([':now'=>$now,':stale'=>gmdate('Y-m-d H:i:s',time()-900)]);
             $row=$pick->fetch(PDO::FETCH_ASSOC);
             if(!$row){$this->db->commit();echo json_encode(['ok'=>true,'processed'=>0,'message'=>'Bekleyen domain kaydı yok.']);return;}
-            $stage=(string)$row['status'];
-            $this->db->prepare("UPDATE domain_registrations SET status='processing',locked_at=:locked,attempts=attempts+1,updated_at=:updated WHERE id=:id")
-                ->execute([':locked'=>$now,':updated'=>$now,':id'=>$row['id']]);
+            $stage=(string)$row['status'];$nameserverOperation=($row['nameserver_status']??'')==='queued';
+            if($nameserverOperation)$this->db->prepare("UPDATE domain_registrations SET nameserver_status='processing',locked_at=:locked,updated_at=:updated WHERE id=:id")->execute([':locked'=>$now,':updated'=>$now,':id'=>$row['id']]);
+            else $this->db->prepare("UPDATE domain_registrations SET status='processing',locked_at=:locked,attempts=attempts+1,updated_at=:updated WHERE id=:id")->execute([':locked'=>$now,':updated'=>$now,':id'=>$row['id']]);
             $this->db->commit();
 
             $cfg=$this->load();
             if(($cfg['enabled']??'0')!=='1'||empty($cfg['api_key_enc'])||empty($cfg['user_id']))throw new \RuntimeException('Domain registrar bağlantısı etkin değil veya eksik.');
             $api=new ResellerClubClient((string)$cfg['user_id'],$this->vault->decrypt((string)$cfg['api_key_enc']),(string)($cfg['environment']??'sandbox'));
+            if($nameserverOperation){
+                if($stage!=='active'||empty($row['registrar_order_id'])||empty($row['pending_nameservers_enc']))throw new \\RuntimeException('Nameserver kuyruğu için aktif domain veya şifreli değişiklik bilgisi eksik.');
+                $servers=json_decode($this->vault->decrypt((string)$row['pending_nameservers_enc']),true,16,JSON_THROW_ON_ERROR);
+                if(!is_array($servers))throw new \\RuntimeException('Nameserver değişiklik bilgileri okunamadı.');
+                $remoteCallStarted=true;$result=$api->updateNameservers((string)$row['registrar_order_id'],$servers);
+                $saved=$this->vault->encrypt(json_encode($servers,JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR));
+                $this->db->prepare("UPDATE domain_registrations SET nameservers_enc=:saved,pending_nameservers_enc=NULL,nameserver_status='completed',nameserver_error=NULL,nameserver_updated_at=:now,locked_at=NULL,updated_at=:now WHERE id=:id")
+                    ->execute([':saved'=>$saved,':now'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
+                echo json_encode(['ok'=>true,'processed'=>1,'domain'=>$row['domain_name'],'nameservers'=>'completed','registrar_message'=>(string)($result['message']??'Nameserver değişikliği kabul edildi.')],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);return;
+            }
             if(in_array($stage,['queued','customer_created','contact_created'],true)){
                 $payload=json_decode($this->vault->decrypt((string)$row['registrar_payload_enc']),true,32,JSON_THROW_ON_ERROR);
                 if(!is_array($payload)||($stage!=='contact_created'&&(empty($payload['customer'])||empty($payload['contact']))))throw new \RuntimeException('Şifreli domain kayıt bilgileri okunamadı.');
@@ -229,9 +242,15 @@ final class DomainController
             if($this->db->inTransaction())$this->db->rollBack();
             error_log('[HostPilot] Domain registration worker: '.$e->getMessage());
             if($row){
-                $next=($remoteCallStarted||in_array($stage,['customer_created','contact_created','pending_remote'],true))?'needs_review':'failed';
-                $this->db->prepare("UPDATE domain_registrations SET status=:status,locked_at=NULL,last_error=:error,updated_at=:updated WHERE id=:id")
-                    ->execute([':status'=>$next,':error'=>substr($e->getMessage(),0,1000),':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
+                if($nameserverOperation){
+                    $nsNext=$remoteCallStarted?'needs_review':'failed';
+                    $this->db->prepare("UPDATE domain_registrations SET nameserver_status=:status,locked_at=NULL,nameserver_error=:error,nameserver_updated_at=:updated,updated_at=:updated WHERE id=:id")
+                        ->execute([':status'=>$nsNext,':error'=>substr($e->getMessage(),0,1000),':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
+                }else{
+                    $next=($remoteCallStarted||in_array($stage,['customer_created','contact_created','pending_remote'],true))?'needs_review':'failed';
+                    $this->db->prepare("UPDATE domain_registrations SET status=:status,locked_at=NULL,last_error=:error,updated_at=:updated WHERE id=:id")
+                        ->execute([':status'=>$next,':error'=>substr($e->getMessage(),0,1000),':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
+                }
             }
             http_response_code(500);echo json_encode(['ok'=>false,'error'=>'Domain kayıt işlemi tamamlanamadı; tekrarın güvenli olmadığı durumlarda manuel incelemeye alındı.'],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
         }
