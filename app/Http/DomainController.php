@@ -456,6 +456,79 @@ final class DomainController
         }
     }
 
+    /**
+     * Daily, read-only registrar synchronization. Each invocation is bounded to ten domains.
+     * GET requests are safe to retry; failures are recorded and retried after one hour.
+     */
+    public function runExpirySyncQueue():void
+    {
+        $provided='';
+        if(preg_match('/Bearer\\s+(.+)/i',(string)($_SERVER['HTTP_AUTHORIZATION']??''),$m))$provided=trim($m[1]);
+        if($provided===''&&isset($_GET['token']))$provided=(string)$_GET['token'];
+        $expected=hash_hmac('sha256','HostPilot domain sync cron v1',$this->applicationKey);
+        if($this->applicationKey===''||$provided===''||!hash_equals($expected,$provided)){http_response_code(403);echo 'Forbidden';return;}
+        header('Content-Type: application/json; charset=utf-8');
+        $stats=['synced'=>0,'failed'=>0,'skipped'=>0];
+        try{
+            $cfg=$this->load();
+            if(($cfg['enabled']??'0')!=='1'||empty($cfg['api_key_enc'])||empty($cfg['user_id']))throw new \\RuntimeException('Domain registrar bağlantısı etkin değil veya eksik.');
+            $api=new ResellerClubClient((string)$cfg['user_id'],$this->vault->decrypt((string)$cfg['api_key_enc']),(string)($cfg['environment']??'sandbox'));
+            for($n=0;$n<10;$n++){
+                $row=null;$now=gmdate('Y-m-d H:i:s');
+                $this->db->beginTransaction();
+                $this->db->prepare("UPDATE domain_registrations SET locked_at=NULL WHERE status='active' AND locked_at IS NOT NULL AND locked_at<:stale")->execute([':stale'=>gmdate('Y-m-d H:i:s',time()-900)]);
+                $pick=$this->db->prepare("SELECT id,domain_name,registrar_order_id FROM domain_registrations
+                    WHERE status='active' AND registrar_order_id IS NOT NULL AND registrar_order_id<>''
+                    AND (locked_at IS NULL)
+                    AND (registrar_sync_attempted_at IS NULL
+                      OR (registrar_sync_error IS NULL AND registrar_sync_attempted_at<=:daily)
+                      OR (registrar_sync_error IS NOT NULL AND registrar_sync_attempted_at<=:retry))
+                    ORDER BY COALESCE(registrar_sync_attempted_at,'1970-01-01 00:00:00'),id
+                    LIMIT 1 FOR UPDATE");
+                $pick->execute([':daily'=>gmdate('Y-m-d H:i:s',time()-86400),':retry'=>gmdate('Y-m-d H:i:s',time()-3600)]);
+                $row=$pick->fetch(PDO::FETCH_ASSOC);
+                if(!$row){$this->db->commit();break;}
+                $this->db->prepare('UPDATE domain_registrations SET locked_at=:now,registrar_sync_attempted_at=:attempted,updated_at=:updated WHERE id=:id')
+                    ->execute([':now'=>$now,':attempted'=>$now,':updated'=>$now,':id'=>$row['id']]);
+                $this->db->commit();
+                try{
+                    $details=$api->domainDetails((string)$row['registrar_order_id']);
+                    $expiryRaw=$details['expiryDate']??$details['endTime']??$details['domainEndTime']??null;
+                    $expiry=$this->parseRegistrarExpiry($expiryRaw);
+                    if($expiry===null)throw new \\RuntimeException('Registrar yanıtında doğrulanabilir son kullanma tarihi bulunamadı.');
+                    $autoRenew=array_key_exists('isAutoRenew',$details)?(filter_var($details['isAutoRenew'],FILTER_VALIDATE_BOOLEAN)?1:0):null;
+                    $synced=gmdate('Y-m-d H:i:s');
+                    $this->db->prepare('UPDATE domain_registrations SET expiry_date=:expiry,registrar_auto_renew=:auto_renew,registrar_synced_at=:synced,registrar_sync_error=NULL,locked_at=NULL,updated_at=:updated WHERE id=:id')
+                        ->execute([':expiry'=>$expiry,':auto_renew'=>$autoRenew,':synced'=>$synced,':updated'=>$synced,':id'=>$row['id']]);
+                    $stats['synced']++;
+                }catch(Throwable $e){
+                    $this->db->prepare('UPDATE domain_registrations SET registrar_sync_error=:error,locked_at=NULL,updated_at=:updated WHERE id=:id')
+                        ->execute([':error'=>substr($e->getMessage(),0,1000),':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
+                    $stats['failed']++;
+                    error_log('[HostPilot] Domain expiry sync failed for registration '.$row['id'].': '.$e->getMessage());
+                }
+            }
+            echo json_encode(['ok'=>true,'results'=>$stats,'limit'=>10],JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE);
+        }catch(Throwable $e){
+            error_log('[HostPilot] Domain expiry sync worker failed: '.$e->getMessage());
+            http_response_code(500);echo json_encode(['ok'=>false,'error'=>'Domain expiry synchronization failed.'],JSON_UNESCAPED_SLASHES);
+        }
+    }
+
+    private function parseRegistrarExpiry(mixed $value):?string
+    {
+        if(!is_scalar($value)||$value==='')return null;
+        if(is_numeric($value)){
+            $timestamp=(int)$value;
+            if($timestamp>9999999999)$timestamp=(int)floor($timestamp/1000);
+            if($timestamp<=0)return null;
+        }else{
+            $timestamp=strtotime((string)$value);
+            if($timestamp===false)return null;
+        }
+        return gmdate('Y-m-d H:i:s',$timestamp);
+    }
+
     private function load():array{$q=$this->db->query("SELECT setting_key,setting_value FROM settings WHERE setting_group='domain_registrar'");$out=[];foreach($q->fetchAll(PDO::FETCH_ASSOC) as $r)$out[$r['setting_key']]=$r['setting_value'];return $out;}
     private function admin():bool{$u=Auth::user();if(!$u){$this->go('/admin/login');return false;}if(!in_array($u['role']??'', ['super_admin','admin'],true)){http_response_code(403);echo 'Yetkisiz erişim.';return false;}return true;}
     private function page(string $title):void{echo '<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'.$this->e($title).' · HostPilot</title><style>body{margin:0;background:#0a1020;color:#e8edf7;font:14px system-ui}*{box-sizing:border-box}.layout{display:flex;min-height:100vh}.sidebar{width:235px;padding:24px 15px;background:#0e1729;border-right:1px solid #26354c}.brand{display:block;color:white;font-weight:900;text-decoration:none;padding:10px}.brand span{color:#7898ff}.nav-item{display:block;color:#aab7cc;padding:12px;text-decoration:none}.nav-item.active{background:#1b2a46;border-radius:8px}.main{flex:1;min-width:0;padding:0 28px 30px;max-width:1300px;margin:auto}.topbar{height:80px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #26354c}.topbar h1{font-size:21px}.panel{margin-top:22px;padding:24px;background:#111c2f;border:1px solid #26354c;border-radius:14px}.panel p{color:#9aabc2;line-height:1.6}.panel label{display:block;margin:14px 0;color:#c4d0e2}.panel input:not([type=checkbox]),.panel select{display:block;width:100%;margin-top:7px;padding:11px;background:#0b1425;color:#fff;border:1px solid #34445e;border-radius:8px}.panel button,.button{padding:12px 17px;background:#5278ed;color:white;border:0;border-radius:8px;font-weight:700;cursor:pointer;text-decoration:none}.panel hr{border:0;border-top:1px solid #26354c;margin:28px 0}.notice,.alert{padding:12px;border-radius:8px;margin:12px 0;background:#172f35;color:#a9f0d0}.alert{background:#4b202b;color:#ffc3ca}@media(max-width:700px){.sidebar{width:64px;flex:0 0 64px}.sidebar .brand{font-size:0}.sidebar .brand span{font-size:12px}.nav-item{font-size:0}.main{padding:0 12px 20px}}</style></head><body>';}
