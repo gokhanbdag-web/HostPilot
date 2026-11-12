@@ -43,3 +43,8 @@ Shared hosting / cPanel-compatible deployment, with PHP 8.3+ as the initial base
 License and commercial distribution terms are to be decided before the first public release.
 
 **Package-change integration status:** cPanel/WHM uses WHM API 1 `changepackage`; Plesk uses `webspace/switch-subscription` with both plan GUID and external ID. DirectAdmin package switching is disabled until the connected server's own OpenAPI contract is verified. Customer-facing upgrade and scheduled downgrade workflows are implemented for cPanel/WHM and Plesk; DirectAdmin remains disabled pending API verification.
+
+
+### Domain registrar (ResellerClub REST API v2)
+
+The first registrar integration provides a customer-side live domain availability lookup and an administrator configuration screen at `/admin/domains` (also `/admin/domains/registrar`). Configure the numeric ResellerClub User ID and API key, choose sandbox or live, and enable lookup. The API key is encrypted with the installation key. Requests use fixed official sandbox/live HTTPS hosts, API-key authorization headers, TLS peer/hostname verification, strict domain validation, timeouts, and bounded response sizes. Customer lookup is available at `/domains/search`. This first stage checks availability only; it does not create paid domain orders or register domains.
