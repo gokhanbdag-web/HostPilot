@@ -115,6 +115,7 @@ if ($requestPath === '/admin/automation/jobs/retry' && $method === 'POST') { $cr
 if ($requestPath === '/admin/automation/jobs/resolve' && $method === 'POST') { $cronController->resolveProvisioningJob(); exit; }
 if ($requestPath === '/cron/provision' && $method === 'GET') { $cronController->runProvisioning(); exit; }
 if ($requestPath === '/cron/email' && $method === 'GET') { $cronController->runEmailQueue(); exit; }
+if ($requestPath === '/cron/domains' && $method === 'GET') { $domains->runRegistrationQueue(); exit; }
 if ($requestPath === '/admin/services/provision' && $method === 'POST') { $serverController->provision(); exit; }
 if ($requestPath === '/admin/services/lifecycle' && $method === 'POST') { $serverController->lifecycle(); exit; }
 if ($requestPath === '/admin/services/terminate' && $method === 'POST') { $serverController->terminate(); exit; }
