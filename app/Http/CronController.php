@@ -51,7 +51,7 @@ final class CronController
         if($error!=='')echo '<p class="error">'.$this->e($error).'</p>';
         echo '<div class="box"><h2>Ödeme tolerans süresi</h2><p>Yenileme faturası, hizmetin sonraki vade tarihinde oluşturulur. Ödeme bu süre içinde tamamlanmazsa hizmet askıya alma kuyruğuna alınır.</p><form method="post"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><label>Vade sonrası tolerans (gün) <input type="number" name="billing_grace_days" min="1" max="30" value="'.$graceDays.'" required></label> <button type="submit">Ayarı kaydet</button></form></div>';
         echo '<div class="box"><h2>cPanel Cron Jobs</h2><p>Otomasyon; yenileme faturalarını oluşturur, vadesi geçmiş ve ödenmemiş faturalar için askıya alma işi açar, ödeme sonrası yeniden etkinleştirmeyi işler. Her çağrı en fazla bir kontrol paneli hesabı işlemi yapar.</p><p>Önerilen çalışma aralığı: dakikada bir.</p><pre>'.$this->e($command).'</pre><p>Komut kurulum anahtarından türetilen gizli erişim bilgisi içerir. Paylaşmayın. Uygulama anahtarı değişirse cron komutunu yeniden alın.</p></div><div class="box"><h2>Güvenlik</h2><p>Manuel yönetici askıya alması ile fatura nedeniyle askıya alma ayrı tutulur. Sistem yalnızca faturalandırma nedeniyle askıya aldığı hizmeti otomatik açabilir. Belirsiz uzak sunucu yanıtları yönetici incelemesine alınır.</p><p>Alan adı girilmeden hosting hesabı oluşturulmaz. Uygun sunucu ve ürün-paket eşleştirmesi gerekir.</p></div>';
-        $scheduledChanges=$this->db->query("SELECT c.id,c.effective_at,c.target_amount,c.currency,s.domain,fp.name AS from_name,tp.name AS to_name,u.email FROM service_package_changes c JOIN services s ON s.id=c.service_id JOIN products fp ON fp.id=c.from_product_id JOIN products tp ON tp.id=c.to_product_id JOIN users u ON u.id=s.user_id WHERE c.status='scheduled' AND c.invoice_id IS NULL ORDER BY c.effective_at,c.id LIMIT 100")->fetchAll();
+        $scheduledChanges=$this->db->query("SELECT c.id,c.effective_at,c.target_amount,c.currency,s.domain,fp.name AS from_name,tp.name AS to_name,u.email FROM service_package_changes c JOIN services s ON s.id=c.service_id JOIN products fp ON fp.id=c.from_product_id JOIN products tp ON tp.id=c.to_product_id JOIN users u ON u.id=s.user_id WHERE c.change_type='downgrade' AND c.status='scheduled' AND c.invoice_id IS NULL ORDER BY c.effective_at,c.id LIMIT 100")->fetchAll();
         echo '<div class="box"><h2>Planlanmış paket düşürmeleri</h2><p>Bu değişiklikler yenileme tarihinde otomatik kuyruğa alınır. Uygulama tamamlanana kadar eski paket üzerinden yenileme faturası oluşturulmaz.</p>';
         if(!$scheduledChanges)echo '<p>Planlanmış paket düşürme bulunmuyor.</p>';
         foreach($scheduledChanges as $change)echo '<article style="border-top:1px solid #2b3c56;padding:12px 0"><b>'.$this->e($change['from_name']).' → '.$this->e($change['to_name']).'</b><p>'.$this->e($change['email']).' · '.$this->e((string)($change['domain']??'Domain yok')).' · Uygulama tarihi: '.$this->e((string)$change['effective_at']).' · Yeni ücret: '.$this->e(number_format((float)$change['target_amount'],2,',','.')).' '.$this->e($change['currency']).'</p></article>';
@@ -420,7 +420,7 @@ final class CronController
     private function processPackageChangeJob(array $job,array $service,int $changeId,bool &$remoteCallStarted):void
     {
         $q=$this->db->prepare("SELECT * FROM service_package_changes WHERE id=:id AND service_id=:service LIMIT 1");$q->execute([':id'=>$changeId,':service'=>$service['id']]);$change=$q->fetch();
-        if(!$change||$change['status']!=='queued')throw new \RuntimeException('Paket değişikliği isteği sırada değil.');
+        if(!$change||$change['status']!=='queued'||!in_array($change['change_type'],['upgrade','downgrade'],true))throw new \RuntimeException('Paket değişikliği isteği sırada değil veya türü geçersiz.');
         $scheduled=$change['change_type']==='downgrade';
         $now=gmdate('Y-m-d H:i:s');
         if($scheduled){
@@ -436,7 +436,7 @@ final class CronController
         $sq=$this->db->prepare('SELECT * FROM servers WHERE id=:id AND enabled=1 LIMIT 1');$sq->execute([':id'=>$service['server_id']]);$server=$sq->fetch();
         if(!$server)throw new \RuntimeException('Hizmet sunucusu bulunamadı veya devre dışı.');
         if(!in_array($server['panel_type'],['cpanel','plesk'],true))throw new \RuntimeException('Bu sunucu panelinde paket değiştirme desteklenmiyor.');
-        if($server['panel_type']==='plesk'&&empty($change['target_package_guid'])||$server['panel_type']==='plesk'&&empty($change['target_package_external_id']))throw new \RuntimeException('Plesk plan kimlikleri eksik.');
+        if($server['panel_type']==='plesk'&&(empty($change['target_package_guid'])||empty($change['target_package_external_id'])))throw new \RuntimeException('Plesk plan kimlikleri eksik.');
         $server['secret']=$this->vault->decrypt((string)$server['secret_enc']);
         $config=['base_url'=>$server['base_url'],'username'=>$server['username'],'secret'=>$server['secret'],'auth_mode'=>$server['auth_mode'],'shared_ip'=>$server['shared_ip']];
         $adapter=match($server['panel_type']){'cpanel'=>new CpanelWhmAdapter($config),'plesk'=>new PleskXmlAdapter($config),default=>throw new \RuntimeException('Desteklenmeyen kontrol paneli.')};
