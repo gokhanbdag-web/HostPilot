@@ -65,12 +65,12 @@ final class DomainController
         if(!Auth::verifyCsrf($_POST['_token']??null)){http_response_code(419);echo 'Güvenlik doğrulaması başarısız.';return;}
         $id=(int)($_POST['domain_id']??0);$servers=preg_split('/[\\r\\n,;]+/',trim((string)($_POST['nameservers']??'')))?:[];$servers=array_values(array_unique(array_map(static fn($v)=>strtolower(trim((string)$v)),$servers)));
         try{
-            if(count($servers)<2||count($servers)>5)throw new \\RuntimeException('İki ile beş arasında nameserver girin.');
-            foreach($servers as $server)if(!preg_match('/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$/',$server))throw new \\RuntimeException('Nameserver biçimi geçersiz: '.$server);
+            if(count($servers)<2||count($servers)>5)throw new \RuntimeException('İki ile beş arasında nameserver girin.');
+            foreach($servers as $server)if(!preg_match('/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$/',$server))throw new \RuntimeException('Nameserver biçimi geçersiz: '.$server);
             $this->db->beginTransaction();
             $q=$this->db->prepare("SELECT * FROM domain_registrations WHERE id=:id AND user_id=:user FOR UPDATE");$q->execute([':id'=>$id,':user'=>$user['id']]);$row=$q->fetch(PDO::FETCH_ASSOC);
-            if(!$row||$row['status']!=='active'||empty($row['registrar_order_id']))throw new \\RuntimeException('Yalnızca aktif ve registrar orderId bilgisi bulunan domainlerde nameserver değiştirilebilir.');
-            if(in_array($row['nameserver_status']??'', ['queued','processing','needs_review'],true))throw new \\RuntimeException('Önceki nameserver işlemi tamamlanmalı veya destek ekibince incelenmeli.');
+            if(!$row||$row['status']!=='active'||empty($row['registrar_order_id']))throw new \RuntimeException('Yalnızca aktif ve registrar orderId bilgisi bulunan domainlerde nameserver değiştirilebilir.');
+            if(in_array($row['nameserver_status']??'', ['queued','processing','needs_review'],true))throw new \RuntimeException('Önceki nameserver işlemi tamamlanmalı veya destek ekibince incelenmeli.');
             $encrypted=$this->vault->encrypt(json_encode($servers,JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR));
             $this->db->prepare("UPDATE domain_registrations SET pending_nameservers_enc=:payload,nameserver_status='queued',nameserver_error=NULL,nameserver_updated_at=:now,updated_at=:now WHERE id=:id")->execute([':payload'=>$encrypted,':now'=>gmdate('Y-m-d H:i:s'),':id'=>$id]);
             $this->db->commit();$this->go('/client/domains','notice='.rawurlencode('Nameserver değişikliği güvenli işlem kuyruğuna alındı.'));
@@ -171,9 +171,9 @@ final class DomainController
             if(($cfg['enabled']??'0')!=='1'||empty($cfg['api_key_enc'])||empty($cfg['user_id']))throw new \RuntimeException('Domain registrar bağlantısı etkin değil veya eksik.');
             $api=new ResellerClubClient((string)$cfg['user_id'],$this->vault->decrypt((string)$cfg['api_key_enc']),(string)($cfg['environment']??'sandbox'));
             if($nameserverOperation){
-                if($stage!=='active'||empty($row['registrar_order_id'])||empty($row['pending_nameservers_enc']))throw new \\RuntimeException('Nameserver kuyruğu için aktif domain veya şifreli değişiklik bilgisi eksik.');
+                if($stage!=='active'||empty($row['registrar_order_id'])||empty($row['pending_nameservers_enc']))throw new \RuntimeException('Nameserver kuyruğu için aktif domain veya şifreli değişiklik bilgisi eksik.');
                 $servers=json_decode($this->vault->decrypt((string)$row['pending_nameservers_enc']),true,16,JSON_THROW_ON_ERROR);
-                if(!is_array($servers))throw new \\RuntimeException('Nameserver değişiklik bilgileri okunamadı.');
+                if(!is_array($servers))throw new \RuntimeException('Nameserver değişiklik bilgileri okunamadı.');
                 $remoteCallStarted=true;$result=$api->updateNameservers((string)$row['registrar_order_id'],$servers);
                 $saved=$this->vault->encrypt(json_encode($servers,JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR));
                 $this->db->prepare("UPDATE domain_registrations SET nameservers_enc=:saved,pending_nameservers_enc=NULL,nameserver_status='completed',nameserver_error=NULL,nameserver_updated_at=:now,locked_at=NULL,updated_at=:now WHERE id=:id")
