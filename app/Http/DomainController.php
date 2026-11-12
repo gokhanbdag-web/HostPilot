@@ -91,11 +91,11 @@ final class DomainController
             $api=new ResellerClubClient((string)$cfg['user_id'],$this->vault->decrypt((string)$cfg['api_key_enc']),(string)($cfg['environment']??'sandbox'));
             $details=$api->domainDetails((string)$row['registrar_order_id']);
             $expiryRaw=$details['expiryDate']??$details['endTime']??$details['domainEndTime']??null;
-            if(!is_numeric($expiryRaw)||(int)$expiryRaw<=0)throw new \RuntimeException('Registrar yanıtında doğrulanabilir son kullanma tarihi bulunamadı.');
-            $expiry=(new \DateTimeImmutable('@'.(int)$expiryRaw))->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+            $expiry=$this->parseRegistrarExpiry($expiryRaw);
+            if($expiry===null)throw new \RuntimeException('Registrar yanıtında doğrulanabilir son kullanma tarihi bulunamadı.');
             $autoRenew=array_key_exists('isAutoRenew',$details)?(filter_var($details['isAutoRenew'],FILTER_VALIDATE_BOOLEAN)?1:0):null;
             $now=gmdate('Y-m-d H:i:s');
-            $this->db->prepare('UPDATE domain_registrations SET expiry_date=:expiry,registrar_auto_renew=:auto_renew,registrar_synced_at=:synced,updated_at=:updated WHERE id=:id')
+            $this->db->prepare('UPDATE domain_registrations SET expiry_date=:expiry,registrar_auto_renew=:auto_renew,registrar_synced_at=:synced,registrar_sync_attempted_at=:synced,registrar_sync_error=NULL,updated_at=:updated WHERE id=:id')
                 ->execute([':expiry'=>$expiry,':auto_renew'=>$autoRenew,':synced'=>$now,':updated'=>$now,':id'=>$id]);
             $this->go('/client/domains','notice='.rawurlencode('Domain bitiş tarihi ve otomatik yenileme bilgisi registrar üzerinden güncellendi.'));
         }catch(Throwable $e){$this->go('/client/domains','error='.rawurlencode($e->getMessage()));}
@@ -476,10 +476,11 @@ final class DomainController
             for($n=0;$n<10;$n++){
                 $row=null;$now=gmdate('Y-m-d H:i:s');
                 $this->db->beginTransaction();
-                $this->db->prepare("UPDATE domain_registrations SET locked_at=NULL WHERE status='active' AND locked_at IS NOT NULL AND locked_at<:stale")->execute([':stale'=>gmdate('Y-m-d H:i:s',time()-900)]);
+                $this->db->prepare("UPDATE domain_registrations SET locked_at=NULL WHERE status='active' AND (nameserver_status IS NULL OR nameserver_status<>'processing') AND locked_at IS NOT NULL AND locked_at<:stale")->execute([':stale'=>gmdate('Y-m-d H:i:s',time()-900)]);
                 $pick=$this->db->prepare("SELECT id,domain_name,registrar_order_id FROM domain_registrations
                     WHERE status='active' AND registrar_order_id IS NOT NULL AND registrar_order_id<>''
                     AND (locked_at IS NULL)
+                    AND (nameserver_status IS NULL OR nameserver_status NOT IN ('queued','processing'))
                     AND (registrar_sync_attempted_at IS NULL
                       OR (registrar_sync_error IS NULL AND registrar_sync_attempted_at<=:daily)
                       OR (registrar_sync_error IS NOT NULL AND registrar_sync_attempted_at<=:retry))
