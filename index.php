@@ -104,6 +104,7 @@ if (in_array($requestPath, ['/admin/domains','/admin/domains/registrar'], true) 
 if ($requestPath === '/domains/search' && in_array($method, ['GET','POST'], true)) { $domains->search(); exit; }
 if ($requestPath === '/client/domains' && $method === 'GET') { $domains->myDomains(); exit; }
 if ($requestPath === '/client/domains/nameservers' && $method === 'POST') { $domains->requestNameservers(); exit; }
+if ($requestPath === '/client/domains/sync' && $method === 'POST') { $domains->syncDomainDetails(); exit; }
 if ($requestPath === '/admin/domains/orders' && $method === 'GET') { $domains->adminOrders(); exit; }
 if ($requestPath === '/admin/domains/reconcile' && $method === 'POST') { $domains->reconcileOrder(); exit; }
 if ($requestPath === '/admin/domains/nameservers/reconcile' && $method === 'POST') { $domains->reconcileNameservers(); exit; }
