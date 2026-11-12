@@ -2,6 +2,7 @@
 declare(strict_types=1);
 namespace HostPilot\Http;
 use HostPilot\Core\Auth;
+use HostPilot\Core\EmailService;
 use HostPilot\Core\SecretVault;
 use PDO;
 use Throwable;
@@ -9,7 +10,7 @@ use Throwable;
 final class ClientController
 {
     private SecretVault $vault;
-    public function __construct(private readonly PDO $db, private readonly string $basePath = '',string $appKey='') {$this->vault=new SecretVault($appKey);}
+    public function __construct(private readonly PDO $db, private readonly string $basePath = '',private readonly string $applicationKey='') {$this->vault=new SecretVault($this->applicationKey);}
 
     public function login(): void
     {
@@ -121,7 +122,7 @@ final class ClientController
         if($_SERVER['REQUEST_METHOD']==='POST'){$subject=trim((string)($_POST['subject']??''));$message=trim((string)($_POST['message']??''));$department=(string)($_POST['department']??'General Support');
             if(!Auth::verifyCsrf($_POST['_token']??null))$error='Güvenlik doğrulaması başarısız.';
             elseif($subject===''||strlen($subject)>570||strlen($message)<10||strlen($message)>36000)$error='Konu ve mesaj alanlarını kontrol edin.';
-            else{if(!in_array($department,['General Support','Billing','Technical Support','Sales'],true))$department='General Support';try{$this->db->beginTransaction();$now=gmdate('Y-m-d H:i:s');$no='HP'.gmdate('ymd').strtoupper(bin2hex(random_bytes(3)));$s=$this->db->prepare("INSERT INTO tickets(ticket_number,user_id,department,subject,priority,status,last_reply_at,created_at,updated_at) VALUES(:no,:uid,:d,:s,'normal','open',:reply,:created,:updated)");$s->execute([':no'=>$no,':uid'=>$u['id'],':d'=>$department,':s'=>$subject,':reply'=>$now,':created'=>$now,':updated'=>$now]);$id=(int)$this->db->lastInsertId();$m=$this->db->prepare('INSERT INTO ticket_messages(ticket_id,user_id,message,is_staff,created_at) VALUES(:t,:u,:m,0,:n)');$m->execute([':t'=>$id,':u'=>$u['id'],':m'=>$message,':n'=>$now]);$this->db->commit();$this->go('/client/tickets/'.$id);}catch(Throwable){if($this->db->inTransaction())$this->db->rollBack();$error='Talep kaydedilemedi.';}}
+            else{if(!in_array($department,['General Support','Billing','Technical Support','Sales'],true))$department='General Support';try{$this->db->beginTransaction();$now=gmdate('Y-m-d H:i:s');$no='HP'.gmdate('ymd').strtoupper(bin2hex(random_bytes(3)));$s=$this->db->prepare("INSERT INTO tickets(ticket_number,user_id,department,subject,priority,status,last_reply_at,created_at,updated_at) VALUES(:no,:uid,:d,:s,'normal','open',:reply,:created,:updated)");$s->execute([':no'=>$no,':uid'=>$u['id'],':d'=>$department,':s'=>$subject,':reply'=>$now,':created'=>$now,':updated'=>$now]);$id=(int)$this->db->lastInsertId();$m=$this->db->prepare('INSERT INTO ticket_messages(ticket_id,user_id,message,is_staff,created_at) VALUES(:t,:u,:m,0,:n)');$m->execute([':t'=>$id,':u'=>$u['id'],':m'=>$message,':n'=>$now]);$messageId=(int)$this->db->lastInsertId();$this->db->commit();$this->notifyTicketStaff($id,$no,$subject,'created',$messageId);$this->go('/client/tickets/'.$id);}catch(Throwable){if($this->db->inTransaction())$this->db->rollBack();$error='Talep kaydedilemedi.';}}
         }
         $this->shell($u,'Yeni destek talebi');$this->err($error);echo '<section class="panel formpanel"><h1>Yeni destek talebi</h1><form method="post"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><label>Konu<input name="subject" maxlength="190" required></label><label>Departman<select name="department"><option value="General Support">Genel destek</option><option value="Technical Support">Teknik destek</option><option value="Billing">Faturalandırma</option><option value="Sales">Satış</option></select></label><label>Mesaj<textarea name="message" rows="7" minlength="10" maxlength="12000" required></textarea></label><button class="button">Talebi gönder</button></form></section>';$this->shellEnd();
     }
@@ -129,11 +130,22 @@ final class ClientController
     public function viewTicket(int $id):void
     {
         $u=$this->customer();if(!$u)return;$s=$this->db->prepare('SELECT * FROM tickets WHERE id=:id AND user_id=:uid LIMIT 1');$s->execute([':id'=>$id,':uid'=>$u['id']]);$t=$s->fetch();if(!$t){http_response_code(404);echo 'Destek talebi bulunamadı.';return;}$error='';
-        if($_SERVER['REQUEST_METHOD']==='POST'){$msg=trim((string)($_POST['message']??''));if(!Auth::verifyCsrf($_POST['_token']??null))$error='Güvenlik doğrulaması başarısız.';elseif($msg===''||strlen($msg)>36000)$error='Mesaj alanını kontrol edin.';elseif(in_array($t['status'],['closed','cancelled'],true))$error='Kapatılmış talebe yanıt gönderilemez.';else{$now=gmdate('Y-m-d H:i:s');$m=$this->db->prepare('INSERT INTO ticket_messages(ticket_id,user_id,message,is_staff,created_at) VALUES(:t,:u,:m,0,:n)');$m->execute([':t'=>$id,':u'=>$u['id'],':m'=>$msg,':n'=>$now]);$this->db->prepare("UPDATE tickets SET status='customer_reply',last_reply_at=:reply,updated_at=:updated WHERE id=:id")->execute([':reply'=>$now,':updated'=>$now,':id'=>$id]);$this->go('/client/tickets/'.$id);}}
+        if($_SERVER['REQUEST_METHOD']==='POST'){$msg=trim((string)($_POST['message']??''));if(!Auth::verifyCsrf($_POST['_token']??null))$error='Güvenlik doğrulaması başarısız.';elseif($msg===''||strlen($msg)>36000)$error='Mesaj alanını kontrol edin.';elseif(in_array($t['status'],['closed','cancelled'],true))$error='Kapatılmış talebe yanıt gönderilemez.';else{$now=gmdate('Y-m-d H:i:s');$m=$this->db->prepare('INSERT INTO ticket_messages(ticket_id,user_id,message,is_staff,created_at) VALUES(:t,:u,:m,0,:n)');$m->execute([':t'=>$id,':u'=>$u['id'],':m'=>$msg,':n'=>$now]);$messageId=(int)$this->db->lastInsertId();$this->db->prepare("UPDATE tickets SET status='customer_reply',last_reply_at=:reply,updated_at=:updated WHERE id=:id")->execute([':reply'=>$now,':updated'=>$now,':id'=>$id]);$this->notifyTicketStaff($id,(string)$t['ticket_number'],(string)$t['subject'],'customer_reply',$messageId);$this->go('/client/tickets/'.$id);}}
         $m=$this->db->prepare('SELECT m.*,u.name FROM ticket_messages m JOIN users u ON u.id=m.user_id WHERE m.ticket_id=:id ORDER BY m.created_at');$m->execute([':id'=>$id]);$this->shell($u,'Destek talebi');echo '<section class="panel"><a class="back" href="'.$this->url('/client/tickets').'">← Taleplere dön</a><h1>#'.$this->e($t['ticket_number']).' · '.$this->e($t['subject']).'</h1><p>'.$this->e($this->status($t['status'])).' · '.$this->e($t['department']).'</p>';
         foreach($m->fetchAll() as $x)echo '<article class="message"><b>'.$this->e($x['name']).'</b> <small>'.($x['is_staff']?'Destek ekibi':'Müşteri').' · '.date('d.m.Y H:i',strtotime($x['created_at'])).'</small><p>'.nl2br($this->e($x['message'])).'</p></article>';$this->err($error);
         if(!in_array($t['status'],['closed','cancelled'],true))echo '<form method="post"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><label>Yanıtınız<textarea name="message" rows="5" maxlength="12000" required></textarea></label><button class="button">Yanıt gönder</button></form>';
         echo '</section>';$this->shellEnd();
+    }
+
+
+    private function notifyTicketStaff(int $ticketId,string $ticketNumber,string $subject,string $event,int $messageId):void
+    {
+        if($this->applicationKey==='')return;
+        try{
+            $q=$this->db->query("SELECT id,email FROM users WHERE role IN ('super_admin','admin','staff') AND status='active' AND email<>''");
+            $mail=new EmailService($this->db,$this->applicationKey);
+            foreach($q->fetchAll(PDO::FETCH_ASSOC) as $staff)$mail->queueTicketNotice((string)$staff['email'],$ticketNumber,$subject,$event,'ticket:'.$ticketId.':'.$event.':'.$messageId.':'.$staff['id']);
+        }catch(Throwable $e){error_log('[HostPilot] Ticket email queue: '.$e->getMessage());}
     }
 
     public function knowledgebase():void
