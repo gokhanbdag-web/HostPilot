@@ -471,7 +471,7 @@ final class DomainController
         $stats=['synced'=>0,'failed'=>0,'skipped'=>0];
         try{
             $cfg=$this->load();
-            if(($cfg['enabled']??'0')!=='1'||empty($cfg['api_key_enc'])||empty($cfg['user_id']))throw new \\RuntimeException('Domain registrar bağlantısı etkin değil veya eksik.');
+            if(($cfg['enabled']??'0')!=='1'||empty($cfg['api_key_enc'])||empty($cfg['user_id']))throw new \RuntimeException('Domain registrar bağlantısı etkin değil veya eksik.');
             $api=new ResellerClubClient((string)$cfg['user_id'],$this->vault->decrypt((string)$cfg['api_key_enc']),(string)($cfg['environment']??'sandbox'));
             for($n=0;$n<10;$n++){
                 $row=null;$now=gmdate('Y-m-d H:i:s');
@@ -496,7 +496,7 @@ final class DomainController
                     $details=$api->domainDetails((string)$row['registrar_order_id']);
                     $expiryRaw=$details['expiryDate']??$details['endTime']??$details['domainEndTime']??null;
                     $expiry=$this->parseRegistrarExpiry($expiryRaw);
-                    if($expiry===null)throw new \\RuntimeException('Registrar yanıtında doğrulanabilir son kullanma tarihi bulunamadı.');
+                    if($expiry===null)throw new \RuntimeException('Registrar yanıtında doğrulanabilir son kullanma tarihi bulunamadı.');
                     $autoRenew=array_key_exists('isAutoRenew',$details)?(filter_var($details['isAutoRenew'],FILTER_VALIDATE_BOOLEAN)?1:0):null;
                     $synced=gmdate('Y-m-d H:i:s');
                     $this->db->prepare('UPDATE domain_registrations SET expiry_date=:expiry,registrar_auto_renew=:auto_renew,registrar_synced_at=:synced,registrar_sync_error=NULL,locked_at=NULL,updated_at=:updated WHERE id=:id')
