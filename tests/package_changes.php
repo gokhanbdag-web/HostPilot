@@ -78,7 +78,7 @@ $checks=[
  'nameserver worker and admin reconciliation handle ambiguous outcomes'=>str_contains($domainController,'nameserverOperation')&&str_contains($domainController,'reconcileNameservers')&&str_contains($routes,"'/admin/domains/nameservers/reconcile'"),
  'versioned registrar expiry metadata migration'=>str_contains($schema,'20261112_0013_domain_expiry_sync')&&str_contains($schema,'expiry_date')&&str_contains($schema,'registrar_auto_renew'),
  'ResellerClub domain detail lookup uses official order endpoint'=>str_contains($domain,'domainDetails')&&str_contains($domain,"'/domains/'.$orderId.'?'")&&str_contains($domain,"'options'=>'OrderDetails,StatusDetails'"),
- 'customer expiry sync enforces ownership and active status'=>str_contains($domainController,'syncDomainDetails')&&str_contains($domainController,"WHERE id=:id AND user_id=:user")&&str_contains($domainController,"$row['status']!=='active'")&&str_contains($routes,"'/client/domains/sync'"),
+ 'customer expiry sync enforces ownership and active status'=>str_contains($domainController,'syncDomainDetails')&&str_contains($domainController,"WHERE id=:id AND user_id=:user")&&str_contains($domainController,"status']!=='active'")&&str_contains($routes,"'/client/domains/sync'"),
  'registrar expiry and auto-renew values are sourced and stored'=>str_contains($domainController,'expiryDate')&&str_contains($domainController,'isAutoRenew')&&str_contains($domainController,'registrar_synced_at'),
 
 ];
