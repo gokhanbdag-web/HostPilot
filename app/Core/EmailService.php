@@ -40,6 +40,20 @@ final class EmailService
 
 
 
+
+    public function queueTicketNotice(string $recipient,string $ticketNumber,string $ticketSubject,string $event,string $idempotencyKey):bool
+    {
+        $labels=['created'=>'Yeni destek talebi oluşturuldu','customer_reply'=>'Müşteriden yeni destek yanıtı','staff_reply'=>'Destek talebinize yanıt verildi'];
+        if(!isset($labels[$event])||!filter_var($recipient,FILTER_VALIDATE_EMAIL))return false;
+        $body="Destek talebi: ".$ticketNumber."\nKonu: ".$ticketSubject."\n\n";
+        $body.=match($event){
+            'created'=>'Yeni bir destek talebi açıldı. Yönetim panelinden inceleyebilirsiniz.',
+            'customer_reply'=>'Müşteri destek talebinize yeni bir yanıt gönderdi. Yönetim panelinden inceleyebilirsiniz.',
+            default=>'Destek ekibimiz talebinize yanıt verdi. Müşteri panelinizden görüntüleyebilirsiniz.',
+        };
+        return $this->queue($recipient,$labels[$event],$body,$idempotencyKey,'ticket_'.$event);
+    }
+
     public function queueInvoiceNotice(string $recipient,string $customerName,string $invoiceNumber,float $amount,string $currency,string $dueAt,string $event,int $invoiceId):bool
     {
         $labels=[
