@@ -115,7 +115,7 @@ final class DomainController
             $q->execute([':id'=>$id,':user'=>$user['id']]);$domain=$q->fetch(PDO::FETCH_ASSOC);
             if(!$domain||empty($domain['registrar_order_id'])||empty($domain['expiry_date'])||empty($domain['registrar_synced_at']))throw new \RuntimeException('Yenileme için önce aktif domainin registrar bitiş bilgilerini eşitleyin.');
             if(strtotime((string)$domain['expiry_date'])<=time())throw new \RuntimeException('Süresi dolmuş domain otomatik yenileme talebine uygun değil; destek ekibine başvurun.');
-            if(str_ends_with(strtolower((string)$domain['domain_name']),'.ai')&&$years!==2)throw new \\RuntimeException('ResellerClub .AI domainleri yalnızca 2 yıllık dönemle yenilenebilir.');
+            if(str_ends_with(strtolower((string)$domain['domain_name']),'.ai')&&$years!==2)throw new \RuntimeException('ResellerClub .AI domainleri yalnızca 2 yıllık dönemle yenilenebilir.');
             $pending=$this->db->prepare("SELECT COUNT(*) FROM domain_renewals WHERE domain_registration_id=:id AND status IN ('awaiting_payment','queued','processing','pending_remote','needs_review')");
             $pending->execute([':id'=>$id]);if((int)$pending->fetchColumn()>0)throw new \RuntimeException('Bu domain için zaten bekleyen bir yenileme işlemi var.');
             $price=$this->db->prepare("SELECT p.name,pp.price,pp.currency,pp.billing_cycle FROM products p JOIN product_pricing pp ON pp.product_id=p.id WHERE p.id=:product AND p.status='active' AND pp.billing_cycle=:cycle AND pp.is_active=1 LIMIT 1");
