@@ -24,6 +24,16 @@ $checks=[
  'worker checks paid invoice and original product'=>str_contains($worker,'bill')&&str_contains($worker,'from_product_id'),
  'ambiguous result goes to review'=>str_contains($worker,'needs_review')&&str_contains($worker,'service_package_changes'),
  'admin can reconcile package change'=>str_contains($worker,'remote_applied')&&str_contains($worker,'remote_not_applied'),
+ 'customer can select lower mapped packages'=>str_contains($client,'$lower=array_values')&&str_contains($client,"'Paketimi değiştir veya düşür'"),
+ 'downgrade is scheduled at service renewal date'=>str_contains($client,"'scheduled'")&&str_contains($client,"$effective=(string)$s['next_due_date'].' 00:00:00'"),
+ 'downgrade creates no immediate invoice'=>str_contains($client,"'scheduled',:effective")&&str_contains($client,"$this->db->commit();"),
+ 'billing queues due downgrades before renewal invoicing'=>str_contains($worker,"c.status='scheduled' AND c.invoice_id IS NULL")&&str_contains($worker,'Planlanmış paket düşürme'),
+ 'old-price renewal blocked while downgrade unresolved'=>str_contains($worker,"c.status IN ('scheduled','queued','processing','needs_review','failed')"),
+ 'scheduled downgrade worker does not require paid invoice'=>str_contains($worker,'$scheduled=$change[\'invoice_id\']===null')&&str_contains($worker,'Paket düşürme henüz yenileme tarihine ulaşmadı'),
+ 'scheduled downgrade must lower service price'=>str_contains($worker,'Faturasız planlı işlem yalnızca paket düşürme'),
+ 'admin can see scheduled downgrade queue'=>str_contains($worker,'Planlanmış paket düşürmeleri'),
+ 'customer sees scheduled downgrade and effective date'=>str_contains($portal,'Planlanan paket düşürme')&&str_contains($portal,'Uygulanma tarihi'),
+ 'scheduled downgrade supports manual remote reconciliation'=>str_contains($worker,'Planlanmış paket düşürme henüz yürürlük tarihine ulaşmadı')&&str_contains($worker,'remote_not_applied'),
 ];
 $failed=[];
 foreach($checks as $name=>$ok){echo ($ok?'PASS':'FAIL').' - '.$name.PHP_EOL;if(!$ok)$failed[]=$name;}
