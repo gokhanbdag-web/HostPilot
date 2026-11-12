@@ -94,10 +94,11 @@ final class ResellerClubClient
         return $domain;
     }
 
-    public function actionStatus(string $orderId):array
+    public function actionStatus(string $orderId,string $eaqId):array
     {
         if(!ctype_digit($orderId))throw new RuntimeException('Geçersiz registrar orderId.');
-        return $this->request('GET','/actions/search-current?'.http_build_query(['orderId'=>$orderId,'size'=>10,'page'=>1]));
+        if(!ctype_digit($eaqId))throw new RuntimeException('Geçersiz registrar action ID.');
+        return $this->request('GET','/actions/search-current?'.http_build_query(['orderId'=>$orderId,'eaqId'=>$eaqId,'size'=>10,'page'=>1]));
     }
 
     private function request(string $method,string $path,?array $payload=null):array
