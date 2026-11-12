@@ -100,10 +100,10 @@ final class CronController
                 if($service['status']!=='pending'||empty($service['domain']))throw new \RuntimeException('Hizmet veya alan adı yeniden denemeye uygun değil.');
                 $this->db->prepare("UPDATE services SET provisioning_status='queued',provisioning_error=NULL,updated_at=:updated WHERE id=:id")->execute([':updated'=>$now,':id'=>$service['id']]);
             }elseif(preg_match('/^package_([0-9]+)$/',(string)$job['job_type'],$packageRetry)){
-                $change=$this->db->prepare("SELECT id,status,invoice_id,target_amount,effective_at FROM service_package_changes WHERE id=:id AND service_id=:service FOR UPDATE");$change->execute([':id'=>(int)$packageRetry[1],':service'=>$service['id']]);$request=$change->fetch();
+                $change=$this->db->prepare("SELECT id,status,invoice_id,target_amount,effective_at,from_product_id FROM service_package_changes WHERE id=:id AND service_id=:service FOR UPDATE");$change->execute([':id'=>(int)$packageRetry[1],':service'=>$service['id']]);$request=$change->fetch();
                 if(!$request||$request['status']!=='failed')throw new \RuntimeException('Paket değişikliği işi güvenli yeniden denemeye uygun değil.');
                 if($request['invoice_id']===null){
-                    if((float)$request['target_amount']>=(float)$service['amount']||$request['effective_at']>=$now||$service['status']!=='active'||(int)$service['product_id']<1)throw new \RuntimeException('Planlanmış paket düşürme henüz güvenli yeniden deneme koşullarını karşılamıyor.');
+                    if((float)$request['target_amount']>=(float)$service['amount']||$request['effective_at']>=$now||$service['status']!=='active'||(int)$service['product_id']!==(int)$request['from_product_id'])throw new \RuntimeException('Planlanmış paket düşürme henüz güvenli yeniden deneme koşullarını karşılamıyor.');
                 }else{
                     $paid=$this->db->prepare("SELECT status,total,amount_paid FROM invoices WHERE id=:id");$paid->execute([':id'=>$request['invoice_id']]);$bill=$paid->fetch();
                     if(!$bill||$bill['status']!=='paid'||(float)$bill['amount_paid']+0.005<(float)$bill['total'])throw new \RuntimeException('Paket yükseltme faturası tamamen ödenmiş değil.');
@@ -155,7 +155,7 @@ final class CronController
                 if(!$change||$change['status']!=='needs_review')throw new \RuntimeException('Paket değişikliği inceleme kaydı bulunamadı.');
                 $scheduled=$change['invoice_id']===null;
                 if($scheduled){
-                    if((float)$change['target_amount']>=(float)$service['amount']||$change['effective_at']>$now||empty($service['next_due_date'])||$service['next_due_date']>$today=gmdate('Y-m-d'))throw new \RuntimeException('Planlanmış paket düşürme henüz yürürlük tarihine ulaşmadı veya tutarsız.');
+                    if((float)$change['target_amount']>=(float)$service['amount']||$change['effective_at']>$now||empty($service['next_due_date'])||$service['next_due_date']>gmdate('Y-m-d'))throw new \RuntimeException('Planlanmış paket düşürme henüz yürürlük tarihine ulaşmadı veya tutarsız.');
                 }else{
                     $invoiceQuery=$this->db->prepare('SELECT status,total,amount_paid FROM invoices WHERE id=:id');$invoiceQuery->execute([':id'=>$change['invoice_id']]);$bill=$invoiceQuery->fetch();
                     if(!$bill||$bill['status']!=='paid'||(float)$bill['amount_paid']+0.005<(float)$bill['total'])throw new \RuntimeException('Paket yükseltme faturası tamamen ödenmiş değil.');
