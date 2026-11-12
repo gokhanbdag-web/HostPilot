@@ -58,6 +58,30 @@ final class DomainController
         echo '</section></main></body></html>';
     }
 
+    public function myDomains():void
+    {
+        $user=Auth::user();if(!$user){$this->go('/client/login');return;}if(($user['role']??'')!=='customer'){http_response_code(403);echo 'Müşteri hesabı gerekli.';return;}
+        $q=$this->db->prepare('SELECT d.*,i.invoice_number,i.status AS invoice_status FROM domain_registrations d JOIN invoices i ON i.id=d.invoice_id WHERE d.user_id=:user ORDER BY d.created_at DESC');
+        $q->execute([':user'=>$user['id']]);$rows=$q->fetchAll(PDO::FETCH_ASSOC);
+        $labels=['awaiting_payment'=>'Ödeme bekleniyor','queued'=>'Kayıt kuyruğunda','processing'=>'İşleniyor','customer_created'=>'Registrar müşteri kaydı açıldı','contact_created'=>'Alan adı iletişim kaydı açıldı','pending_remote'=>'Registrar kayıt işlemi sürüyor','active'=>'Aktif','failed'=>'Başarısız','needs_review'=>'Yönetici incelemesi gerekli','cancelled'=>'İptal edildi'];
+        echo '<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Domainlerim · HostPilot</title><style>body{margin:0;background:#0a1020;color:#e8edf7;font:15px system-ui}main{max-width:1000px;margin:30px auto;padding:20px}.panel{background:#111c2f;border:1px solid #26354c;border-radius:14px;padding:22px;margin-top:20px}.muted,small{color:#9aabc2}.item{padding:16px 0;border-bottom:1px solid #26354c}.item:last-child{border:0}a{color:#9eb7fa}</style></head><body><main><a href="'.$this->url('/client').'">← Müşteri paneli</a><section class="panel"><h1>Domainlerim</h1><p class="muted">Satın aldığınız alan adlarının ödeme ve registrar kayıt durumları.</p>';
+        if(!$rows)echo '<p>Henüz domain siparişiniz bulunmuyor. <a href="'.$this->url('/domains/search').'">Alan adı sorgulayın.</a></p>';
+        foreach($rows as $row){$status=$labels[$row['status']]??(string)$row['status'];echo '<article class="item"><h2>'.$this->e((string)$row['domain_name']).'</h2><b>'.$this->e($status).'</b><p class="muted">'.$this->e((string)$row['years']).' yıl · Fatura #'.$this->e((string)$row['invoice_number']).' · Fatura: '.$this->e((string)$row['invoice_status']).'</p>';if(!empty($row['action_message']))echo '<p>'.$this->e((string)$row['action_message']).'</p>';if($row['status']==='needs_review'||$row['status']==='failed')echo '<p>İşlem destek ekibinin kontrolüne alındı. Yinelenen kayıt oluşturmamak için otomatik yeniden gönderim yapılmayacak.</p>';echo '</article>';}
+        echo '</section></main></body></html>';
+    }
+
+    public function adminOrders():void
+    {
+        if(!$this->admin())return;
+        $rows=$this->db->query('SELECT d.*,u.name,u.email,i.invoice_number,i.status AS invoice_status FROM domain_registrations d JOIN users u ON u.id=d.user_id JOIN invoices i ON i.id=d.invoice_id ORDER BY d.created_at DESC LIMIT 300')->fetchAll(PDO::FETCH_ASSOC);
+        $labels=['awaiting_payment'=>'Ödeme bekleniyor','queued'=>'Kuyrukta','processing'=>'İşleniyor','customer_created'=>'Müşteri kaydı','contact_created'=>'İletişim kaydı','pending_remote'=>'Registrar bekleniyor','active'=>'Aktif','failed'=>'Başarısız','needs_review'=>'İnceleme gerekli','cancelled'=>'İptal'];
+        $this->page('Domain siparişleri');
+        echo '<div class="layout"><aside class="sidebar"><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a class="nav-item" href="'.$this->url('/admin/domains/registrar').'">Registrar ayarları</a><a class="nav-item active" href="'.$this->url('/admin/domains/orders').'">Domain siparişleri</a></aside><main class="main"><header class="topbar"><div><small>DOMAIN / SİPARİŞLER</small><h1>Domain kayıt kuyruğu</h1></div><a href="'.$this->url('/admin/domains/registrar').'">Registrar ayarları</a></header><article class="panel"><p>Belirsiz registrar yanıtları otomatik tekrar gönderilmez; manuel doğrulama gerektirir.</p>';
+        if(!$rows)echo '<p>Henüz domain siparişi yok.</p>';
+        foreach($rows as $row)echo '<div style="padding:14px 0;border-bottom:1px solid #26354c"><b>'.$this->e((string)$row['domain_name']).'</b> · '.$this->e($labels[$row['status']]??(string)$row['status']).'<p>'.$this->e((string)$row['name']).' · '.$this->e((string)$row['email']).' · #'.$this->e((string)$row['invoice_number']).' · '.$this->e((string)$row['invoice_status']).'</p><small>Registrar order: '.$this->e((string)($row['registrar_order_id']??'—')).' · Action: '.$this->e((string)($row['action_status']??'—')).'</small>'.(!empty($row['last_error'])?'<p class="alert">'.$this->e((string)$row['last_error']).'</p>':'').'</div>';
+        echo '</article></main></div>';$this->end();
+    }
+
     public function runRegistrationQueue():void
     {
         $provided='';
