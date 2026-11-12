@@ -37,7 +37,7 @@ $checks=[
  'customer sees scheduled downgrade and effective date'=>str_contains($portal,'Planlanan paket düşürme')&&str_contains($portal,'Uygulanma tarihi'),
  'scheduled downgrade supports manual remote reconciliation'=>str_contains($worker,'Planlanmış paket düşürme henüz yürürlük tarihine ulaşmadı')&&str_contains($worker,'remote_not_applied'),
  'customer can cancel a scheduled downgrade'=>str_contains($client,'public function cancelScheduled')&&str_contains($client,"SET status='cancelled'")&&str_contains($routes,"'/client/services/change/cancel'"),
- 'cancellation is limited to future scheduled downgrades'=>str_contains($client,"$change['status']!=='scheduled'")&&str_contains($client,"$change['effective_at']<=gmdate"),
+ 'cancellation is limited to future scheduled downgrades'=>str_contains($client,'$change[\'status\']!==\'scheduled\'')&&str_contains($client,'$change[\'effective_at\']<=gmdate'),
  'customer portal displays downgrade cancellation control'=>str_contains($portal,'Paket düşürme talebini iptal et')&&str_contains($portal,'change_id'),
  'SMTP sender uses TLS verification and encrypted credentials'=>str_contains($email,'SecretVault')&&str_contains($email,'verify_peer_name')&&str_contains($email,'stream_socket_enable_crypto'),
  'SMTP credentials configured from admin screen'=>str_contains($emailSettings,'password_enc')&&str_contains($emailSettings,'/admin/settings')&&str_contains($routes,'EmailSettingsController'),
