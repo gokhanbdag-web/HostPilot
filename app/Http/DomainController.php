@@ -70,6 +70,8 @@ final class DomainController
         try{
             $now=gmdate('Y-m-d H:i:s');
             $this->db->beginTransaction();
+            $this->db->prepare("UPDATE domain_registrations SET status='needs_review',locked_at=NULL,last_error='Worker yanıtı zaman aşımına uğradı; registrar tarafındaki son durum doğrulanmalı.',updated_at=:now WHERE status='processing' AND locked_at IS NOT NULL AND locked_at<:cutoff")
+                ->execute([':now'=>$now,':cutoff'=>gmdate('Y-m-d H:i:s',time()-900)]);
             $pick=$this->db->prepare("SELECT * FROM domain_registrations WHERE status IN ('queued','customer_created','contact_created','pending_remote') AND available_at<=:now AND (locked_at IS NULL OR locked_at<:stale) ORDER BY available_at,id LIMIT 1 FOR UPDATE");
             $pick->execute([':now'=>$now,':stale'=>gmdate('Y-m-d H:i:s',time()-900)]);
             $row=$pick->fetch(PDO::FETCH_ASSOC);
