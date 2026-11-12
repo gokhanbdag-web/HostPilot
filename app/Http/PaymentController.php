@@ -249,6 +249,8 @@ final class PaymentController
                 }
                 $domainQueue=$this->db->prepare("UPDATE domain_registrations SET status='queued',available_at=:available,updated_at=:updated WHERE invoice_id=:invoice AND status='awaiting_payment'");
                 $domainQueue->execute([':available'=>$now,':updated'=>$now,':invoice'=>$invoice['id']]);
+                $renewalQueue=$this->db->prepare("UPDATE domain_renewals SET status='queued',available_at=:available,updated_at=:updated WHERE invoice_id=:invoice AND status='awaiting_payment'");
+                $renewalQueue->execute([':available'=>$now,':updated'=>$now,':invoice'=>$invoice['id']]);
                 $changeQuery=$this->db->prepare("SELECT * FROM service_package_changes WHERE invoice_id=:invoice AND status='pending_payment' FOR UPDATE");
                 $changeQuery->execute([':invoice'=>$invoice['id']]);$packageChange=$changeQuery->fetch();
                 if($packageChange){
