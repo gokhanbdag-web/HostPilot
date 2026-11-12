@@ -8,6 +8,7 @@ $payment=file_get_contents(__DIR__.'/../app/Http/PaymentController.php');
 $worker=file_get_contents(__DIR__.'/../app/Http/CronController.php');
 $routes=file_get_contents(__DIR__.'/../index.php');
 $portal=file_get_contents(__DIR__.'/../app/Http/ClientController.php');
+$admin=file_get_contents(__DIR__.'/../app/Http/AdminController.php');
 $checks=[
  'versioned package change migrations'=>str_contains($schema,'20261112_0008_service_package_changes')&&str_contains($schema,'20261112_0009_service_package_change_type')&&str_contains($schema,'change_type VARCHAR(16)'),
  'customer ownership enforced'=>str_contains($client,'s.user_id=:user FOR UPDATE'),
@@ -53,6 +54,8 @@ $checks=[
  'renewal invoice notification queued transactionally'=>str_contains($worker,'queueInvoiceNotice')&&str_contains($worker,'o.currency AS currency'),
  'verified invoice payment notification queued'=>str_contains($payment,'queueInvoiceNotice')&&str_contains($payment,"'paid'"),
  'hosting provisioning and billing lifecycle notices queued'=>str_contains($worker,"'provisioned'")&&str_contains($worker,"'suspended'")&&str_contains($worker,"'reactivated'"),
+ 'customer ticket creation and replies notify support staff'=>str_contains($portal,'notifyTicketStaff')&&str_contains($portal,"'created'")&&str_contains($portal,"'customer_reply'"),
+ 'staff ticket replies notify the customer'=>str_contains($admin,'queueTicketNotice')&&str_contains($admin,"'staff_reply'")&&str_contains($admin,'applicationKey'),
 
 ];
 $failed=[];
