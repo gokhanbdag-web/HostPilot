@@ -7,6 +7,8 @@ $client=file_get_contents(__DIR__.'/../app/Http/PackageChangeController.php');
 $payment=file_get_contents(__DIR__.'/../app/Http/PaymentController.php');
 $worker=file_get_contents(__DIR__.'/../app/Http/CronController.php');
 $routes=file_get_contents(__DIR__.'/../index.php');
+$domain=file_get_contents(__DIR__.'/../app/Core/ResellerClubClient.php');
+$domainController=file_get_contents(__DIR__.'/../app/Http/DomainController.php');
 $portal=file_get_contents(__DIR__.'/../app/Http/ClientController.php');
 $admin=file_get_contents(__DIR__.'/../app/Http/AdminController.php');
 $checks=[
@@ -58,6 +60,9 @@ $checks=[
  'staff ticket replies notify the customer'=>str_contains($admin,'queueTicketNotice')&&str_contains($admin,"'staff_reply'")&&str_contains($admin,'applicationKey'),
  'overdue invoice notifications are queued'=>str_contains($worker,"'overdue'")&&str_contains($worker,'queueInvoiceNotice'),
  'failed payment notifications are queued idempotently'=>str_contains($payment,"'failed',$id")&&str_contains($email,"'payment-failed:'"),
+ 'ResellerClub REST API uses fixed sandbox/live hosts and TLS verification'=>str_contains($domain,'api.sandbox.resellerclub.com/v2')&&str_contains($domain,'api.resellerclub.com/v2')&&str_contains($domain,'verify_peer_name'),
+ 'ResellerClub API key is encrypted in admin settings'=>str_contains($domainController,'SecretVault')&&str_contains($domainController,'api_key_enc')&&str_contains($routes,"'/admin/domains/registrar'"),
+ 'customer can check live domain availability'=>str_contains($domain,"'/domains/available?")&&str_contains($domainController,'checkAvailability')&&str_contains($routes,"'/domains/search'"),
 
 ];
 $failed=[];
