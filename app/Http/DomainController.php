@@ -338,6 +338,52 @@ final class DomainController
         }
     }
 
+    public function runRenewalQueue():void
+    {
+        $provided='';if(preg_match('/Bearer\\s+(.+)/i',(string)($_SERVER['HTTP_AUTHORIZATION']??''),$m))$provided=trim($m[1]);if($provided===''&&isset($_GET['token']))$provided=(string)$_GET['token'];
+        $expected=hash_hmac('sha256','HostPilot domain cron v1',$this->applicationKey);
+        if($this->applicationKey===''||$provided===''||!hash_equals($expected,$provided)){http_response_code(403);echo 'Forbidden';return;}
+        header('Content-Type: application/json; charset=utf-8');$row=null;$remoteCallStarted=false;$stage='';
+        try{
+            $now=gmdate('Y-m-d H:i:s');$this->db->beginTransaction();
+            $this->db->prepare("UPDATE domain_renewals SET status='needs_review',locked_at=NULL,last_error='Yenileme worker zaman aşımına uğradı; registrar tarafı doğrulanmalı.',updated_at=:now WHERE status='processing' AND locked_at IS NOT NULL AND locked_at<:cutoff")->execute([':now'=>$now,':cutoff'=>gmdate('Y-m-d H:i:s',time()-900)]);
+            $q=$this->db->prepare("SELECT r.*,i.status AS invoice_status,d.expiry_date AS current_expiry FROM domain_renewals r JOIN invoices i ON i.id=r.invoice_id JOIN domain_registrations d ON d.id=r.domain_registration_id WHERE r.status IN ('queued','pending_remote') AND r.available_at<=:now AND (r.locked_at IS NULL OR r.locked_at<:stale) ORDER BY r.id LIMIT 1 FOR UPDATE");
+            $q->execute([':now'=>$now,':stale'=>gmdate('Y-m-d H:i:s',time()-900)]);$row=$q->fetch(PDO::FETCH_ASSOC);
+            if(!$row){$this->db->commit();echo json_encode(['ok'=>true,'processed'=>0]);return;}
+            $stage=(string)$row['status'];
+            if($row['invoice_status']!=='paid')throw new \RuntimeException('Domain yenileme faturası tamamen ödenmemiş.');
+            if($row['current_expiry']===null||strtotime((string)$row['current_expiry'])!==strtotime((string)$row['expiry_before']))throw new \RuntimeException('Domain bitiş tarihi yenileme talebinden sonra değişmiş; mükerrer yenileme riski nedeniyle inceleme gerekli.');
+            $this->db->prepare("UPDATE domain_renewals SET status='processing',locked_at=:now,updated_at=:now WHERE id=:id")->execute([':now'=>$now,':id'=>$row['id']]);$this->db->commit();
+            $cfg=$this->load();if(($cfg['enabled']??'0')!=='1'||empty($cfg['api_key_enc'])||empty($cfg['user_id']))throw new \RuntimeException('Domain registrar bağlantısı etkin değil veya eksik.');
+            $api=new ResellerClubClient((string)$cfg['user_id'],$this->vault->decrypt((string)$cfg['api_key_enc']),(string)($cfg['environment']??'sandbox'));
+            if($stage==='queued'){
+                $expiryTimestamp=strtotime((string)$row['expiry_before'].' UTC');if(!$expiryTimestamp||$expiryTimestamp<=time())throw new \RuntimeException('Domain bitiş tarihi geçmiş veya geçersiz; otomatik yenileme yapılamaz.');
+                $remoteCallStarted=true;$result=$api->renewDomain((string)$row['registrar_order_id'],(int)$row['years'],$expiryTimestamp,false);
+                $this->db->prepare("UPDATE domain_renewals SET status='pending_remote',action_status=:action,last_error=NULL,locked_at=NULL,available_at=:next,updated_at=:now WHERE id=:id")
+                    ->execute([':action'=>(string)($result['actionId']??$result['status']??'Submitted'),':next'=>gmdate('Y-m-d H:i:s',time()+120),':now'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
+                echo json_encode(['ok'=>true,'processed'=>1,'renewal'=>'submitted','message'=>'Registrar yenileme isteği gönderildi; sonuç takip edilecek.']);return;
+            }
+            $remoteCallStarted=true;$statusData=$api->actionStatus((string)$row['registrar_order_id']);$actions=$statusData['actions']??[];$action=is_array($actions)&&isset($actions[0])&&is_array($actions[0])?$actions[0]:null;
+            $actionStatus=(string)($action['actionStatus']??'');$message=substr((string)($action['actionStatusDesc']??$action['message']??''),0,500);
+            if(strcasecmp($actionStatus,'Completed')===0){
+                $details=$api->domainDetails((string)$row['registrar_order_id']);$raw=$details['expiryDate']??$details['endTime']??$details['domainEndTime']??null;
+                if(!is_numeric($raw)||(int)$raw<=strtotime((string)$row['expiry_before'].' UTC'))throw new \RuntimeException('Registrar yenileme tamamlandı ancak yeni bitiş tarihi doğrulanamadı.');
+                $expiry=(new \DateTimeImmutable('@'.(int)$raw))->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s');$now=gmdate('Y-m-d H:i:s');
+                $this->db->beginTransaction();
+                $this->db->prepare("UPDATE domain_renewals SET status='completed',action_status=:action,renewed_expiry=:expiry,last_error=NULL,locked_at=NULL,updated_at=:now WHERE id=:id")->execute([':action'=>$actionStatus,':expiry'=>$expiry,':now'=>$now,':id'=>$row['id']]);
+                $this->db->prepare("UPDATE domain_registrations SET expiry_date=:expiry,registrar_synced_at=:now,updated_at=:now WHERE id=:id")->execute([':expiry'=>$expiry,':now'=>$now,':id'=>$row['domain_registration_id']]);
+                $this->db->commit();echo json_encode(['ok'=>true,'processed'=>1,'renewal'=>'completed','expiry'=>$expiry]);return;
+            }
+            if(strcasecmp($actionStatus,'Failed')===0){$this->db->prepare("UPDATE domain_renewals SET status='failed',action_status=:action,last_error=:error,locked_at=NULL,updated_at=:now WHERE id=:id")->execute([':action'=>$actionStatus,':error'=>$message?:'Registrar yenileme işlemini başarısız bildirdi.',' :now'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);echo json_encode(['ok'=>true,'processed'=>1,'renewal'=>'failed']);return;}
+            $this->db->prepare("UPDATE domain_renewals SET status='pending_remote',action_status=:action,last_error=:error,locked_at=NULL,available_at=:next,updated_at=:now WHERE id=:id")->execute([':action'=>$actionStatus?:'Pending',':error'=>$message?:null,':next'=>gmdate('Y-m-d H:i:s',time()+180),':now'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
+            echo json_encode(['ok'=>true,'processed'=>1,'renewal'=>'pending_remote','action_status'=>$actionStatus]);
+        }catch(Throwable $e){
+            if($this->db->inTransaction())$this->db->rollBack();error_log('[HostPilot] Domain renewal worker: '.$e->getMessage());
+            if($row){$status=$remoteCallStarted?'needs_review':'failed';$this->db->prepare("UPDATE domain_renewals SET status=:status,last_error=:error,locked_at=NULL,updated_at=:now WHERE id=:id")->execute([':status'=>$status,':error'=>substr($e->getMessage(),0,1000),':now'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);}
+            http_response_code(500);echo json_encode(['ok'=>false,'error'=>'Domain yenileme işlemi tamamlanamadı; belirsiz registrar yanıtı otomatik tekrarlanmayacak.']);
+        }
+    }
+
     private function load():array{$q=$this->db->query("SELECT setting_key,setting_value FROM settings WHERE setting_group='domain_registrar'");$out=[];foreach($q->fetchAll(PDO::FETCH_ASSOC) as $r)$out[$r['setting_key']]=$r['setting_value'];return $out;}
     private function admin():bool{$u=Auth::user();if(!$u){$this->go('/admin/login');return false;}if(!in_array($u['role']??'', ['super_admin','admin'],true)){http_response_code(403);echo 'Yetkisiz erişim.';return false;}return true;}
     private function page(string $title):void{echo '<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'.$this->e($title).' · HostPilot</title><style>body{margin:0;background:#0a1020;color:#e8edf7;font:14px system-ui}*{box-sizing:border-box}.layout{display:flex;min-height:100vh}.sidebar{width:235px;padding:24px 15px;background:#0e1729;border-right:1px solid #26354c}.brand{display:block;color:white;font-weight:900;text-decoration:none;padding:10px}.brand span{color:#7898ff}.nav-item{display:block;color:#aab7cc;padding:12px;text-decoration:none}.nav-item.active{background:#1b2a46;border-radius:8px}.main{flex:1;min-width:0;padding:0 28px 30px;max-width:1300px;margin:auto}.topbar{height:80px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #26354c}.topbar h1{font-size:21px}.panel{margin-top:22px;padding:24px;background:#111c2f;border:1px solid #26354c;border-radius:14px}.panel p{color:#9aabc2;line-height:1.6}.panel label{display:block;margin:14px 0;color:#c4d0e2}.panel input:not([type=checkbox]),.panel select{display:block;width:100%;margin-top:7px;padding:11px;background:#0b1425;color:#fff;border:1px solid #34445e;border-radius:8px}.panel button,.button{padding:12px 17px;background:#5278ed;color:white;border:0;border-radius:8px;font-weight:700;cursor:pointer;text-decoration:none}.panel hr{border:0;border-top:1px solid #26354c;margin:28px 0}.notice,.alert{padding:12px;border-radius:8px;margin:12px 0;background:#172f35;color:#a9f0d0}.alert{background:#4b202b;color:#ffc3ca}@media(max-width:700px){.sidebar{width:64px;flex:0 0 64px}.sidebar .brand{font-size:0}.sidebar .brand span{font-size:12px}.nav-item{font-size:0}.main{padding:0 12px 20px}}</style></head><body>';}
