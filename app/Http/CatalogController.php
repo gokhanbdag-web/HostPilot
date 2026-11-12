@@ -2,12 +2,13 @@
 declare(strict_types=1);
 namespace HostPilot\Http;
 use HostPilot\Core\Auth;
+use HostPilot\Core\SecretVault;
 use PDO;
 use Throwable;
 
 final class CatalogController
 {
-    public function __construct(private readonly PDO $db, private readonly string $basePath='') {}
+    public function __construct(private readonly PDO $db, private readonly string $basePath='',private readonly string $applicationKey='') {}
 
     public function storefront():void
     {
