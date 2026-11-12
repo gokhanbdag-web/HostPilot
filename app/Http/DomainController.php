@@ -164,7 +164,7 @@ final class DomainController
         if(!in_array($expiry,['expired','30','90','no_date'],true))$expiry='';
         if(!in_array($sort,['newest','expiry_asc','expiry_desc'],true))$sort='newest';
         $page=max(1,(int)($_GET['page']??1));$perPage=25;$where=[];$params=[];
-        if($search!==''){$where[]='(d.domain_name LIKE :q OR u.name LIKE :q OR u.email LIKE :q)';$params[':q']='%'.$search.'%';}
+        if($search!==''){$where[]='(d.domain_name LIKE :q_domain OR u.name LIKE :q_name OR u.email LIKE :q_email)';$params[':q_domain']='%'.$search.'%';$params[':q_name']='%'.$search.'%';$params[':q_email']='%'.$search.'%';}
         if($status!==''){$where[]='d.status=:status';$params[':status']=$status;}
         if($expiry==='expired')$where[]="d.expiry_date IS NOT NULL AND d.expiry_date<CURDATE()";
         elseif($expiry==='30')$where[]="d.expiry_date IS NOT NULL AND d.expiry_date>=CURDATE() AND d.expiry_date<=DATE_ADD(CURDATE(),INTERVAL 30 DAY)";
