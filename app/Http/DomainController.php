@@ -101,6 +101,41 @@ final class DomainController
         }catch(Throwable $e){$this->go('/client/domains','error='.rawurlencode($e->getMessage()));}
     }
 
+    public function requestRenewal():void
+    {
+        $user=Auth::user();if(!$user){$this->go('/client/login');return;}if(($user['role']??'')!=='customer'){http_response_code(403);echo 'Müşteri hesabı gerekli.';return;}
+        if(($_SERVER['REQUEST_METHOD']??'GET')!=='POST'){http_response_code(405);echo 'Method not allowed';return;}
+        if(!Auth::verifyCsrf($_POST['_token']??null)){http_response_code(419);echo 'Güvenlik doğrulaması başarısız.';return;}
+        $id=(int)($_POST['domain_id']??0);$years=(int)($_POST['years']??1);
+        $cycles=[1=>'annually',2=>'biennially',3=>'triennially'];
+        try{
+            if(!isset($cycles[$years]))throw new \RuntimeException('Yenileme süresi 1, 2 veya 3 yıl olmalı.');
+            $this->db->beginTransaction();
+            $q=$this->db->prepare("SELECT d.*,oi.product_id FROM domain_registrations d JOIN order_items oi ON oi.order_id=d.order_id JOIN products p ON p.id=oi.product_id AND p.product_type='domain' WHERE d.id=:id AND d.user_id=:user AND d.status='active' LIMIT 1 FOR UPDATE");
+            $q->execute([':id'=>$id,':user'=>$user['id']]);$domain=$q->fetch(PDO::FETCH_ASSOC);
+            if(!$domain||empty($domain['registrar_order_id'])||empty($domain['expiry_date'])||empty($domain['registrar_synced_at']))throw new \RuntimeException('Yenileme için önce aktif domainin registrar bitiş bilgilerini eşitleyin.');
+            if(strtotime((string)$domain['expiry_date'])<=time())throw new \RuntimeException('Süresi dolmuş domain otomatik yenileme talebine uygun değil; destek ekibine başvurun.');
+            $pending=$this->db->prepare("SELECT COUNT(*) FROM domain_renewals WHERE domain_registration_id=:id AND status IN ('awaiting_payment','queued','processing','pending_remote','needs_review')");
+            $pending->execute([':id'=>$id]);if((int)$pending->fetchColumn()>0)throw new \RuntimeException('Bu domain için zaten bekleyen bir yenileme işlemi var.');
+            $price=$this->db->prepare("SELECT p.name,pp.price,pp.currency,pp.billing_cycle FROM products p JOIN product_pricing pp ON pp.product_id=p.id WHERE p.id=:product AND p.status='active' AND pp.billing_cycle=:cycle AND pp.is_active=1 LIMIT 1");
+            $price->execute([':product'=>$domain['product_id'],':cycle'=>$cycles[$years]]);$pricing=$price->fetch(PDO::FETCH_ASSOC);
+            if(!$pricing)throw new \RuntimeException('Bu domain ürünü için seçilen süreye ait aktif yenileme fiyatı tanımlı değil.');
+            $now=gmdate('Y-m-d H:i:s');$total=(string)$pricing['price'];$orderNo='HPR'.gmdate('ymd').strtoupper(bin2hex(random_bytes(4)));
+            $o=$this->db->prepare("INSERT INTO orders(order_number,user_id,status,currency,subtotal,tax_total,total,created_at,updated_at) VALUES(:number,:user,'pending',:currency,:total,0,:total,:now,:now)");
+            $o->execute([':number'=>$orderNo,':user'=>$user['id'],':currency'=>$pricing['currency'],':total'=>$total,':now'=>$now]);$orderId=(int)$this->db->lastInsertId();
+            $oi=$this->db->prepare('INSERT INTO order_items(order_id,product_id,product_name,billing_cycle,quantity,unit_price,line_total,created_at) VALUES(:order,:product,:name,:cycle,1,:price,:price,:now)');
+            $oi->execute([':order'=>$orderId,':product'=>$domain['product_id'],':name'=>$pricing['name'].' · Domain yenileme '.$years.' yıl',' :cycle'=>$cycles[$years],':price'=>$total,':now'=>$now]);
+            $invoiceNo='HPRF'.gmdate('ymd').strtoupper(bin2hex(random_bytes(4)));$due=gmdate('Y-m-d H:i:s',time()+604800);
+            $inv=$this->db->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,status,currency,subtotal,tax_total,total,amount_paid,issued_at,due_at,created_at,updated_at) VALUES(:number,:order,:user,'unpaid',:currency,:total,0,:total,0,:now,:due,:now,:now)");
+            $inv->execute([':number'=>$invoiceNo,':order'=>$orderId,':user'=>$user['id'],':currency'=>$pricing['currency'],':total'=>$total,':now'=>$now,':due'=>$due]);$invoiceId=(int)$this->db->lastInsertId();
+            $line=$this->db->prepare('INSERT INTO invoice_items(invoice_id,description,quantity,unit_price,tax_rate,tax_amount,line_total,created_at) VALUES(:invoice,:description,1,:price,0,0,:price,:now)');
+            $line->execute([':invoice'=>$invoiceId,':description'=>$domain['domain_name'].' · '.$years.' yıllık domain yenileme',':price'=>$total,':now'=>$now]);
+            $renew=$this->db->prepare("INSERT INTO domain_renewals(domain_registration_id,user_id,order_id,invoice_id,years,registrar_order_id,expiry_before,status,idempotency_key,available_at,created_at,updated_at) VALUES(:domain,:user,:order,:invoice,:years,:registrar,:expiry,'awaiting_payment',:key,:now,:now,:now)");
+            $renew->execute([':domain'=>$id,':user'=>$user['id'],':order'=>$orderId,':invoice'=>$invoiceId,':years'=>$years,':registrar'=>$domain['registrar_order_id'],':expiry'=>$domain['expiry_date'],':key'=>hash('sha256','domain-renewal:'.$id.':'.$orderId),':now'=>$now]);
+            $this->db->commit();$this->go('/client/invoices','notice='.rawurlencode('Domain yenileme faturası oluşturuldu. Ödeme doğrulanınca işlem kuyruğa alınacak.'));
+        }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();$this->go('/client/domains','error='.rawurlencode($e->getMessage()));}
+    }
+
     public function myDomains():void
     {
         $user=Auth::user();if(!$user){$this->go('/client/login');return;}if(($user['role']??'')!=='customer'){http_response_code(403);echo 'Müşteri hesabı gerekli.';return;}
