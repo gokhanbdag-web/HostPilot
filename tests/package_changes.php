@@ -7,7 +7,7 @@ $worker=file_get_contents(__DIR__.'/../app/Http/CronController.php');
 $routes=file_get_contents(__DIR__.'/../index.php');
 $portal=file_get_contents(__DIR__.'/../app/Http/ClientController.php');
 $checks=[
- 'versioned package change migration'=>str_contains($schema,'20261112_0008_service_package_changes')&&str_contains($schema,'CREATE TABLE IF NOT EXISTS service_package_changes'),
+ 'versioned package change migrations'=>str_contains($schema,'20261112_0008_service_package_changes')&&str_contains($schema,'20261112_0009_service_package_change_type')&&str_contains($schema,'change_type VARCHAR(16)'),
  'customer ownership enforced'=>str_contains($client,'s.user_id=:user FOR UPDATE'),
  'higher and lower packages are server-mapped'=>str_contains($client,'m.server_id=:server')&&str_contains($client,'$higher=array_values')&&str_contains($client,'$lower=array_values'),
  'same billing cycle and currency required'=>str_contains($client,'pp.currency=:currency AND pp.billing_cycle=:cycle'),
@@ -27,9 +27,9 @@ $checks=[
  'customer can select lower mapped packages'=>str_contains($client,'$lower=array_values')&&str_contains($client,'Bir sonraki yenilemede paket düşürme'),
  'downgrade is scheduled at service renewal date'=>str_contains($client,"'scheduled'")&&str_contains($client,'$effective=(string)$s[\'next_due_date\'].\' 00:00:00\''),
  'downgrade creates no immediate invoice'=>str_contains($client,"'scheduled',:effective")&&str_contains($client,'$this->db->commit();'),
- 'billing queues due downgrades before renewal invoicing'=>str_contains($worker,"c.status='scheduled' AND c.invoice_id IS NULL")&&str_contains($worker,'Planlanmış paket düşürme'),
- 'old-price renewal blocked while downgrade unresolved'=>str_contains($worker,"c.status IN ('scheduled','queued','processing','needs_review','failed')"),
- 'scheduled downgrade worker does not require paid invoice'=>str_contains($worker,'$scheduled=$change[\'invoice_id\']===null')&&str_contains($worker,'Paket düşürme henüz yenileme tarihine ulaşmadı'),
+ 'billing queues due downgrades before renewal invoicing'=>str_contains($worker,"c.change_type='downgrade' AND c.status='scheduled' AND c.invoice_id IS NULL")&&str_contains($worker,'Planlanmış paket düşürme'),
+ 'old-price renewal blocked while downgrade unresolved'=>str_contains($worker,"c.change_type='downgrade' AND c.invoice_id IS NULL AND c.status IN ('scheduled','queued','processing','needs_review','failed')"),
+ 'scheduled downgrade worker does not require paid invoice'=>str_contains($worker,'$scheduled=$change[\'change_type\']===\'downgrade\'')&&str_contains($worker,'Paket düşürme henüz yenileme tarihine ulaşmadı'),
  'scheduled downgrade must lower service price'=>str_contains($worker,'Faturasız planlı işlem yalnızca paket düşürme'),
  'admin can see scheduled downgrade queue'=>str_contains($worker,'Planlanmış paket düşürmeleri'),
  'customer sees scheduled downgrade and effective date'=>str_contains($portal,'Planlanan paket düşürme')&&str_contains($portal,'Uygulanma tarihi'),
