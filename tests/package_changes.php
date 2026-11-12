@@ -80,7 +80,15 @@ $checks=[
  'ResellerClub domain detail lookup uses official order endpoint'=>str_contains($domain,'domainDetails')&&str_contains($domain,"domains/'")&&str_contains($domain,'http_build_query')&&str_contains($domain,"'options'=>'OrderDetails,StatusDetails'"),
  'customer expiry sync enforces ownership and active status'=>str_contains($domainController,'syncDomainDetails')&&str_contains($domainController,"WHERE id=:id AND user_id=:user")&&str_contains($domainController,"status']!=='active'")&&str_contains($routes,"'/client/domains/sync'"),
  'registrar expiry and auto-renew values are sourced and stored'=>str_contains($domainController,'expiryDate')&&str_contains($domainController,'isAutoRenew')&&str_contains($domainController,'registrar_synced_at'),
- 'ResellerClub renewal request validates order, years and verified expiry and uses OnlyAdd'=>str_contains($domain,'renewDomain')&&str_contains($domain,"'/renew'")&&str_contains($domain,"'expDate'")&&str_contains($domain,"'invoiceOption'=>'OnlyAdd'")&&str_contains($domain,'currentExpiryTimestamp<=time()')
+ 'ResellerClub renewal request validates order, years and verified expiry and uses OnlyAdd'=>str_contains($domain,'renewDomain')&&str_contains($domain,"'/renew'")&&str_contains($domain,"'expDate'")&&str_contains($domain,"'invoiceOption'=>'OnlyAdd'")&&str_contains($domain,'currentExpiryTimestamp<=time()'),
+ 'versioned domain renewal invoice queue migration'=>str_contains($schema,'20261112_0014_domain_renewal_queue')&&str_contains($schema,'domain_renewals')&&str_contains($schema,'uq_domain_renewal_idempotency'),
+ 'customer domain renewal requires registrar-synced active domain and matching term price'=>str_contains($domainController,'requestRenewal')&&str_contains($domainController,'registrar_synced_at')&&str_contains($domainController,'domain_renewals')&&str_contains($domainController,'product_pricing'),
+ 'domain renewal creates separate order and invoice'=>str_contains($domainController,'Domain yenileme faturası oluşturuldu')&&str_contains($domainController,'INSERT INTO invoices')&&str_contains($domainController,'INSERT INTO orders'),
+ 'renewal is queued only after verified payment'=>str_contains($payment,"UPDATE domain_renewals SET status='queued'")&&str_contains($payment,"status='awaiting_payment'"),
+ 'renewal worker checks paid invoice and unchanged registrar expiry'=>str_contains($domainController,'runRenewalQueue')&&str_contains($domainController,"invoice_status']!=='paid'")&&str_contains($domainController,'expiry_before'),
+ 'renewal worker polls registrar and syncs confirmed new expiry'=>str_contains($domainController,'actionStatus')&&str_contains($domainController,'renewed_expiry')&&str_contains($domainController,"status='completed'"),
+ 'renewal ambiguous remote outcomes are not retried automatically'=>str_contains($domainController,"$status=$remoteCallStarted?'needs_review':'failed'")&&str_contains($domainController,'belirsiz registrar yanıtı otomatik tekrarlanmayacak'),
+ 'customer renewal request and authenticated worker routes registered'=>str_contains($routes,"'/client/domains/renew'")&&str_contains($routes,"'/cron/domain-renewals'")
 
 ];
 $failed=[];
