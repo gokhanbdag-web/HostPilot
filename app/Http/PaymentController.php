@@ -282,6 +282,11 @@ final class PaymentController
         $sets=[];$params=[':id'=>$id];foreach($fields as $k=>$v)if(in_array($k,$allowed,true)){$sets[]=$k.'=:'.$k;$params[':'.$k]=$v;}
         if(!$sets)return;$sets[]='updated_at=:updated';$params[':updated']=gmdate('Y-m-d H:i:s');
         $where=' WHERE id=:id';if(isset($fields['status'])&&$fields['status']!=='success')$where.=" AND status<>'success'";$q=$this->db->prepare('UPDATE payment_transactions SET '.implode(',',$sets).$where);$q->execute($params);
+        if(($fields['status']??'')==='failed'){
+            $notice=$this->db->prepare('SELECT i.id,i.invoice_number,i.total,i.currency,i.due_at,u.email,u.name FROM payment_transactions t JOIN invoices i ON i.id=t.invoice_id JOIN users u ON u.id=t.user_id WHERE t.id=:id LIMIT 1');
+            $notice->execute([':id'=>$id]);$invoice=$notice->fetch();
+            if($invoice)(new EmailService($this->db,$this->applicationKey))->queueInvoiceNotice((string)$invoice['email'],(string)$invoice['name'],(string)$invoice['invoice_number'],(float)$invoice['total'],(string)$invoice['currency'],'','failed',$id);
+        }
     }
 
     private function settings():array
