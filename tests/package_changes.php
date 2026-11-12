@@ -45,6 +45,11 @@ $checks=[
  'package downgrade cancellation email notification'=>str_contains($email,"'cancelled'")&&str_contains($client,"'cancelled'"),
  'upgrade request and verified payment email notifications'=>str_contains($email,"'requested'")&&str_contains($payment,'EmailService')&&str_contains($payment,"'payment'"),
  'successful remote package change email notification'=>str_contains($worker,'EmailService')&&str_contains($worker,"'completed'"),
+ 'versioned email outbox migration'=>str_contains($schema,'20261112_0010_email_outbox')&&str_contains($schema,'email_outbox'),
+ 'package notifications are queued idempotently'=>str_contains($email,'INSERT IGNORE INTO email_outbox')&&str_contains($email,'hash(\'sha256\''),
+ 'email worker uses bounded locked claims and retry backoff'=>str_contains($email,'FOR UPDATE')&&str_contains($email,'needs_review')&&str_contains($email,'2**min'),
+ 'email cron endpoint is authenticated'=>str_contains($worker,'HostPilot email cron v1')&&str_contains($routes,"'/cron/email'"),
+ 'admin can review and retry failed email'=>str_contains($routes,"'/admin/email-queue'")&&str_contains($routes,'EmailQueueController')&&str_contains($worker,'email-queue'),
 
 ];
 $failed=[];
