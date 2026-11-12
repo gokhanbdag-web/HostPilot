@@ -70,6 +70,15 @@ final class ResellerClubClient
         return $this->request('PUT','/domains/'.$orderId.'/nameservers',['ns'=>$servers]);
     }
 
+    public function domainDetails(string $orderId):array
+    {
+        if(!ctype_digit($orderId))throw new RuntimeException('Geçersiz registrar orderId.');
+        $data=$this->request('GET','/domains/'.$orderId.'?'.http_build_query(['options'=>'OrderDetails,StatusDetails']));
+        $domain=$data['domain']??null;
+        if(!is_array($domain))throw new RuntimeException('Registrar domain detaylarını döndürmedi.');
+        return $domain;
+    }
+
     public function actionStatus(string $orderId):array
     {
         if(!ctype_digit($orderId))throw new RuntimeException('Geçersiz registrar orderId.');
