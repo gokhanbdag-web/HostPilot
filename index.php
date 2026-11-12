@@ -82,7 +82,7 @@ if ($requestPath === '/knowledgebase' && $method === 'GET') { $client->knowledge
 if ($requestPath === '/admin/settings' && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\EmailSettingsController($pdo, $basePath, (string)($config['app']['key'] ?? '')))->index(); exit; }
 if ($requestPath === '/admin/email-queue' && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\EmailQueueController($pdo, $basePath))->index(); exit; }
 
-$controller = new \HostPilot\Http\AdminController($pdo, $basePath);
+$controller = new \HostPilot\Http\AdminController($pdo, $basePath, (string)($config['app']['key'] ?? ''));
 if ($requestPath === '/admin/tickets' && $method === 'GET') { $controller->tickets(); exit; }
 if (preg_match('#^/admin/tickets/([0-9]+)$#', $requestPath, $adminTicketMatch) && in_array($method, ['GET','POST'], true)) { $controller->viewTicket((int)$adminTicketMatch[1]); exit; }
 
