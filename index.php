@@ -103,6 +103,7 @@ $domains = new \HostPilot\Http\DomainController($pdo, $basePath, (string)($confi
 if (in_array($requestPath, ['/admin/domains','/admin/domains/registrar'], true) && in_array($method, ['GET','POST'], true)) { $domains->settings(); exit; }
 if ($requestPath === '/domains/search' && in_array($method, ['GET','POST'], true)) { $domains->search(); exit; }
 if ($requestPath === '/client/domains' && $method === 'GET') { $domains->myDomains(); exit; }
+if ($requestPath === '/client/domains/nameservers' && $method === 'POST') { $domains->requestNameservers(); exit; }
 if ($requestPath === '/admin/domains/orders' && $method === 'GET') { $domains->adminOrders(); exit; }
 if ($requestPath === '/admin/domains/reconcile' && $method === 'POST') { $domains->reconcileOrder(); exit; }
 $payment = new \HostPilot\Http\PaymentController($pdo, $basePath, (string)($config['app']['base_url'] ?? ''), (string)($config['app']['key'] ?? ''));
