@@ -60,10 +60,10 @@ final class ClientController
             }elseif(($row['provisioning_status']??'')==='needs_review'){
                 echo '<p>Otomatik işlem sonucu kesinleştirilemedi. Yinelenen hesap açılmasını önlemek için yönetici kontrolü bekleniyor.</p>';
             }
-            $changeQuery=$this->db->prepare("SELECT c.status,c.effective_at,c.invoice_id,tp.name AS target_name FROM service_package_changes c JOIN products tp ON tp.id=c.to_product_id WHERE c.service_id=:service AND c.status IN ('pending_payment','scheduled','queued','processing','needs_review','failed') ORDER BY c.id DESC LIMIT 1");
+            $changeQuery=$this->db->prepare("SELECT c.id,c.status,c.effective_at,c.invoice_id,tp.name AS target_name FROM service_package_changes c JOIN products tp ON tp.id=c.to_product_id WHERE c.service_id=:service AND c.status IN ('pending_payment','scheduled','queued','processing','needs_review','failed') ORDER BY c.id DESC LIMIT 1");
             $changeQuery->execute([':service'=>$row['id']]);$change=$changeQuery->fetch();
             if($change){
-                if($change['status']==='scheduled')echo '<p>Planlanan paket düşürme: <b>'.$this->e($change['target_name']).'</b><br>Uygulanma tarihi: '.$this->e(date('d.m.Y',strtotime($change['effective_at']))).'. Mevcut döneminiz sonuna kadar şimdiki paketiniz geçerlidir.</p>';
+                if($change['status']==='scheduled')echo '<p>Planlanan paket düşürme: <b>'.$this->e($change['target_name']).'</b><br>Uygulanma tarihi: '.$this->e(date('d.m.Y',strtotime($change['effective_at']))).'. Mevcut döneminiz sonuna kadar şimdiki paketiniz geçerlidir.</p><form method="post" action="'.$this->url('/client/services/change/cancel').'" onsubmit="return confirm(\'Planlanmış paket düşürme talebini iptal etmek istiyor musunuz?\')"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="change_id" value="'.(int)$change['id'].'"><button class="button" style="background:#8a3946">Paket düşürme talebini iptal et</button></form>';
                 elseif($change['status']==='pending_payment')echo '<p>Yükseltme talebiniz ödeme bekliyor.</p>';
                 elseif($change['status']==='needs_review')echo '<p>Paket değişikliği kontrol paneliyle eşleştiriliyor; yönetici incelemesi bekleniyor.</p>';
                 elseif($change['status']==='failed')echo '<p>Paket değişikliği tamamlanamadı; destek/yönetici incelemesi bekleniyor.</p>';
