@@ -58,6 +58,85 @@ final class DomainController
         echo '</section></main></body></html>';
     }
 
+    public function runRegistrationQueue():void
+    {
+        $provided='';
+        if(preg_match('/Bearer\\s+(.+)/i',(string)($_SERVER['HTTP_AUTHORIZATION']??''),$m))$provided=trim($m[1]);
+        if($provided===''&&isset($_GET['token']))$provided=(string)$_GET['token'];
+        $expected=hash_hmac('sha256','HostPilot domain cron v1',$this->applicationKey);
+        if($this->applicationKey===''||$provided===''||!hash_equals($expected,$provided)){http_response_code(403);echo 'Forbidden';return;}
+        header('Content-Type: application/json; charset=utf-8');
+        $row=null;$stage='';$remoteCallStarted=false;
+        try{
+            $now=gmdate('Y-m-d H:i:s');
+            $this->db->beginTransaction();
+            $pick=$this->db->prepare("SELECT * FROM domain_registrations WHERE status IN ('queued','pending_remote') AND available_at<=:now AND (locked_at IS NULL OR locked_at<:stale) ORDER BY available_at,id LIMIT 1 FOR UPDATE");
+            $pick->execute([':now'=>$now,':stale'=>gmdate('Y-m-d H:i:s',time()-900)]);
+            $row=$pick->fetch(PDO::FETCH_ASSOC);
+            if(!$row){$this->db->commit();echo json_encode(['ok'=>true,'processed'=>0,'message'=>'Bekleyen domain kaydı yok.']);return;}
+            $stage=(string)$row['status'];
+            $this->db->prepare("UPDATE domain_registrations SET status='processing',locked_at=:locked,attempts=attempts+1,updated_at=:updated WHERE id=:id")
+                ->execute([':locked'=>$now,':updated'=>$now,':id'=>$row['id']]);
+            $this->db->commit();
+
+            $cfg=$this->load();
+            if(($cfg['enabled']??'0')!=='1'||empty($cfg['api_key_enc'])||empty($cfg['user_id']))throw new \\RuntimeException('Domain registrar bağlantısı etkin değil veya eksik.');
+            $api=new ResellerClubClient((string)$cfg['user_id'],$this->vault->decrypt((string)$cfg['api_key_enc']),(string)($cfg['environment']??'sandbox'));
+            if($stage==='queued'){
+                $payload=json_decode($this->vault->decrypt((string)$row['registrar_payload_enc']),true,32,JSON_THROW_ON_ERROR);
+                if(!is_array($payload)||empty($payload['customer'])||empty($payload['contact']))throw new \\RuntimeException('Şifreli domain kayıt bilgileri okunamadı.');
+                $remoteCallStarted=true;
+                $availability=$api->checkAvailability((string)$row['domain_name']);
+                if(empty($availability['available']))throw new \\RuntimeException('Ödeme tamamlandı ancak alan adı son kontrol sırasında artık uygun değil. Yönetici incelemesi gerekli.');
+                $remoteCallStarted=true;
+                $customerId=$api->createCustomer((array)$payload['customer']);
+                $this->db->prepare("UPDATE domain_registrations SET registrar_customer_id=:customer,status='customer_created',locked_at=NULL,available_at=:available,updated_at=:updated WHERE id=:id")
+                    ->execute([':customer'=>$customerId,':available'=>gmdate('Y-m-d H:i:s'),':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
+                $payload['contact']['customerId']=$customerId;
+                $remoteCallStarted=true;
+                $contactId=$api->createContact((array)$payload['contact']);
+                $this->db->prepare("UPDATE domain_registrations SET registrar_contact_id=:contact,status='contact_created',locked_at=NULL,available_at=:available,updated_at=:updated WHERE id=:id")
+                    ->execute([':contact'=>$contactId,':available'=>gmdate('Y-m-d H:i:s'),':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
+                $remoteCallStarted=true;
+                $result=$api->registerDomain((string)$row['domain_name'],(int)$row['years'],$customerId,$contactId,(array)($payload['nameservers']??[]),(string)($payload['invoiceOption']??'OnlyAdd'),(bool)($payload['autoRenew']??false));
+                $this->db->prepare("UPDATE domain_registrations SET registrar_order_id=:order_id,status='pending_remote',action_status=:action,action_message=:message,locked_at=NULL,available_at=:available,updated_at=:updated WHERE id=:id")
+                    ->execute([':order_id'=>(string)$result['orderId'],':action'=>(string)($result['actionStatus']??'Added'),':message'=>substr((string)($result['message']??'Kayıt talebi registrar tarafından alındı.'),0,500),':available'=>gmdate('Y-m-d H:i:s',time()+45),':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
+                echo json_encode(['ok'=>true,'processed'=>1,'domain'=>$row['domain_name'],'status'=>'pending_remote'],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);return;
+            }
+            if($stage==='pending_remote'){
+                $orderId=(string)($row['registrar_order_id']??'');
+                if($orderId==='')throw new \\RuntimeException('Registrar orderId eksik; otomatik tekrar güvenli değil.');
+                $remoteCallStarted=true;$statusData=$api->actionStatus($orderId);
+                $actions=$statusData['actions']??[];$action=is_array($actions)&&isset($actions[0])&&is_array($actions[0])?$actions[0]:null;
+                $actionStatus=(string)($action['actionStatus']??'');
+                $message=substr((string)($action['actionStatusDesc']??$action['message']??''),0,500);
+                if(strcasecmp($actionStatus,'Completed')===0){
+                    $this->db->prepare("UPDATE domain_registrations SET status='active',action_status=:action,action_message=:message,registered_at=:registered,locked_at=NULL,last_error=NULL,updated_at=:updated WHERE id=:id")
+                        ->execute([':action'=>$actionStatus,':message'=>$message,':registered'=>gmdate('Y-m-d H:i:s'),':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
+                    echo json_encode(['ok'=>true,'processed'=>1,'domain'=>$row['domain_name'],'status'=>'active'],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);return;
+                }
+                if(strcasecmp($actionStatus,'Failed')===0){
+                    $this->db->prepare("UPDATE domain_registrations SET status='failed',action_status=:action,action_message=:message,last_error=:error,locked_at=NULL,updated_at=:updated WHERE id=:id")
+                        ->execute([':action'=>$actionStatus,':message'=>$message,':error'=>$message!==''?$message:'Registrar domain kayıt işlemini başarısız olarak bildirdi.',':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
+                    echo json_encode(['ok'=>true,'processed'=>1,'domain'=>$row['domain_name'],'status'=>'failed'],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);return;
+                }
+                $attempts=(int)$row['attempts']+1;$nextStatus=$attempts>=40?'needs_review':'pending_remote';
+                $this->db->prepare("UPDATE domain_registrations SET status=:status,action_status=:action,action_message=:message,locked_at=NULL,available_at=:available,last_error=:error,updated_at=:updated WHERE id=:id")
+                    ->execute([':status'=>$nextStatus,':action'=>$actionStatus?:'Pending',':message'=>$message,':available'=>gmdate('Y-m-d H:i:s',time()+120),':error'=>$nextStatus==='needs_review'?'Registrar işlemi beklenen sürede tamamlanmadı; manuel kontrol gerekli.':null,':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
+                echo json_encode(['ok'=>true,'processed'=>1,'domain'=>$row['domain_name'],'status'=>$nextStatus,'action_status'=>$actionStatus],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);return;
+            }
+        }catch(Throwable $e){
+            if($this->db->inTransaction())$this->db->rollBack();
+            error_log('[HostPilot] Domain registration worker: '.$e->getMessage());
+            if($row){
+                $next=($remoteCallStarted||$stage==='pending_remote')?'needs_review':'failed';
+                $this->db->prepare("UPDATE domain_registrations SET status=:status,locked_at=NULL,last_error=:error,updated_at=:updated WHERE id=:id")
+                    ->execute([':status'=>$next,':error'=>substr($e->getMessage(),0,1000),':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
+            }
+            http_response_code(500);echo json_encode(['ok'=>false,'error'=>'Domain kayıt işlemi tamamlanamadı; tekrarın güvenli olmadığı durumlarda manuel incelemeye alındı.'],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+        }
+    }
+
     private function load():array{$q=$this->db->query("SELECT setting_key,setting_value FROM settings WHERE setting_group='domain_registrar'");$out=[];foreach($q->fetchAll(PDO::FETCH_ASSOC) as $r)$out[$r['setting_key']]=$r['setting_value'];return $out;}
     private function admin():bool{$u=Auth::user();if(!$u){$this->go('/admin/login');return false;}if(!in_array($u['role']??'', ['super_admin','admin'],true)){http_response_code(403);echo 'Yetkisiz erişim.';return false;}return true;}
     private function page(string $title):void{echo '<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'.$this->e($title).' · HostPilot</title><style>body{margin:0;background:#0a1020;color:#e8edf7;font:14px system-ui}*{box-sizing:border-box}.layout{display:flex;min-height:100vh}.sidebar{width:235px;padding:24px 15px;background:#0e1729;border-right:1px solid #26354c}.brand{display:block;color:white;font-weight:900;text-decoration:none;padding:10px}.brand span{color:#7898ff}.nav-item{display:block;color:#aab7cc;padding:12px;text-decoration:none}.nav-item.active{background:#1b2a46;border-radius:8px}.main{flex:1;min-width:0;padding:0 28px 30px;max-width:1300px;margin:auto}.topbar{height:80px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #26354c}.topbar h1{font-size:21px}.panel{margin-top:22px;padding:24px;background:#111c2f;border:1px solid #26354c;border-radius:14px}.panel p{color:#9aabc2;line-height:1.6}.panel label{display:block;margin:14px 0;color:#c4d0e2}.panel input:not([type=checkbox]),.panel select{display:block;width:100%;margin-top:7px;padding:11px;background:#0b1425;color:#fff;border:1px solid #34445e;border-radius:8px}.panel button,.button{padding:12px 17px;background:#5278ed;color:white;border:0;border-radius:8px;font-weight:700;cursor:pointer;text-decoration:none}.panel hr{border:0;border-top:1px solid #26354c;margin:28px 0}.notice,.alert{padding:12px;border-radius:8px;margin:12px 0;background:#172f35;color:#a9f0d0}.alert{background:#4b202b;color:#ffc3ca}@media(max-width:700px){.sidebar{width:64px;flex:0 0 64px}.sidebar .brand{font-size:0}.sidebar .brand span{font-size:12px}.nav-item{font-size:0}.main{padding:0 12px 20px}}</style></head><body>';}
