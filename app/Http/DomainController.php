@@ -118,16 +118,16 @@ final class DomainController
         $id=(int)($_POST['id']??0);$decision=(string)($_POST['decision']??'');$now=gmdate('Y-m-d H:i:s');
         try{
             $this->db->beginTransaction();$q=$this->db->prepare("SELECT * FROM domain_registrations WHERE id=:id FOR UPDATE");$q->execute([':id'=>$id]);$row=$q->fetch(PDO::FETCH_ASSOC);
-            if(!$row||$row['status']!=='active'||!in_array($row['nameserver_status']??'', ['needs_review','failed'],true))throw new \\RuntimeException('Yalnızca incelemedeki aktif domain nameserver işlemleri uzlaştırılabilir.');
+            if(!$row||$row['status']!=='active'||!in_array($row['nameserver_status']??'', ['needs_review','failed'],true))throw new \RuntimeException('Yalnızca incelemedeki aktif domain nameserver işlemleri uzlaştırılabilir.');
             if($decision==='remote_applied'){
-                if(empty($row['pending_nameservers_enc']))throw new \\RuntimeException('Bekleyen nameserver verisi bulunamadı.');
+                if(empty($row['pending_nameservers_enc']))throw new \RuntimeException('Bekleyen nameserver verisi bulunamadı.');
                 $this->db->prepare("UPDATE domain_registrations SET nameservers_enc=pending_nameservers_enc,pending_nameservers_enc=NULL,nameserver_status='completed',nameserver_error=NULL,nameserver_updated_at=:now,updated_at=:now WHERE id=:id")->execute([':now'=>$now,':id'=>$id]);
             }elseif($decision==='remote_not_applied'){
-                if(empty($row['pending_nameservers_enc']))throw new \\RuntimeException('Bekleyen nameserver verisi bulunamadı.');
+                if(empty($row['pending_nameservers_enc']))throw new \RuntimeException('Bekleyen nameserver verisi bulunamadı.');
                 $this->db->prepare("UPDATE domain_registrations SET nameserver_status='queued',nameserver_error=NULL,nameserver_updated_at=:now,updated_at=:now WHERE id=:id")->execute([':now'=>$now,':id'=>$id]);
             }elseif($decision==='mark_failed'){
                 $this->db->prepare("UPDATE domain_registrations SET pending_nameservers_enc=NULL,nameserver_status='failed',nameserver_error='Yönetici nameserver işleminin uygulanmadığını ve kapatıldığını doğruladı.',nameserver_updated_at=:now,updated_at=:now WHERE id=:id")->execute([':now'=>$now,':id'=>$id]);
-            }else throw new \\RuntimeException('Geçersiz nameserver uzlaştırma kararı.');
+            }else throw new \RuntimeException('Geçersiz nameserver uzlaştırma kararı.');
             $this->db->commit();$this->go('/admin/domains/orders','notice='.rawurlencode('Nameserver işlemi uzlaştırıldı.'));
         }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();$this->go('/admin/domains/orders','error='.rawurlencode($e->getMessage()));}
     }
