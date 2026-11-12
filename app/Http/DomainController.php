@@ -22,7 +22,7 @@ final class DomainController
             if(!Auth::verifyCsrf($_POST['_token']??null))$error='Güvenlik doğrulaması başarısız.';
             else{
                 $environment=(string)($_POST['environment']??'sandbox');$userId=trim((string)($_POST['user_id']??''));$apiKey=(string)($_POST['api_key']??'');$enabled=isset($_POST['enabled'])?'1':'0';
-                if(!in_array($environment,['sandbox','live'],true)||$userId===''||strlen($userId)>120||strlen($apiKey)>1000)$error='ResellerClub bağlantı bilgilerini kontrol edin.';
+                if(!in_array($environment,['sandbox','live'],true)||!preg_match('/^[0-9]{1,20}$/',$userId)||strlen($apiKey)>1000)$error='ResellerClub bağlantı bilgilerini kontrol edin.';
                 else try{
                     $old=$this->load();$secret=$apiKey!==''?$this->vault->encrypt($apiKey):(string)($old['api_key_enc']??'');
                     if($secret==='')throw new \RuntimeException('API anahtarı gerekli. İlk kayıt sırasında anahtarı girin.');
