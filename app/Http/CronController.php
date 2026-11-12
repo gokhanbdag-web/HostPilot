@@ -421,6 +421,11 @@ final class CronController
 
             $this->db->prepare("UPDATE invoices SET status='overdue',updated_at=:updated WHERE status='unpaid' AND due_at IS NOT NULL AND due_at<=:now")
                 ->execute([':updated'=>$now,':now'=>$now]);
+            $expired=$this->db->prepare("SELECT i.id,i.invoice_number,i.total,i.currency,i.due_at,u.email,u.name FROM invoices i JOIN users u ON u.id=i.user_id WHERE i.status='overdue' AND i.due_at IS NOT NULL AND i.due_at<=:now AND i.updated_at=:updated");
+            $expired->execute([':now'=>$now,':updated'=>$now]);
+            foreach($expired->fetchAll(PDO::FETCH_ASSOC) as $expiredInvoice){
+                (new EmailService($this->db,$this->applicationKey))->queueInvoiceNotice((string)$expiredInvoice['email'],(string)$expiredInvoice['name'],(string)$expiredInvoice['invoice_number'],(float)$expiredInvoice['total'],(string)$expiredInvoice['currency'],(string)$expiredInvoice['due_at'],'overdue',(int)$expiredInvoice['id']);
+            }
 
             // Queue suspension only for a provisioned service with a genuinely outstanding, expired invoice balance.
             $overdue=$this->db->prepare("SELECT i.id AS invoice_id,s.id AS service_id FROM invoices i JOIN services s ON s.id=i.service_id WHERE i.status IN ('unpaid','partially_paid','overdue') AND i.amount_paid+0.005<i.total AND i.due_at IS NOT NULL AND i.due_at<=:now AND s.status='active' AND s.suspension_source='none' AND s.provisioned_at IS NOT NULL ORDER BY i.due_at,i.id LIMIT 1");
