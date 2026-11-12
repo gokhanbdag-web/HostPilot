@@ -50,7 +50,7 @@ final class CatalogController
             if(!preg_match('/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$/',$domainName)||$address===''||$city===''||!preg_match('/^[A-Z]{2}$/',$country)||$zip===''||$phoneCode===''||$phone===''){http_response_code(422);echo 'Domain ve kayıt sahibi iletişim bilgilerini eksiksiz girin.';return;}
             $years=['annually'=>1,'biennially'=>2,'triennially'=>3,'onetime'=>1][$cycle]??0;
             if($years<1){http_response_code(422);echo 'Domain ürünlerinde yıllık, iki yıllık veya üç yıllık fiyat dönemi tanımlayın.';return;}
-            $customerName=trim((string)$user['name']);$username='hp'.strtolower(bin2hex(random_bytes(6)));$password=rtrim(strtr(base64_encode(random_bytes(24)),'+/','-_'),'=');
+            $customerName=trim((string)$user['name']);$username='hp'.strtolower(bin2hex(random_bytes(6)));$password='Hp!'.bin2hex(random_bytes(12)).'9a';
             $customer=['username'=>$username,'password'=>$password,'name'=>$customerName,'addressLine1'=>$address,'city'=>$city,'country'=>$country,'zipcode'=>$zip,'phoneCountryCode'=>$phoneCode,'phone'=>$phone];
             $contact=['name'=>$customerName,'email'=>(string)$user['email'],'addressLine1'=>$address,'city'=>$city,'country'=>$country,'zipcode'=>$zip,'phoneCountryCode'=>$phoneCode,'phone'=>$phone];
             $registrarPayload=['customer'=>$customer,'contact'=>$contact,'nameservers'=>[],'invoiceOption'=>'OnlyAdd','autoRenew'=>false];
