@@ -7,7 +7,7 @@ use Throwable;
 
 final class PackageChangeController
 {
-    public function __construct(private readonly PDO $db,private readonly string $basePath=''){}
+    public function __construct(private readonly PDO $db,private readonly string $basePath='',private readonly string $applicationKey=''){}
     public function index():void
     {
         $u=$this->customer();if(!$u)return;$id=(int)($_GET['service_id']??0);
@@ -67,6 +67,7 @@ final class PackageChangeController
                 $c=$this->db->prepare("INSERT INTO service_package_changes(service_id,from_product_id,to_product_id,target_package,target_package_guid,target_package_external_id,target_amount,charge_amount,currency,change_type,status,effective_at,created_at,updated_at) VALUES(:sid,:from,:to,:package,:guid,:external,:target,0,:currency,'downgrade','scheduled',:effective,:created,:updated)");
                 $c->execute([':sid'=>$sid,':from'=>$s['product_id'],':to'=>$pid,':package'=>$plan['remote_package'],':guid'=>$plan['remote_package_guid']?:null,':external'=>$plan['remote_package_external_id']?:null,':target'=>$plan['price'],':currency'=>$currency,':effective'=>$effective,':created'=>$now,':updated'=>$now]);
                 $this->db->commit();
+                (new EmailService($this->db,$this->applicationKey))->sendPackageChange((string)$u['email'],(string)$u['name'],(string)$s['remote_domain'],(string)$s['old_name'],(string)$plan['name'],'scheduled',(string)$s['next_due_date']);
                 $this->go('/client/services','notice='.rawurlencode('Paket düşürme isteğiniz kaydedildi. Yeni paket '.$s['next_due_date'].' tarihindeki yenilemede uygulanacak; mevcut döneminiz değişmeyecek.'));
             }
             $periodQuery=$this->db->prepare('SELECT service_period_start FROM invoices WHERE service_id=:service AND service_period_start IS NOT NULL ORDER BY service_period_start DESC LIMIT 1');
@@ -92,9 +93,28 @@ final class PackageChangeController
             $line=$this->db->prepare("INSERT INTO invoice_items(invoice_id,description,quantity,unit_price,tax_rate,tax_amount,line_total,created_at) VALUES(:invoice,:description,1,:price,0,0,:price,:now)");
             $line->execute([':invoice'=>$invoiceId,':description'=>'Paket yükseltme: '.$s['old_name'].' → '.$plan['name'],':price'=>$amount,':now'=>$now]);
             $this->db->prepare("UPDATE service_package_changes SET invoice_id=:invoice WHERE id=:id")->execute([':invoice'=>$invoiceId,':id'=>$changeId]);
-            $this->db->commit();$this->go('/client/invoices/'.$invoiceId.'/pay');
+            $this->db->commit();(new EmailService($this->db,$this->applicationKey))->sendPackageChange((string)$u['email'],(string)$u['name'],(string)$s['remote_domain'],(string)$s['old_name'],(string)$plan['name'],'requested');$this->go('/client/invoices/'.$invoiceId.'/pay');
         }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();$this->go('/client/services','error='.$e->getMessage());}
     }
+    public function cancelScheduled():void
+    {
+        $u=$this->customer();if(!$u)return;
+        if(!Auth::verifyCsrf($_POST['_token']??null))$this->go('/client/services','error=Güvenlik doğrulaması başarısız.');
+        $changeId=(int)($_POST['change_id']??0);
+        try{
+            $this->db->beginTransaction();
+            $q=$this->db->prepare("SELECT c.*,s.user_id,s.status AS service_status,s.product_id,s.next_due_date,s.remote_domain,fp.name AS from_name,tp.name AS to_name,u.name AS customer_name,u.email AS customer_email FROM service_package_changes c JOIN services s ON s.id=c.service_id JOIN products fp ON fp.id=c.from_product_id JOIN products tp ON tp.id=c.to_product_id JOIN users u ON u.id=s.user_id WHERE c.id=:id AND s.user_id=:user FOR UPDATE");
+            $q->execute([':id'=>$changeId,':user'=>$u['id']]);$change=$q->fetch();
+            if(!$change||$change['change_type']!=='downgrade'||$change['status']!=='scheduled'||$change['service_status']!=='active'||(int)$change['product_id']!==(int)$change['from_product_id']||$change['effective_at']<=gmdate('Y-m-d H:i:s')||$change['next_due_date']<=gmdate('Y-m-d'))throw new \\RuntimeException('Bu paket düşürme artık iptal edilemiyor; işlem yenileme kuyruğuna alınmış veya tarihi geçmiş olabilir.');
+            $u1=$this->db->prepare("UPDATE service_package_changes SET status='cancelled',updated_at=:updated WHERE id=:id AND status='scheduled'");
+            $u1->execute([':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$changeId]);
+            if($u1->rowCount()!==1)throw new \\RuntimeException('Paket düşürme talebi eşzamanlı olarak değişti; sayfayı yenileyin.');
+            $this->db->commit();
+            (new EmailService($this->db,$this->applicationKey))->sendPackageChange((string)$change['customer_email'],(string)$change['customer_name'],(string)($change['remote_domain']??''),(string)$change['from_name'],(string)$change['to_name'],'cancelled');
+            $this->go('/client/services','notice=Planlanmış paket düşürme talebiniz iptal edildi.');
+        }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();$this->go('/client/services','error='.$e->getMessage());}
+    }
+
     private function customer():?array{$u=Auth::user();if(!$u){$this->go('/client/login');return null;}if(($u['role']??'')!=='customer'){http_response_code(403);echo 'Müşteri hesabı gerekli.';return null;}return $u;}
     private function start():void{echo '<!doctype html><html lang="tr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Paket yükseltme · HostPilot</title><style>body{margin:0;background:#0a1020;color:#e8edf7;font:15px system-ui}*{box-sizing:border-box}main{max-width:850px;margin:35px auto;padding:20px}section{background:#111c2f;border:1px solid #2b3c56;border-radius:14px;padding:25px;margin-top:18px}p{color:#aabbd2;line-height:1.6}a{color:#a9c0ff}select{display:block;width:100%;max-width:520px;padding:12px;margin:14px 0;background:#091321;color:#fff;border:1px solid #344760;border-radius:8px}button{padding:12px 18px;border:0;border-radius:8px;background:#5579ef;color:white;font-weight:700}</style></head><body>';}
     private function end():void{echo '</body></html>';}
