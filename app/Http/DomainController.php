@@ -124,7 +124,7 @@ final class DomainController
             $o=$this->db->prepare("INSERT INTO orders(order_number,user_id,status,currency,subtotal,tax_total,total,created_at,updated_at) VALUES(:number,:user,'pending',:currency,:total,0,:total,:now,:now)");
             $o->execute([':number'=>$orderNo,':user'=>$user['id'],':currency'=>$pricing['currency'],':total'=>$total,':now'=>$now]);$orderId=(int)$this->db->lastInsertId();
             $oi=$this->db->prepare('INSERT INTO order_items(order_id,product_id,product_name,billing_cycle,quantity,unit_price,line_total,created_at) VALUES(:order,:product,:name,:cycle,1,:price,:price,:now)');
-            $oi->execute([':order'=>$orderId,':product'=>$domain['product_id'],':name'=>$pricing['name'].' · Domain yenileme '.$years.' yıl',' :cycle'=>$cycles[$years],':price'=>$total,':now'=>$now]);
+            $oi->execute([':order'=>$orderId,':product'=>$domain['product_id'],':name'=>$pricing['name'].' · Domain yenileme '.$years.' yıl',':cycle'=>$cycles[$years],':price'=>$total,':now'=>$now]);
             $invoiceNo='HPRF'.gmdate('ymd').strtoupper(bin2hex(random_bytes(4)));$due=gmdate('Y-m-d H:i:s',time()+604800);
             $inv=$this->db->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,status,currency,subtotal,tax_total,total,amount_paid,issued_at,due_at,created_at,updated_at) VALUES(:number,:order,:user,'unpaid',:currency,:total,0,:total,0,:now,:due,:now,:now)");
             $inv->execute([':number'=>$invoiceNo,':order'=>$orderId,':user'=>$user['id'],':currency'=>$pricing['currency'],':total'=>$total,':now'=>$now,':due'=>$due]);$invoiceId=(int)$this->db->lastInsertId();
