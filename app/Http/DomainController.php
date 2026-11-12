@@ -169,6 +169,62 @@ final class DomainController
         echo '</article></main></div>';$this->end();
     }
 
+
+    public function adminRenewals():void
+    {
+        if(!$this->admin())return;
+        $notice=(string)($_GET['notice']??'');$error=(string)($_GET['error']??'');
+        $rows=$this->db->query("SELECT r.*,d.domain_name,d.expiry_date AS current_expiry,u.name,u.email,i.invoice_number,i.status AS invoice_status FROM domain_renewals r JOIN domain_registrations d ON d.id=r.domain_registration_id JOIN users u ON u.id=r.user_id JOIN invoices i ON i.id=r.invoice_id ORDER BY CASE WHEN r.status='needs_review' THEN 0 WHEN r.status='pending_remote' THEN 1 WHEN r.status='failed' THEN 2 ELSE 3 END,r.created_at DESC LIMIT 300")->fetchAll(PDO::FETCH_ASSOC);
+        $labels=['awaiting_payment'=>'Ödeme bekleniyor','queued'=>'Kuyrukta','processing'=>'İşleniyor','pending_remote'=>'Registrar sonucu bekleniyor','completed'=>'Tamamlandı','failed'=>'Başarısız','needs_review'=>'Yönetici incelemesi gerekli'];
+        $this->page('Domain yenilemeleri');
+        echo '<div class="layout"><aside class="sidebar"><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a class="nav-item" href="'.$this->url('/admin/domains/registrar').'">Registrar ayarları</a><a class="nav-item" href="'.$this->url('/admin/domains/orders').'">Domain siparişleri</a><a class="nav-item active" href="'.$this->url('/admin/domains/renewals').'">Domain yenilemeleri</a></aside><main class="main"><header class="topbar"><div><small>DOMAIN / YENİLEME</small><h1>Domain yenileme işlemleri</h1></div><a href="'.$this->url('/admin/domains/orders').'">Domain siparişleri</a></header><article class="panel"><p>Belirsiz registrar işlemlerinde otomatik tekrar yapılmaz. Registrar panelinde yenileme emrinin sonucunu ve yeni bitiş tarihini doğruladıktan sonra aşağıdaki uzlaştırma işlemini kullanın.</p>';
+        if($notice!=='')echo '<div class="notice">'.$this->e($notice).'</div>';if($error!=='')echo '<div class="alert">'.$this->e($error).'</div>';
+        if(!$rows)echo '<p>Henüz domain yenileme talebi yok.</p>';
+        foreach($rows as $row){
+            echo '<section style="padding:16px 0;border-bottom:1px solid #26354c"><b>'.$this->e((string)$row['domain_name']).'</b> · '.$this->e($labels[$row['status']]??(string)$row['status']).'<p>'.$this->e((string)$row['name']).' · '.$this->e((string)$row['email']).' · Fatura: '.$this->e((string)$row['invoice_number']).' ('.$this->e((string)$row['invoice_status']).')</p><small>'.$this->e((string)$row['years']).' yıl · Önceki bitiş: '.$this->e((string)$row['expiry_before']).' · Güncel yerel bitiş: '.$this->e((string)($row['current_expiry']??'—')).' · Registrar order: '.$this->e((string)$row['registrar_order_id']).' · Action: '.$this->e((string)($row['action_status']??'—')).'</small>';
+            if(!empty($row['last_error']))echo '<p class="alert">'.$this->e((string)$row['last_error']).'</p>';
+            if($row['status']==='needs_review'){
+                echo '<p>Registrar panelinde doğruladığınız sonuca göre işlem yapın. “Uygulandı” seçeneğinde registrar panelinde görünen yeni bitiş tarihini girmeniz gerekir.</p><form method="post" action="'.$this->url('/admin/domains/renewals/reconcile').'" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="id" value="'.(int)$row['id'].'"><label>Registrar üzerinde görünen yeni bitiş tarihi<input type="date" name="renewed_expiry" required></label><label>Yönetici notu<input name="reason" maxlength="1000" placeholder="Doğrulama notu"></label><button name="decision" value="remote_applied">Yenileme uygulandı — eşitle</button><button name="decision" value="remote_not_applied">Uygulanmadı — tekrar kuyruğa al</button><button name="decision" value="mark_failed">Yenilemeyi başarısız kapat</button></form>';
+            }
+            echo '</section>';
+        }
+        echo '</article></main></div>';$this->end();
+    }
+
+    public function reconcileRenewal():void
+    {
+        if(!$this->admin())return;
+        if(($_SERVER['REQUEST_METHOD']??'GET')!=='POST'){http_response_code(405);echo 'Method not allowed';return;}
+        if(!Auth::verifyCsrf($_POST['_token']??null)){http_response_code(419);echo 'Güvenlik doğrulaması başarısız.';return;}
+        $id=(int)($_POST['id']??0);$decision=(string)($_POST['decision']??'');$reason=trim((string)($_POST['reason']??''));$now=gmdate('Y-m-d H:i:s');
+        try{
+            $this->db->beginTransaction();
+            $q=$this->db->prepare("SELECT r.*,d.expiry_date AS current_expiry,i.status AS invoice_status FROM domain_renewals r JOIN domain_registrations d ON d.id=r.domain_registration_id JOIN invoices i ON i.id=r.invoice_id WHERE r.id=:id FOR UPDATE");
+            $q->execute([':id'=>$id]);$row=$q->fetch(PDO::FETCH_ASSOC);
+            if(!$row||$row['status']!=='needs_review')throw new \RuntimeException('Yalnızca yönetici incelemesindeki yenilemeler uzlaştırılabilir.');
+            if($row['invoice_status']!=='paid')throw new \RuntimeException('Yenileme faturası tamamen ödenmiş değil.');
+            if($row['current_expiry']===null||strtotime((string)$row['current_expiry'])!==strtotime((string)$row['expiry_before']))throw new \RuntimeException('Domain bitiş tarihi değişmiş; bu yenileme güvenli biçimde uzlaştırılamaz.');
+            if($decision==='remote_applied'){
+                $date=trim((string)($_POST['renewed_expiry']??''));$parsed=\DateTimeImmutable::createFromFormat('!Y-m-d',$date,new \DateTimeZone('UTC'));
+                $dateErrors=\DateTimeImmutable::getLastErrors();
+                if(!$parsed||($dateErrors!==false&&($dateErrors['warning_count']>0||$dateErrors['error_count']>0))||$parsed->format('Y-m-d')!==$date)throw new \RuntimeException('Registrar panelinde doğruladığınız yeni bitiş tarihini YYYY-AA-GG biçiminde girin.');
+                $expiry=$parsed->format('Y-m-d').' 23:59:59';
+                if(strtotime($expiry)<=strtotime((string)$row['expiry_before']))throw new \RuntimeException('Yeni bitiş tarihi önceki bitiş tarihinden ileri olmalı.');
+                $this->db->prepare("UPDATE domain_renewals SET status='completed',action_status='Admin verified completed',renewed_expiry=:expiry,last_error=NULL,locked_at=NULL,updated_at=:now WHERE id=:id")->execute([':expiry'=>$expiry,':now'=>$now,':id'=>$id]);
+                $this->db->prepare("UPDATE domain_registrations SET expiry_date=:expiry,registrar_synced_at=:now,updated_at=:now WHERE id=:domain")->execute([':expiry'=>$expiry,':now'=>$now,':domain'=>$row['domain_registration_id']]);
+                $message='Registrar panelinde tamamlandığı doğrulanan yenileme HostPilot ile eşitlendi.';
+            }elseif($decision==='remote_not_applied'){
+                $this->db->prepare("UPDATE domain_renewals SET status='queued',action_status='Admin verified not applied',last_error=NULL,locked_at=NULL,available_at=:now,updated_at=:now WHERE id=:id")->execute([':now'=>$now,':id'=>$id]);
+                $message='Registrar panelinde uygulanmadığı doğrulanan yenileme yeniden kuyruğa alındı.';
+            }elseif($decision==='mark_failed'){
+                if($reason==='')$reason='Yönetici registrar panelinde yenilemenin başarısız olduğunu doğruladı.';
+                $this->db->prepare("UPDATE domain_renewals SET status='failed',action_status='Admin verified failed',last_error=:reason,locked_at=NULL,updated_at=:now WHERE id=:id")->execute([':reason'=>substr($reason,0,1000),':now'=>$now,':id'=>$id]);
+                $message='Domain yenilemesi yönetici tarafından başarısız olarak kapatıldı.';
+            }else throw new \RuntimeException('Geçersiz yenileme uzlaştırma kararı.');
+            $this->db->commit();$this->go('/admin/domains/renewals','notice='.rawurlencode($message));
+        }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();$this->go('/admin/domains/renewals','error='.rawurlencode($e->getMessage()));}
+    }
+
     public function reconcileNameservers():void
     {
         if(!$this->admin())return;
