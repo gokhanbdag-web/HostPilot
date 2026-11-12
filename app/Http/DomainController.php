@@ -181,7 +181,7 @@ final class DomainController
         $this->page('Domain siparişleri');
         echo '<div class="layout"><aside class="sidebar"><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a class="nav-item" href="'.$this->url('/admin/domains/registrar').'">Registrar ayarları</a><a class="nav-item active" href="'.$this->url('/admin/domains/orders').'">Domain siparişleri</a><a class="nav-item" href="'.$this->url('/admin/domains/renewals').'">Domain yenilemeleri</a></aside><main class="main"><header class="topbar"><div><small>DOMAIN / SİPARİŞLER</small><h1>Domain kayıt kuyruğu</h1></div><a href="'.$this->url('/admin/domains/registrar').'">Registrar ayarları</a></header><article class="panel"><p>Belirsiz registrar yanıtları otomatik tekrar gönderilmez; manuel doğrulama gerektirir. Aşağıdaki uzlaştırma işlemleri yalnızca registrar panelinde kontrol yaptıktan sonra kullanılmalıdır.</p>';if($notice!=='')echo '<div class="notice">'.$this->e($notice).'</div>';if($error!=='')echo '<div class="alert">'.$this->e($error).'</div>';
         echo '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin:18px 0">';$cards=[['Aktif domain',(int)($summary['active_total']??0),''],['Süresi dolmuş',(int)($summary['expired']??0),'expired'],['7 gün içinde',(int)($summary['due_7']??0),'7'],['8–30 gün',(int)($summary['due_30']??0),'30'],['31–90 gün',(int)($summary['due_90']??0),'90'],['Bitiş tarihi yok',(int)($summary['no_date']??0),'no_date']];foreach($cards as [$caption,$number,$filter]){$href=$this->url('/admin/domains/orders').($filter!==''?'?'.http_build_query(['expiry'=>$filter]):'');echo '<a href="'.$this->e($href).'" style="display:block;padding:14px;background:#0b1425;border:1px solid #26354c;border-radius:10px;text-decoration:none"><small>'.$this->e($caption).'</small><div style="font-size:25px;font-weight:800;margin-top:5px">'.$number.'</div></a>';}echo '</div>';
-        echo '<form method="get" action="'.$this->url('/admin/domains/orders').'" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:18px 0"><label>Domain / müşteri / e-posta<input name="q" value="'.$this->e($search).'" placeholder="ornek.com"></label><label>Durum<select name="status"><option value="">Tüm durumlar</option>';foreach($labels as $key=>$label)echo '<option value="'.$this->e($key).'"'.($status===$key?' selected':'').'>'.$this->e($label).'</option>';echo '</select></label><label>Bitiş tarihi<select name="expiry"><option value="">Tüm tarihler</option><option value="expired"'.($expiry==='expired'?' selected':'').'>Süresi dolmuş</option><option value="7"'.($expiry==='7'?' selected':'').'>7 gün içinde</option><option value="30"'.($expiry==='30'?' selected':'').'>30 gün içinde</option><option value="90"'.($expiry==='90'?' selected':'').'>90 gün içinde</option><option value="no_date"'.($expiry==='no_date'?' selected':'').'>Tarih bilinmiyor</option></select></label><label>Sıralama<select name="sort"><option value="newest"'.($sort==='newest'?' selected':'').'>En yeni kayıt</option><option value="expiry_asc"'.($sort==='expiry_asc'?' selected':'').'>Bitiş tarihi yakın önce</option><option value="expiry_desc"'.($sort==='expiry_desc'?' selected':'').'>Bitiş tarihi uzak önce</option></select></label><button type="submit">Filtrele</button><a href="'.$this->url('/admin/domains/orders').'">Temizle</a></form><p>Toplam '.$total.' domain · Sayfa '.$page.' / '.$pages.'</p>';
+        echo '<form method="get" action="'.$this->url('/admin/domains/orders').'" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:18px 0"><label>Domain / müşteri / e-posta<input name="q" value="'.$this->e($search).'" placeholder="ornek.com"></label><label>Durum<select name="status"><option value="">Tüm durumlar</option>';foreach($labels as $key=>$label)echo '<option value="'.$this->e($key).'"'.($status===$key?' selected':'').'>'.$this->e($label).'</option>';echo '</select></label><label>Bitiş tarihi<select name="expiry"><option value="">Tüm tarihler</option><option value="expired"'.($expiry==='expired'?' selected':'').'>Süresi dolmuş</option><option value="7"'.($expiry==='7'?' selected':'').'>7 gün içinde</option><option value="30"'.($expiry==='30'?' selected':'').'>30 gün içinde</option><option value="90"'.($expiry==='90'?' selected':'').'>90 gün içinde</option><option value="no_date"'.($expiry==='no_date'?' selected':'').'>Tarih bilinmiyor</option></select></label><label>Sıralama<select name="sort"><option value="newest"'.($sort==='newest'?' selected':'').'>En yeni kayıt</option><option value="expiry_asc"'.($sort==='expiry_asc'?' selected':'').'>Bitiş tarihi yakın önce</option><option value="expiry_desc"'.($sort==='expiry_desc'?' selected':'').'>Bitiş tarihi uzak önce</option></select></label><button type="submit">Filtrele</button><a href="'.$this->url('/admin/domains/orders').'">Temizle</a></form><p><a class="button" href="'.$this->e($this->url('/admin/domains/export').($search!==''||$status!==''||$expiry!==''||$sort!=='newest'?'?'.http_build_query(array_filter(['q'=>$search,'status'=>$status,'expiry'=>$expiry,'sort'=>$sort],static fn($v)=>$v!=='')):'' )).'">Filtrelenmiş CSV raporunu indir ↓</a></p><p>Toplam '.$total.' domain · Sayfa '.$page.' / '.$pages.'</p>';
         if(!$rows)echo '<p>Henüz domain siparişi yok.</p>';
         foreach($rows as $row){
             echo '<div style="padding:14px 0;border-bottom:1px solid #26354c"><b>'.$this->e((string)$row['domain_name']).'</b> · '.$this->e($labels[$row['status']]??(string)$row['status']).'<p>'.$this->e((string)$row['name']).' · '.$this->e((string)$row['email']).' · #'.$this->e((string)$row['invoice_number']).' · '.$this->e((string)$row['invoice_status']).'</p><small>Registrar order: '.$this->e((string)($row['registrar_order_id']??'—')).' · Action: '.$this->e((string)($row['action_status']??'—')).'</small>'.(!empty($row['last_error'])?'<p class="alert">'.$this->e((string)$row['last_error']).'</p>':'').'</div>';
@@ -200,6 +200,50 @@ final class DomainController
         }
         if($pages>1){$base=['q'=>$search,'status'=>$status,'expiry'=>$expiry,'sort'=>$sort];echo '<nav style="display:flex;gap:8px;flex-wrap:wrap;margin:20px 0">';for($n=max(1,$page-3);$n<=min($pages,$page+3);$n++){$link=$this->url('/admin/domains/orders').'?'.http_build_query($base+['page'=>$n]);echo '<a href="'.$this->e($link).'"'.($n===$page?' aria-current="page"':'').'>'.$n.'</a>';}echo '</nav>';}
         echo '</article></main></div>';$this->end();
+    }
+
+    public function exportOrdersCsv():void
+    {
+        if(!$this->admin())return;
+        if(($_SERVER['REQUEST_METHOD']??'GET')!=='GET'){http_response_code(405);echo 'Method not allowed';return;}
+        $search=trim((string)($_GET['q']??''));$status=(string)($_GET['status']??'');$expiry=(string)($_GET['expiry']??'');$sort=(string)($_GET['sort']??'newest');
+        $allowedStatuses=['awaiting_payment','queued','processing','customer_created','contact_created','pending_remote','active','failed','needs_review','cancelled'];
+        if(!in_array($status,$allowedStatuses,true))$status='';
+        if(!in_array($expiry,['expired','7','30','90','no_date'],true))$expiry='';
+        if(!in_array($sort,['newest','expiry_asc','expiry_desc'],true))$sort='newest';
+        $where=[];$params=[];
+        if($search!==''){$where[]='(d.domain_name LIKE :q_domain OR u.name LIKE :q_name OR u.email LIKE :q_email)';$params[':q_domain']='%'.$search.'%';$params[':q_name']='%'.$search.'%';$params[':q_email']='%'.$search.'%';}
+        if($status!==''){$where[]='d.status=:status';$params[':status']=$status;}
+        if($expiry==='expired')$where[]="d.expiry_date IS NOT NULL AND d.expiry_date<CURDATE()";
+        elseif($expiry==='7')$where[]="d.expiry_date IS NOT NULL AND d.expiry_date>=CURDATE() AND d.expiry_date<=DATE_ADD(CURDATE(),INTERVAL 7 DAY)";
+        elseif($expiry==='30')$where[]="d.expiry_date IS NOT NULL AND d.expiry_date>=CURDATE() AND d.expiry_date<=DATE_ADD(CURDATE(),INTERVAL 30 DAY)";
+        elseif($expiry==='90')$where[]="d.expiry_date IS NOT NULL AND d.expiry_date>=CURDATE() AND d.expiry_date<=DATE_ADD(CURDATE(),INTERVAL 90 DAY)";
+        elseif($expiry==='no_date')$where[]='d.expiry_date IS NULL';
+        $whereSql=$where?' WHERE '.implode(' AND ',$where):'';
+        $order=$sort==='expiry_asc'?'d.expiry_date IS NULL ASC,d.expiry_date ASC':($sort==='expiry_desc'?'d.expiry_date IS NULL ASC,d.expiry_date DESC':"CASE WHEN d.status IN ('needs_review','failed') THEN 0 ELSE 1 END,d.created_at DESC");
+        $stmt=$this->db->prepare('SELECT d.domain_name,d.status,d.expiry_date,d.registrar_auto_renew,d.registrar_synced_at,d.registrar_sync_error,u.name AS customer_name,u.email,i.invoice_number,i.status AS invoice_status FROM domain_registrations d JOIN users u ON u.id=d.user_id JOIN invoices i ON i.id=d.invoice_id'.$whereSql.' ORDER BY '.$order);
+        $stmt->execute($params);
+        $filename='hostpilot-domain-raporu-'.gmdate('Y-m-d').'.csv';
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="'.$filename.'"');
+        header('Cache-Control: no-store, no-cache, must-revalidate');
+        header('X-Content-Type-Options: nosniff');
+        $out=fopen('php://output','wb');
+        if($out===false){http_response_code(500);return;}
+        fwrite($out,"\xEF\xBB\xBF");
+        $safe=static function($value):string{$value=(string)($value??'');return preg_match('/^[\\s\\x00-\\x1F]*[=+\\-@]/u',$value)?"'".$value:$value;};
+        fputcsv($out,['Domain','Müşteri','E-posta','Kayıt durumu','Fatura no','Fatura durumu','Bitiş tarihi','Otomatik yenileme','Son registrar eşitlemesi','Son eşitleme hatası']);
+        $statusLabels=['awaiting_payment'=>'Ödeme bekleniyor','queued'=>'Kuyrukta','processing'=>'İşleniyor','customer_created'=>'Müşteri kaydı','contact_created'=>'İletişim kaydı','pending_remote'=>'Registrar bekleniyor','active'=>'Aktif','failed'=>'Başarısız','needs_review'=>'İnceleme gerekli','cancelled'=>'İptal'];
+        while($row=$stmt->fetch(PDO::FETCH_ASSOC)){
+            $auto=$row['registrar_auto_renew']===null?'Bilinmiyor':((int)$row['registrar_auto_renew']===1?'Açık':'Kapalı');
+            fputcsv($out,[
+                $safe($row['domain_name']),$safe($row['customer_name']),$safe($row['email']),
+                $safe($statusLabels[$row['status']]??$row['status']),$safe($row['invoice_number']),
+                $safe($row['invoice_status']),$safe($row['expiry_date']),$safe($auto),
+                $safe($row['registrar_synced_at']),$safe($row['registrar_sync_error'])
+            ]);
+        }
+        fclose($out);exit;
     }
 
     public function queueExpirySync():void
