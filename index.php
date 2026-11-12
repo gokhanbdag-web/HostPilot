@@ -80,6 +80,7 @@ if (preg_match('#^/client/tickets/([0-9]+)$#', $requestPath, $ticketMatch) && in
 if ($requestPath === '/knowledgebase' && $method === 'GET') { $client->knowledgebase(); exit; }
 
 if ($requestPath === '/admin/settings' && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\EmailSettingsController($pdo, $basePath, (string)($config['app']['key'] ?? '')))->index(); exit; }
+if ($requestPath === '/admin/email-queue' && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\EmailQueueController($pdo, $basePath))->index(); exit; }
 
 $controller = new \HostPilot\Http\AdminController($pdo, $basePath);
 if ($requestPath === '/admin/tickets' && $method === 'GET') { $controller->tickets(); exit; }
