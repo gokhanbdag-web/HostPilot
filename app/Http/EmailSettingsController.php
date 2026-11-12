@@ -41,7 +41,7 @@ final class EmailSettingsController
                     if($action==='test'){
                         $to=trim((string)($_POST['test_email']??''));
                         if(!filter_var($to,FILTER_VALIDATE_EMAIL))$error='Test e-posta adresi geçerli değil.';
-                        else{$sent=(new EmailService($this->db,(string)($_SERVER['HOSTPILOT_APP_KEY']??'')))->send($to,'HostPilot SMTP test e-postası','SMTP bağlantı ve gönderim testi başarıyla tamamlandı.');if($sent)$notice='Test e-postası gönderildi.';else$error='Test e-postası gönderilemedi. SMTP bilgilerini ve sunucu hata kayıtlarını kontrol edin.';}
+                        else{$sent=(new EmailService($this->db,$this->appKey))->send($to,'HostPilot SMTP test e-postası','SMTP bağlantı ve gönderim testi başarıyla tamamlandı.');if($sent)$notice='Test e-postası gönderildi.';else$error='Test e-postası gönderilemedi. SMTP bilgilerini ve sunucu hata kayıtlarını kontrol edin.';}
                     }else $notice='E-posta ayarları kaydedildi.';
                 }catch(Throwable $e){$error='Ayarlar kaydedilemedi: '.$e->getMessage();}
             }
