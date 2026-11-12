@@ -18,6 +18,7 @@ final class PackageChangeController
         $p->execute([':currency'=>$currency,':cycle'=>$s['billing_cycle'],':server'=>$s['server_id'],':current'=>$s['product_id']]);$allPlans=$p->fetchAll();
         $higher=array_values(array_filter($allPlans,static fn(array $x):bool=>(float)$x['price']>(float)$s['amount']));
         $lower=array_values(array_filter($allPlans,static fn(array $x):bool=>(float)$x['price']<(float)$s['amount']));
+        if($s['panel_type']==='plesk'){$hasPleskIds=static fn(array $x):bool=>!empty($x['remote_package_guid'])&&!empty($x['remote_package_external_id']);$higher=array_values(array_filter($higher,$hasPleskIds));$lower=array_values(array_filter($lower,$hasPleskIds));}
         $busy=$this->db->prepare("SELECT id FROM service_package_changes WHERE service_id=:id AND status IN ('pending_payment','scheduled','queued','processing','needs_review','failed') LIMIT 1");
         $busy->execute([':id'=>$id]);$hasPending=(bool)$busy->fetchColumn();
         $outstanding=$this->db->prepare("SELECT COUNT(*) FROM invoices WHERE service_id=:service AND status IN ('unpaid','partially_paid','overdue') AND amount_paid+0.005<total");
