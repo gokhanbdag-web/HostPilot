@@ -181,7 +181,7 @@ final class DomainController
         if($notice!=='')echo '<div class="notice">'.$this->e($notice).'</div>';if($error!=='')echo '<div class="alert">'.$this->e($error).'</div>';
         if(!$rows)echo '<p>Henüz domain yenileme talebi yok.</p>';
         foreach($rows as $row){
-            echo '<section style="padding:16px 0;border-bottom:1px solid #26354c"><b>'.$this->e((string)$row['domain_name']).'</b> · '.$this->e($labels[$row['status']]??(string)$row['status']).'<p>'.$this->e((string)$row['name']).' · '.$this->e((string)$row['email']).' · Fatura: '.$this->e((string)$row['invoice_number']).' ('.$this->e((string)$row['invoice_status']).')</p><small>'.$this->e((string)$row['years']).' yıl · Önceki bitiş: '.$this->e((string)$row['expiry_before']).' · Güncel yerel bitiş: '.$this->e((string)($row['current_expiry']??'—')).' · Registrar order: '.$this->e((string)$row['registrar_order_id']).' · Action: '.$this->e((string)($row['action_status']??'—')).'</small>';
+            echo '<section style="padding:16px 0;border-bottom:1px solid #26354c"><b>'.$this->e((string)$row['domain_name']).'</b> · '.$this->e($labels[$row['status']]??(string)$row['status']).'<p>'.$this->e((string)$row['name']).' · '.$this->e((string)$row['email']).' · Fatura: '.$this->e((string)$row['invoice_number']).' ('.$this->e((string)$row['invoice_status']).')</p><small>'.$this->e((string)$row['years']).' yıl · Önceki bitiş: '.$this->e((string)$row['expiry_before']).' · Güncel yerel bitiş: '.$this->e((string)($row['current_expiry']??'—')).' · Registrar order: '.$this->e((string)$row['registrar_order_id']).' · EAQ: '.$this->e((string)($row['action_eaq_id']??'—')).' · Action: '.$this->e((string)($row['action_status']??'—')).'</small>';
             if(!empty($row['last_error']))echo '<p class="alert">'.$this->e((string)$row['last_error']).'</p>';
             if($row['status']==='needs_review'){
                 echo '<p>Registrar panelinde doğruladığınız sonuca göre işlem yapın. “Uygulandı” seçeneğinde registrar panelinde görünen yeni bitiş tarihini girmeniz gerekir.</p><form method="post" action="'.$this->url('/admin/domains/renewals/reconcile').'" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="id" value="'.(int)$row['id'].'"><label>Registrar üzerinde görünen yeni bitiş tarihi<input type="date" name="renewed_expiry"></label><label>Yönetici notu<input name="reason" maxlength="1000" placeholder="Doğrulama notu"></label><button name="decision" value="remote_applied">Yenileme uygulandı — eşitle</button><button name="decision" value="remote_not_applied">Uygulanmadı — tekrar kuyruğa al</button><button name="decision" value="mark_failed">Yenilemeyi başarısız kapat</button></form>';
@@ -214,7 +214,7 @@ final class DomainController
                 $this->db->prepare("UPDATE domain_registrations SET expiry_date=:expiry,registrar_synced_at=:now,updated_at=:now WHERE id=:domain")->execute([':expiry'=>$expiry,':now'=>$now,':domain'=>$row['domain_registration_id']]);
                 $message='Registrar panelinde tamamlandığı doğrulanan yenileme HostPilot ile eşitlendi.';
             }elseif($decision==='remote_not_applied'){
-                $this->db->prepare("UPDATE domain_renewals SET status='queued',action_status='Admin verified not applied',last_error=NULL,locked_at=NULL,available_at=:now,updated_at=:now WHERE id=:id")->execute([':now'=>$now,':id'=>$id]);
+                $this->db->prepare("UPDATE domain_renewals SET status='queued',action_eaq_id=NULL,action_type=NULL,action_status='Admin verified not applied',last_error=NULL,locked_at=NULL,available_at=:now,updated_at=:now WHERE id=:id")->execute([':now'=>$now,':id'=>$id]);
                 $message='Registrar panelinde uygulanmadığı doğrulanan yenileme yeniden kuyruğa alındı.';
             }elseif($decision==='mark_failed'){
                 if($reason==='')$reason='Yönetici registrar panelinde yenilemenin başarısız olduğunu doğruladı.';
@@ -415,24 +415,39 @@ final class DomainController
             if($stage==='queued'){
                 $expiryTimestamp=strtotime((string)$row['expiry_before'].' UTC');if(!$expiryTimestamp||$expiryTimestamp<=time())throw new \RuntimeException('Domain bitiş tarihi geçmiş veya geçersiz; otomatik yenileme yapılamaz.');
                 $remoteCallStarted=true;$result=$api->renewDomain((string)$row['registrar_order_id'],(int)$row['years'],$expiryTimestamp,false);
-                $this->db->prepare("UPDATE domain_renewals SET status='pending_remote',action_status=:action,last_error=NULL,locked_at=NULL,available_at=:next,updated_at=:now WHERE id=:id")
-                    ->execute([':action'=>(string)($result['actionId']??$result['status']??'Submitted'),':next'=>gmdate('Y-m-d H:i:s',time()+120),':now'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
-                echo json_encode(['ok'=>true,'processed'=>1,'renewal'=>'submitted','message'=>'Registrar yenileme isteği gönderildi; sonuç takip edilecek.']);return;
+                $eaqId=(string)($result['eaqId']??'');
+                if(!ctype_digit($eaqId))throw new \RuntimeException('Registrar yenileme isteği alındı ancak takip için geçerli EAQ işlem kimliği dönmedi; manuel doğrulama gerekli.');
+                $this->db->prepare("UPDATE domain_renewals SET status='pending_remote',action_eaq_id=:eaq,action_type=:type,action_status=:action,last_error=NULL,locked_at=NULL,available_at=:next,updated_at=:now WHERE id=:id")
+                    ->execute([':eaq'=>$eaqId,':type'=>(string)($result['actionType']??''),':action'=>(string)($result['actionStatus']??$result['status']??'Submitted'),':next'=>gmdate('Y-m-d H:i:s',time()+120),':now'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
+                echo json_encode(['ok'=>true,'processed'=>1,'renewal'=>'submitted','message'=>'Registrar yenileme isteği gönderildi; işlem kimliği kaydedildi ve sonuç takip edilecek.']);return;
             }
-            $remoteCallStarted=true;$statusData=$api->actionStatus((string)$row['registrar_order_id']);$actions=$statusData['actions']??[];$action=is_array($actions)&&isset($actions[0])&&is_array($actions[0])?$actions[0]:null;
+            $eaqId=(string)($row['action_eaq_id']??'');
+            if(!ctype_digit($eaqId))throw new \RuntimeException('Registrar yenileme işlem kimliği bulunamadı; otomatik sorgu durduruldu ve yönetici incelemesi gerekli.');
+            $remoteCallStarted=true;$statusData=$api->actionStatus((string)$row['registrar_order_id'],$eaqId);$actions=$statusData['actions']??[];$action=null;
+            if(is_array($actions)){foreach($actions as $candidate){if(is_array($candidate)&&(string)($candidate['eaqId']??'')===$eaqId){$action=$candidate;break;}}}
             $actionStatus=(string)($action['actionStatus']??'');$message=substr((string)($action['actionStatusDesc']??$action['message']??''),0,500);
             if(strcasecmp($actionStatus,'Completed')===0){
                 $details=$api->domainDetails((string)$row['registrar_order_id']);$raw=$details['expiryDate']??$details['endTime']??$details['domainEndTime']??null;
-                if(!is_numeric($raw)||(int)$raw<=strtotime((string)$row['expiry_before'].' UTC'))throw new \RuntimeException('Registrar yenileme tamamlandı ancak yeni bitiş tarihi doğrulanamadı.');
-                $expiry=(new \DateTimeImmutable('@'.(int)$raw))->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s');$now=gmdate('Y-m-d H:i:s');
+                if($raw===null||$raw==='')throw new \RuntimeException('Registrar yenileme tamamlandı ancak yeni bitiş tarihi alanı dönmedi.');
+                try{
+                    if(is_numeric($raw)){
+                        $timestamp=(int)$raw;if($timestamp>9999999999)$timestamp=(int)floor($timestamp/1000);
+                        if($timestamp<1)throw new \RuntimeException('Geçersiz registrar bitiş zaman damgası.');
+                        $expiryDate=(new \DateTimeImmutable('@'.$timestamp))->setTimezone(new \DateTimeZone('UTC'));
+                    }else{$expiryDate=new \DateTimeImmutable((string)$raw,new \DateTimeZone('UTC'));}
+                }catch(Throwable $dateError){throw new \RuntimeException('Registrar yeni bitiş tarihi tanınan bir tarih biçiminde değil.');}
+                $expiry=$expiryDate->format('Y-m-d H:i:s');
+                if(strtotime($expiry)<=strtotime((string)$row['expiry_before']))throw new \RuntimeException('Registrar yenileme tamamlandı ancak yeni bitiş tarihi önceki tarihten ileri değil.');
+                $now=gmdate('Y-m-d H:i:s');
                 $this->db->beginTransaction();
                 $this->db->prepare("UPDATE domain_renewals SET status='completed',action_status=:action,renewed_expiry=:expiry,last_error=NULL,locked_at=NULL,updated_at=:now WHERE id=:id")->execute([':action'=>$actionStatus,':expiry'=>$expiry,':now'=>$now,':id'=>$row['id']]);
                 $this->db->prepare("UPDATE domain_registrations SET expiry_date=:expiry,registrar_synced_at=:now,updated_at=:now WHERE id=:id")->execute([':expiry'=>$expiry,':now'=>$now,':id'=>$row['domain_registration_id']]);
                 $this->db->commit();echo json_encode(['ok'=>true,'processed'=>1,'renewal'=>'completed','expiry'=>$expiry]);return;
             }
             if(strcasecmp($actionStatus,'Failed')===0){$this->db->prepare("UPDATE domain_renewals SET status='failed',action_status=:action,last_error=:error,locked_at=NULL,updated_at=:now WHERE id=:id")->execute([':action'=>$actionStatus,':error'=>$message?:'Registrar yenileme işlemini başarısız bildirdi.',':now'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);echo json_encode(['ok'=>true,'processed'=>1,'renewal'=>'failed']);return;}
-            $this->db->prepare("UPDATE domain_renewals SET status='pending_remote',action_status=:action,last_error=:error,locked_at=NULL,available_at=:next,updated_at=:now WHERE id=:id")->execute([':action'=>$actionStatus?:'Pending',':error'=>$message?:null,':next'=>gmdate('Y-m-d H:i:s',time()+180),':now'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
-            echo json_encode(['ok'=>true,'processed'=>1,'renewal'=>'pending_remote','action_status'=>$actionStatus]);
+            $pendingStatus=$actionStatus?:'Not found yet';
+            $this->db->prepare("UPDATE domain_renewals SET status='pending_remote',action_status=:action,last_error=:error,locked_at=NULL,available_at=:next,updated_at=:now WHERE id=:id")->execute([':action'=>$pendingStatus,':error'=>$message?:null,':next'=>gmdate('Y-m-d H:i:s',time()+180),':now'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
+            echo json_encode(['ok'=>true,'processed'=>1,'renewal'=>'pending_remote','action_status'=>$pendingStatus]);
         }catch(Throwable $e){
             if($this->db->inTransaction())$this->db->rollBack();error_log('[HostPilot] Domain renewal worker: '.$e->getMessage());
             if($row){$status=$remoteCallStarted?'needs_review':'failed';$this->db->prepare("UPDATE domain_renewals SET status=:status,last_error=:error,locked_at=NULL,updated_at=:now WHERE id=:id")->execute([':status'=>$status,':error'=>substr($e->getMessage(),0,1000),':now'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);}
