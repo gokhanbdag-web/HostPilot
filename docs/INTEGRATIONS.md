@@ -140,3 +140,8 @@ Customer-facing cPanel/WHM and Plesk upgrades create a prorated remaining-term i
 - OpenSRS API overview: https://opensrs.com/api/overview
 
 This document is a research baseline, not a claim that adapters have already been implemented or certified. Each adapter must pass sandbox and live-account acceptance tests before being marked production-ready.
+
+
+## Native SMTP outbox
+
+SMTP credentials are stored encrypted with the installation key. Application notifications are persisted to `email_outbox` with a unique idempotency key and are delivered by the authenticated `/cron/email` worker in bounded batches. Temporary failures use exponential retry backoff (up to eight attempts). A worker timeout while a message is in `sending` moves it to `needs_review` instead of blindly retrying, because SMTP acceptance may have occurred before the connection was lost. Administrators can inspect recent messages at `/admin/email-queue` and manually retry failed or reviewed items after checking delivery status. Current queued event coverage includes package changes, renewal invoice creation, verified invoice payment, hosting provisioning, and billing suspension/reactivation. Live delivery still requires the operator's own SMTP credentials and a successful test message.
