@@ -106,6 +106,7 @@ if ($requestPath === '/client/domains' && $method === 'GET') { $domains->myDomai
 if ($requestPath === '/client/domains/nameservers' && $method === 'POST') { $domains->requestNameservers(); exit; }
 if ($requestPath === '/client/domains/sync' && $method === 'POST') { $domains->syncDomainDetails(); exit; }
 if ($requestPath === '/client/domains/renew' && $method === 'POST') { $domains->requestRenewal(); exit; }
+if ($requestPath === '/admin/domains/export' && $method === 'GET') { $domains->exportOrdersCsv(); exit; }
 if ($requestPath === '/admin/domains/orders' && $method === 'GET') { $domains->adminOrders(); exit; }
 if ($requestPath === '/admin/domains/expiry-sync/queue' && $method === 'POST') { $domains->queueExpirySync(); exit; }
 if ($requestPath === '/admin/domains/renewals' && $method === 'GET') { $domains->adminRenewals(); exit; }
