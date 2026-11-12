@@ -110,7 +110,7 @@ final class CronController
                 if($request['change_type']==='downgrade'){
                     if($request['invoice_id']!==null||(float)$request['target_amount']>=(float)$service['amount']||$request['effective_at']>=$now||$service['status']!=='active'||(int)$service['product_id']!==(int)$request['from_product_id'])throw new \RuntimeException('Planlanmış paket düşürme henüz güvenli yeniden deneme koşullarını karşılamıyor.');
                 }else{
-                    if($request['invoice_id']===null)throw new \\RuntimeException('Yükseltme faturası bağlantısı bulunamadı.');
+                    if($request['invoice_id']===null)throw new \RuntimeException('Yükseltme faturası bağlantısı bulunamadı.');
                     $paid=$this->db->prepare("SELECT status,total,amount_paid FROM invoices WHERE id=:id");$paid->execute([':id'=>$request['invoice_id']]);$bill=$paid->fetch();
                     if(!$bill||$bill['status']!=='paid'||(float)$bill['amount_paid']+0.005<(float)$bill['total'])throw new \RuntimeException('Paket yükseltme faturası tamamen ödenmiş değil.');
                 }
@@ -163,7 +163,7 @@ final class CronController
                 if($scheduled){
                     if($change['invoice_id']!==null||(float)$change['target_amount']>=(float)$service['amount']||$change['effective_at']>$now||empty($service['next_due_date'])||$service['next_due_date']>gmdate('Y-m-d'))throw new \RuntimeException('Planlanmış paket düşürme henüz yürürlük tarihine ulaşmadı veya tutarsız.');
                 }else{
-                    if($change['invoice_id']===null)throw new \\RuntimeException('Yükseltme faturası bağlantısı bulunamadı.');
+                    if($change['invoice_id']===null)throw new \RuntimeException('Yükseltme faturası bağlantısı bulunamadı.');
                     $invoiceQuery=$this->db->prepare('SELECT status,total,amount_paid FROM invoices WHERE id=:id');$invoiceQuery->execute([':id'=>$change['invoice_id']]);$bill=$invoiceQuery->fetch();
                     if(!$bill||$bill['status']!=='paid'||(float)$bill['amount_paid']+0.005<(float)$bill['total'])throw new \RuntimeException('Paket yükseltme faturası tamamen ödenmiş değil.');
                 }
@@ -427,7 +427,7 @@ final class CronController
             if($change['invoice_id']!==null||(float)$change['target_amount']>=(float)$service['amount'])throw new \RuntimeException('Faturasız planlı işlem yalnızca paket düşürme için kullanılabilir.');
             if($change['effective_at']>$now||empty($service['next_due_date'])||$service['next_due_date']>gmdate('Y-m-d'))throw new \RuntimeException('Paket düşürme henüz yenileme tarihine ulaşmadı.');
         }else{
-            if($change['invoice_id']===null)throw new \\RuntimeException('Yükseltme faturası bağlantısı bulunamadı.');
+            if($change['invoice_id']===null)throw new \RuntimeException('Yükseltme faturası bağlantısı bulunamadı.');
             $invoice=$this->db->prepare("SELECT status,total,amount_paid FROM invoices WHERE id=:id");$invoice->execute([':id'=>$change['invoice_id']]);$bill=$invoice->fetch();
             if(!$bill||$bill['status']!=='paid'||(float)$bill['amount_paid']+0.005<(float)$bill['total'])throw new \RuntimeException('Paket yükseltme faturası tamamen ödenmemiş.');
             if((float)$change['target_amount']<=(float)$service['amount'])throw new \RuntimeException('Ödemeli paket değişikliği geçerli bir yükseltme değil.');
