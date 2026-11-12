@@ -72,6 +72,10 @@ $checks=[
  'customer and admin can track domain registrations'=>str_contains($domainController,'myDomains')&&str_contains($domainController,'adminOrders')&&str_contains($routes,"'/client/domains'")&&str_contains($routes,"'/admin/domains/orders'"),
  'domain reconciliation requires admin csrf and explicit registrar identifiers'=>str_contains($domainController,'function reconcileOrder')&&str_contains($domainController,'Auth::verifyCsrf')&&str_contains($domainController,'resume_customer')&&str_contains($domainController,'resume_contact')&&str_contains($domainController,'resume_action')&&str_contains($domainController,'mark_active')&&str_contains($routes,"'/admin/domains/reconcile'"),
  'admin automation exposes authenticated domain cron command'=>str_contains(file_get_contents(__DIR__.'/../app/Http/CronController.php'),'HostPilot domain cron v1')&&str_contains(file_get_contents(__DIR__.'/../app/Http/CronController.php'),'domainCommand')&&str_contains(file_get_contents(__DIR__.'/../app/Http/CronController.php'),'/cron/domains'),
+ 'versioned nameserver queue migration'=>str_contains($schema,'20261112_0012_domain_nameserver_queue')&&str_contains($schema,'pending_nameservers_enc')&&str_contains($schema,'nameserver_status'),
+ 'ResellerClub nameserver updates use validated PUT API'=>str_contains($domain,'updateNameservers')&&str_contains($domain,'/nameservers')&&str_contains($domain,'PUT'),
+ 'customer nameserver changes are encrypted and queued'=>str_contains($domainController,'requestNameservers')&&str_contains($domainController,'pending_nameservers_enc')&&str_contains($domainController,'nameserver_status=\'queued\'')&&str_contains($routes,"'/client/domains/nameservers'"),
+ 'nameserver worker and admin reconciliation handle ambiguous outcomes'=>str_contains($domainController,'nameserverOperation')&&str_contains($domainController,'reconcileNameservers')&&str_contains($routes,"'/admin/domains/nameservers/reconcile'"),
 
 ];
 $failed=[];
