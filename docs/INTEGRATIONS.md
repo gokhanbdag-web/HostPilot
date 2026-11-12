@@ -193,3 +193,4 @@ Configure the domain cron token using the same HMAC-SHA256 derivation as the dom
 - Current actions are checked first. If the action has moved out of the 24-hour current-action window, the client checks archived actions using the same EAQ ID.
 - The action-tracking migration moves legacy pending_remote rows without a stored EAQ ID into needs_review, because their exact registrar operation cannot safely be inferred.
 - Registrar expiry values are parsed from either Unix timestamps (seconds or milliseconds) or date strings, then checked to be later than the recorded pre-renewal expiry.
+- ResellerClub's current API reference specifies that .AI domains can only be renewed for two years. HostPilot enforces this in both the customer form and POST validation.
