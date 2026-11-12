@@ -53,7 +53,7 @@
 - [ ] Invoice email and customer invoice portal.
 - [x] Native SMTP settings with encrypted credentials, TLS certificate verification, administrator test-send, and customer package-change notifications.
 - [x] Versioned email outbox with idempotent queueing, bounded locked worker, exponential retry, stale-send review, and admin retry screen.
-- [x] Invoice-created/paid and hosting provisioned/suspended/reactivated email events queued with billing/provisioning state changes.
+- [x] Invoice-created/paid, hosting provisioned/suspended/reactivated, and support ticket creation/reply email events queued with their related workflows.
 
 **Exit criteria:** Sandbox payment can settle an invoice exactly once; failures and retries are handled.
 
@@ -97,7 +97,7 @@
 - [ ] Customer ticket portal and email notifications.
 - [ ] FAQ and knowledge base search/feedback.
 - [x] Package-change lifecycle notifications by email (scheduled, cancelled, upgrade payment confirmed, remote package change completed).
-- [ ] Ticket email notifications, announcements, and remaining general service notifications (password/security events, domain lifecycle, payment failures).
+- [ ] Announcements and remaining general service notifications (password/security events, domain lifecycle, payment failures).
 - [ ] Client Area service/domain/invoice management.
 
 **Exit criteria:** Complete customer support workflow from ticket creation through closure.
