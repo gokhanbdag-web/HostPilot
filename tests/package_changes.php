@@ -79,7 +79,7 @@ $checks=[
  'versioned registrar expiry metadata migration'=>str_contains($schema,'20261112_0013_domain_expiry_sync')&&str_contains($schema,'expiry_date')&&str_contains($schema,'registrar_auto_renew'),
  'ResellerClub domain detail lookup uses official order endpoint'=>str_contains($domain,'domainDetails')&&str_contains($domain,"domains/'")&&str_contains($domain,'http_build_query')&&str_contains($domain,"'options'=>'OrderDetails,StatusDetails'"),
  'customer expiry sync enforces ownership and active status'=>str_contains($domainController,'syncDomainDetails')&&str_contains($domainController,"WHERE id=:id AND user_id=:user")&&str_contains($domainController,"status']!=='active'")&&str_contains($routes,"'/client/domains/sync'"),
- 'registrar expiry and auto-renew values are sourced and stored'=>str_contains($domainController,'expiryDate')&&str_contains($domainController,'isAutoRenew')&&str_contains($domainController,'registrar_synced_at'),,
+ 'registrar expiry and auto-renew values are sourced and stored'=>str_contains($domainController,'expiryDate')&&str_contains($domainController,'isAutoRenew')&&str_contains($domainController,'registrar_synced_at'),
  'ResellerClub renewal request validates order, years and verified expiry and uses OnlyAdd'=>str_contains($domain,'renewDomain')&&str_contains($domain,"'/renew'")&&str_contains($domain,"'expDate'")&&str_contains($domain,"'invoiceOption'=>'OnlyAdd'")&&str_contains($domain,'currentExpiryTimestamp<=time()')
 
 ];
