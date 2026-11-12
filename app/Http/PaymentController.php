@@ -3,6 +3,7 @@ declare(strict_types=1);
 namespace HostPilot\Http;
 
 use HostPilot\Core\Auth;
+use HostPilot\Core\EmailService;
 use HostPilot\Core\SecretVault;
 use HostPilot\Payment\GatewayTransport;
 use HostPilot\Payment\PaytrSignature;
