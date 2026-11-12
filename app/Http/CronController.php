@@ -275,8 +275,8 @@ final class CronController
         $freshSince=gmdate('Y-m-d H:i:s',time()-30*86400);
         $targets=[];
         foreach([30,15,7] as $days){
-            $start=(new \\DateTimeImmutable('today',new \\DateTimeZone('UTC')))->modify('+'.$days.' days')->format('Y-m-d').' 00:00:00';
-            $end=(new \\DateTimeImmutable($start,new \\DateTimeZone('UTC')))->modify('+1 day')->format('Y-m-d H:i:s');
+            $start=(new \DateTimeImmutable('today',new \DateTimeZone('UTC')))->modify('+'.$days.' days')->format('Y-m-d').' 00:00:00';
+            $end=(new \DateTimeImmutable($start,new \DateTimeZone('UTC')))->modify('+1 day')->format('Y-m-d H:i:s');
             $targets[$days]=[$start,$end];
         }
         $sql="SELECT d.id,d.domain_name,d.expiry_date,d.registrar_auto_renew,u.email,u.name
