@@ -112,13 +112,13 @@ The HostPilot operator must obtain:
 
 ## Hosting package changes
 
-Customer-facing cPanel/WHM and Plesk upgrades now create a prorated remaining-term invoice. The remote package is changed only after the payment callback has verified full settlement; the bounded cron worker performs the change and ambiguous outcomes require explicit administrator reconciliation. Downgrades are not yet exposed. DirectAdmin remains fail-closed.
+Customer-facing cPanel/WHM and Plesk upgrades create a prorated remaining-term invoice. The remote package is changed only after the payment callback has verified full settlement. Customers can also schedule a lower mapped package for the next renewal date without an immediate charge. The cron worker applies a due downgrade before renewal invoice generation; renewal billing is blocked while that change is queued, processing, failed, or under manual review, so the old package price is not invoiced accidentally. Ambiguous remote outcomes require explicit administrator reconciliation. DirectAdmin remains fail-closed.
 
 
 - cPanel/WHM uses the documented WHM API 1 `changepackage` operation with the remote account username and package name.
 - Plesk uses XML API `webspace/switch-subscription`. The request requires both `plan-guid` and `plan-external-id`; the server-product mapping screen stores these separately from the package display name.
 - DirectAdmin is deliberately fail-closed for package changes. DirectAdmin publishes the actual OpenAPI/Swagger contract at `/static/swagger.json` per server, but HostPilot does not guess an endpoint or mutate user configuration files. A server-specific documented operation must be verified before enabling it.
-- This adapter capability layer does not yet expose a customer upgrade/downgrade workflow or billing. Those must be completed before package changes can be offered to customers.
+- The customer workflow supports immediate paid upgrades and next-renewal scheduled downgrades. Downgrades require an active service, no outstanding service invoice, a lower-priced product on the same server/currency/billing cycle, and a valid remote mapping. Plesk additionally requires both plan GUID and external ID. The scheduled operation does not create an invoice; after successful remote application, the next renewal invoice is generated using the new service amount.
 
 ## 6. Research sources
 
