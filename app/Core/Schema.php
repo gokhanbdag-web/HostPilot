@@ -319,5 +319,44 @@ final class Schema
             $record->execute([':name'=>$emailOutboxName,':applied'=>gmdate('Y-m-d H:i:s')]);
         }
 
+        $domainRegistrationName='20261112_0011_domain_registration_queue';
+        $dr=$db->prepare('SELECT id FROM migrations WHERE migration=:name LIMIT 1');
+        $dr->execute([':name'=>$domainRegistrationName]);
+        if(!$dr->fetchColumn()){
+            $db->exec("CREATE TABLE IF NOT EXISTS domain_registrations (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                user_id BIGINT UNSIGNED NOT NULL,
+                order_id BIGINT UNSIGNED NOT NULL,
+                invoice_id BIGINT UNSIGNED NOT NULL,
+                domain_name VARCHAR(253) NOT NULL,
+                years TINYINT UNSIGNED NOT NULL DEFAULT 1,
+                registrar_customer_id VARCHAR(40) NULL,
+                registrar_contact_id VARCHAR(40) NULL,
+                registrar_order_id VARCHAR(40) NULL,
+                registrar_payload_enc LONGTEXT NOT NULL,
+                idempotency_key CHAR(64) NOT NULL,
+                status VARCHAR(24) NOT NULL DEFAULT 'awaiting_payment',
+                action_status VARCHAR(80) NULL,
+                action_message VARCHAR(500) NULL,
+                attempts SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+                available_at DATETIME NOT NULL,
+                locked_at DATETIME NULL,
+                last_error VARCHAR(1000) NULL,
+                registered_at DATETIME NULL,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL,
+                UNIQUE KEY uq_domain_registration_order(order_id),
+                UNIQUE KEY uq_domain_registration_idempotency(idempotency_key),
+                KEY idx_domain_registration_queue(status,available_at,id),
+                KEY idx_domain_registration_user(user_id,created_at),
+                KEY idx_domain_registration_domain(domain_name,status),
+                CONSTRAINT fk_domain_registration_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE RESTRICT,
+                CONSTRAINT fk_domain_registration_order FOREIGN KEY(order_id) REFERENCES orders(id) ON DELETE RESTRICT,
+                CONSTRAINT fk_domain_registration_invoice FOREIGN KEY(invoice_id) REFERENCES invoices(id) ON DELETE RESTRICT
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            $record=$db->prepare('INSERT IGNORE INTO migrations(migration,batch,applied_at) VALUES(:name,11,:applied)');
+            $record->execute([':name'=>$domainRegistrationName,':applied'=>gmdate('Y-m-d H:i:s')]);
+        }
+
     }
 }
