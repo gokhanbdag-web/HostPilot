@@ -444,5 +444,15 @@ final class Schema
         }
 
 
+        $domainExpiryReminderName='20261112_0016_domain_expiry_reminder_index';
+        $deri=$db->prepare('SELECT id FROM migrations WHERE migration=:name LIMIT 1');
+        $deri->execute([':name'=>$domainExpiryReminderName]);
+        if(!$deri->fetchColumn()){
+            $index=$db->prepare("SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='domain_registrations' AND INDEX_NAME='idx_domain_expiry_reminders'");
+            if(!(int)$index->fetchColumn())$db->exec('ALTER TABLE domain_registrations ADD KEY idx_domain_expiry_reminders(status,expiry_date,registrar_synced_at)');
+            $record=$db->prepare('INSERT IGNORE INTO migrations(migration,batch,applied_at) VALUES(:name,16,:applied)');
+            $record->execute([':name'=>$domainExpiryReminderName,':applied'=>gmdate('Y-m-d H:i:s')]);
+        }
+
     }
 }
