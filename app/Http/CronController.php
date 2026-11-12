@@ -345,6 +345,7 @@ final class CronController
             $this->db->prepare("UPDATE provisioning_jobs SET status='completed',locked_at=NULL,last_error=NULL,updated_at=:updated WHERE id=:id")
                 ->execute([':updated'=>$finished,':id'=>$jobId]);
             $this->audit((int)$service['id'],(int)$server['id'],'create','success','Hosting hesabı oluşturuldu: '.(string)$result['identifier']);
+            (new EmailService($this->db,$this->applicationKey))->queueServiceNotice((string)$service['email'],(string)($service['customer_name']??''),(string)$service['domain'],'provisioned',(int)$service['id']);
             $this->db->commit();
             echo json_encode(['ok'=>true,'processed'=>1,'job_id'=>$jobId,'service_id'=>(int)$service['id'],'status'=>'completed'],JSON_UNESCAPED_SLASHES);
         }catch(Throwable $e){
@@ -399,7 +400,7 @@ final class CronController
             }
 
             // Never bill the old package while a scheduled downgrade is queued, processing, failed, or under review.
-            $due=$this->db->prepare("SELECT s.*,p.name AS product_name FROM services s JOIN products p ON p.id=s.product_id WHERE s.status='active' AND s.provisioning_status='completed' AND s.suspension_source='none' AND s.next_due_date IS NOT NULL AND s.next_due_date<=:today AND NOT EXISTS (SELECT 1 FROM service_package_changes c WHERE c.service_id=s.id AND c.change_type='downgrade' AND c.invoice_id IS NULL AND c.status IN ('scheduled','queued','processing','needs_review','failed')) ORDER BY s.next_due_date,s.id LIMIT 1 FOR UPDATE");
+            $due=$this->db->prepare("SELECT s.*,p.name AS product_name,u.email,u.name AS customer_name FROM services s JOIN products p ON p.id=s.product_id JOIN users u ON u.id=s.user_id WHERE s.status='active' AND s.provisioning_status='completed' AND s.suspension_source='none' AND s.next_due_date IS NOT NULL AND s.next_due_date<=:today AND NOT EXISTS (SELECT 1 FROM service_package_changes c WHERE c.service_id=s.id AND c.change_type='downgrade' AND c.invoice_id IS NULL AND c.status IN ('scheduled','queued','processing','needs_review','failed')) ORDER BY s.next_due_date,s.id LIMIT 1 FOR UPDATE");
             $due->execute([':today'=>$today]);$service=$due->fetch();
             if($service){
                 if(empty($service['order_id']))throw new \RuntimeException('Yenileme faturası için hizmetin sipariş bağlantısı bulunamadı.');
@@ -414,6 +415,7 @@ final class CronController
                 $line=$this->db->prepare("INSERT INTO invoice_items(invoice_id,description,quantity,unit_price,tax_rate,tax_amount,line_total,created_at) VALUES(:invoice,:description,1,:price,0,0,:total,:created)");
                 $line->execute([':invoice'=>$invoiceId,':description'=>$service['product_name'].' · Hizmet yenileme '.$period,':price'=>$service['amount'],':total'=>$service['amount'],':created'=>$now]);
                 $this->db->prepare("UPDATE services SET next_due_date=:next,updated_at=:updated WHERE id=:id")->execute([':next'=>$next,':updated'=>$now,':id'=>$service['id']]);
+                (new EmailService($this->db,$this->applicationKey))->queueInvoiceNotice((string)$service['email'],(string)$service['customer_name'],$number,(float)$service['amount'],(string)$service['currency'],$dueAt,'created',$invoiceId);
             }
             $this->db->commit();
 
@@ -565,6 +567,7 @@ final class CronController
         $this->db->prepare("UPDATE provisioning_jobs SET status='completed',locked_at=NULL,last_error=NULL,updated_at=:updated WHERE id=:id")
             ->execute([':updated'=>$now,':id'=>$job['id']]);
         $this->audit((int)$service['id'],(int)$server['id'],$job['job_type'],'success',$action==='suspend'?'Vadesi geçmiş fatura nedeniyle hizmet askıya alındı.':'Ödeme alındı; hizmet yeniden etkinleştirildi.');
+        (new EmailService($this->db,$this->applicationKey))->queueServiceNotice((string)($service['email']??''),(string)($service['customer_name']??''),(string)($service['remote_domain']??''),$action==='suspend'?'suspended':'reactivated',(int)$service['id']);
         echo json_encode(['ok'=>true,'processed'=>1,'job_id'=>(int)$job['id'],'status'=>'completed'],JSON_UNESCAPED_SLASHES);
     }
 
