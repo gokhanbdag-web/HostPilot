@@ -22,6 +22,46 @@ final class ResellerClubClient
         if(!is_bool($available))throw new RuntimeException('Registrar yanıtında kullanılabilirlik bilgisi bulunamadı.');
         return ['domain'=>strtolower($domain),'available'=>$available,'price'=>isset($data['price'])?(string)$data['price']:null,'raw_status'=>(string)($data['status']??'')];
     }
+    public function createCustomer(array $customer):string
+    {
+        $required=['username','password','name','addressLine1','city','country','zipcode','phoneCountryCode','phone'];
+        foreach($required as $key)if(!isset($customer[$key])||trim((string)$customer[$key])==='')throw new RuntimeException('Registrar müşteri bilgileri eksik: '.$key);
+        $data=$this->request('POST','/customers',$customer);
+        $id=(string)($data['customerId']??'');
+        if($id===''||!ctype_digit($id))throw new RuntimeException('Registrar müşteri kaydından geçerli customerId dönmedi.');
+        return $id;
+    }
+
+    public function createContact(array $contact):string
+    {
+        $required=['customerId','name','email','addressLine1','city','country','zipcode','phoneCountryCode','phone'];
+        foreach($required as $key)if(!isset($contact[$key])||trim((string)$contact[$key])==='')throw new RuntimeException('Registrar iletişim bilgileri eksik: '.$key);
+        $contact['type']='Contact';
+        $data=$this->request('POST','/contacts',$contact);
+        $id=(string)($data['contactId']??$data['value']??'');
+        if($id===''||!ctype_digit($id))throw new RuntimeException('Registrar contact kaydından geçerli contactId dönmedi.');
+        return $id;
+    }
+
+    public function registerDomain(string $domain,int $years,string $customerId,string $contactId,array $nameservers,string $invoiceOption,bool $autoRenew=false):array
+    {
+        if(!preg_match('/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$/i',$domain))throw new RuntimeException('Geçersiz alan adı.');
+        if($years<1||$years>10||!ctype_digit($customerId)||!ctype_digit($contactId))throw new RuntimeException('Domain kayıt parametreleri geçersiz.');
+        if(!in_array($invoiceOption,['NoInvoice','PayInvoice','KeepInvoice','OnlyAdd'],true))throw new RuntimeException('Registrar faturalandırma seçeneği geçersiz.');
+        $ns=[];foreach($nameservers as $server){$server=strtolower(trim((string)$server));if($server!==''&&!preg_match('/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$/',$server))throw new RuntimeException('Nameserver adresi geçersiz.');if($server!=='')$ns[]=$server;}
+        $payload=['domainName'=>strtolower($domain),'years'=>$years,'customerId'=>$customerId,'regContactId'=>$contactId,'adminContactId'=>$contactId,'techContactId'=>$contactId,'billingContactId'=>$contactId,'invoiceOption'=>$invoiceOption,'autoRenew'=>$autoRenew];
+        if($ns)$payload['ns']=$ns;
+        $data=$this->request('POST','/domains',$payload);
+        if(empty($data['orderId'])||!ctype_digit((string)$data['orderId']))throw new RuntimeException('Registrar kayıt yanıtında geçerli orderId bulunamadı.');
+        return $data;
+    }
+
+    public function actionStatus(string $orderId):array
+    {
+        if(!ctype_digit($orderId))throw new RuntimeException('Geçersiz registrar orderId.');
+        return $this->request('GET','/actions/search-current?'.http_build_query(['orderId'=>$orderId,'size'=>10,'page'=>1]));
+    }
+
     private function request(string $method,string $path,?array $payload=null):array
     {
         $headers=['Accept: application/json','X-User-Id: '.$this->userId,'Authorization: ApiKey '.$this->apiKey];
