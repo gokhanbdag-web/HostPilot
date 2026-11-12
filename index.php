@@ -78,6 +78,8 @@ if ($requestPath === '/client/tickets/new' && in_array($method, ['GET', 'POST'],
 if (preg_match('#^/client/tickets/([0-9]+)$#', $requestPath, $ticketMatch) && in_array($method, ['GET', 'POST'], true)) { $client->viewTicket((int)$ticketMatch[1]); exit; }
 if ($requestPath === '/knowledgebase' && $method === 'GET') { $client->knowledgebase(); exit; }
 
+if ($requestPath === '/admin/settings' && in_array($method, ['GET','POST'], true)) { (new \\HostPilot\\Http\\EmailSettingsController($pdo, $basePath, (string)($config['app']['key'] ?? '')))->index(); exit; }
+
 $controller = new \HostPilot\Http\AdminController($pdo, $basePath);
 if ($requestPath === '/admin/tickets' && $method === 'GET') { $controller->tickets(); exit; }
 if (preg_match('#^/admin/tickets/([0-9]+)$#', $requestPath, $adminTicketMatch) && in_array($method, ['GET','POST'], true)) { $controller->viewTicket((int)$adminTicketMatch[1]); exit; }
