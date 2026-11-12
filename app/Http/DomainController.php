@@ -110,7 +110,7 @@ final class DomainController
             $api=new ResellerClubClient((string)$cfg['user_id'],$this->vault->decrypt((string)$cfg['api_key_enc']),(string)($cfg['environment']??'sandbox'));
             if(in_array($stage,['queued','customer_created','contact_created'],true)){
                 $payload=json_decode($this->vault->decrypt((string)$row['registrar_payload_enc']),true,32,JSON_THROW_ON_ERROR);
-                if(!is_array($payload)||empty($payload['customer'])||empty($payload['contact']))throw new \\RuntimeException('Şifreli domain kayıt bilgileri okunamadı.');
+                if(!is_array($payload)||($stage!=='contact_created'&&(empty($payload['customer'])||empty($payload['contact']))))throw new \\RuntimeException('Şifreli domain kayıt bilgileri okunamadı.');
                 $customerId=(string)($row['registrar_customer_id']??'');
                 $contactId=(string)($row['registrar_contact_id']??'');
                 if($stage==='queued'){
@@ -119,8 +119,10 @@ final class DomainController
                     if(empty($availability['available']))throw new \\RuntimeException('Ödeme tamamlandı ancak alan adı son kontrol sırasında artık uygun değil. Yönetici incelemesi gerekli.');
                     $remoteCallStarted=true;
                     $customerId=$api->createCustomer((array)$payload['customer']);
-                    $this->db->prepare("UPDATE domain_registrations SET registrar_customer_id=:customer,status='customer_created',locked_at=NULL,available_at=:available,updated_at=:updated WHERE id=:id")
-                        ->execute([':customer'=>$customerId,':available'=>gmdate('Y-m-d H:i:s'),':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
+                    unset($payload['customer']['password'],$payload['customer']['username']);
+                    $payloadEnc=$this->vault->encrypt(json_encode($payload,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR));
+                    $this->db->prepare("UPDATE domain_registrations SET registrar_customer_id=:customer,registrar_payload_enc=:payload,status='customer_created',locked_at=NULL,available_at=:available,updated_at=:updated WHERE id=:id")
+                        ->execute([':customer'=>$customerId,':payload'=>$payloadEnc,':available'=>gmdate('Y-m-d H:i:s'),':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
                     $stage='customer_created';
                 }
                 if($stage==='customer_created'){
@@ -128,8 +130,9 @@ final class DomainController
                     $payload['contact']['customerId']=$customerId;
                     $remoteCallStarted=true;
                     $contactId=$api->createContact((array)$payload['contact']);
-                    $this->db->prepare("UPDATE domain_registrations SET registrar_contact_id=:contact,status='contact_created',locked_at=NULL,available_at=:available,updated_at=:updated WHERE id=:id")
-                        ->execute([':contact'=>$contactId,':available'=>gmdate('Y-m-d H:i:s'),':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
+                    $emptyPayload=$this->vault->encrypt('{}');
+                    $this->db->prepare("UPDATE domain_registrations SET registrar_contact_id=:contact,registrar_payload_enc=:payload,status='contact_created',locked_at=NULL,available_at=:available,updated_at=:updated WHERE id=:id")
+                        ->execute([':contact'=>$contactId,':payload'=>$emptyPayload,':available'=>gmdate('Y-m-d H:i:s'),':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
                     $stage='contact_created';
                 }
                 if($stage==='contact_created'){
@@ -167,7 +170,7 @@ final class DomainController
             if($this->db->inTransaction())$this->db->rollBack();
             error_log('[HostPilot] Domain registration worker: '.$e->getMessage());
             if($row){
-                $next=($remoteCallStarted||$stage==='pending_remote')?'needs_review':'failed';
+                $next=($remoteCallStarted||in_array($stage,['customer_created','contact_created','pending_remote'],true))?'needs_review':'failed';
                 $this->db->prepare("UPDATE domain_registrations SET status=:status,locked_at=NULL,last_error=:error,updated_at=:updated WHERE id=:id")
                     ->execute([':status'=>$next,':error'=>substr($e->getMessage(),0,1000),':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
             }
