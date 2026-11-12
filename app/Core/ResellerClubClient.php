@@ -56,6 +56,20 @@ final class ResellerClubClient
         return $data;
     }
 
+    public function updateNameservers(string $orderId,array $nameservers):array
+    {
+        if(!ctype_digit($orderId))throw new RuntimeException('Geçersiz registrar orderId.');
+        $servers=[];
+        foreach($nameservers as $server){
+            $server=strtolower(trim((string)$server));
+            if(!preg_match('/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$/',$server))throw new RuntimeException('Nameserver adresi geçersiz.');
+            $servers[]=$server;
+        }
+        $servers=array_values(array_unique($servers));
+        if(count($servers)<2||count($servers)>5)throw new RuntimeException('En az iki, en fazla beş farklı nameserver girin.');
+        return $this->request('PUT','/domains/'.$orderId.'/nameservers',['ns'=>$servers]);
+    }
+
     public function actionStatus(string $orderId):array
     {
         if(!ctype_digit($orderId))throw new RuntimeException('Geçersiz registrar orderId.');
