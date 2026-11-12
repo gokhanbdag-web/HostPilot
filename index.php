@@ -126,6 +126,7 @@ if ($requestPath === '/cron/provision' && $method === 'GET') { $cronController->
 if ($requestPath === '/cron/email' && $method === 'GET') { $cronController->runEmailQueue(); exit; }
 if ($requestPath === '/cron/domains' && $method === 'GET') { $domains->runRegistrationQueue(); exit; }
 if ($requestPath === '/cron/domain-renewals' && $method === 'GET') { $domains->runRenewalQueue(); exit; }
+if ($requestPath === '/cron/domain-expiry-sync' && $method === 'GET') { $domains->runExpirySyncQueue(); exit; }
 if ($requestPath === '/admin/services/provision' && $method === 'POST') { $serverController->provision(); exit; }
 if ($requestPath === '/admin/services/lifecycle' && $method === 'POST') { $serverController->lifecycle(); exit; }
 if ($requestPath === '/admin/services/terminate' && $method === 'POST') { $serverController->terminate(); exit; }
