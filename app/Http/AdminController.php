@@ -2,12 +2,13 @@
 declare(strict_types=1);
 namespace HostPilot\Http;
 use HostPilot\Core\Auth;
+use HostPilot\Core\EmailService;
 use PDO;
 use Throwable;
 
 final class AdminController
 {
-    public function __construct(private readonly PDO $db, private readonly string $basePath = '') {}
+    public function __construct(private readonly PDO $db, private readonly string $basePath = '',private readonly string $applicationKey='') {}
 
     public function login(): void
     {
@@ -93,7 +94,9 @@ final class AdminController
                 else{
                     $m=$this->db->prepare('INSERT INTO ticket_messages(ticket_id,user_id,message,is_staff,created_at) VALUES(:ticket,:uid,:message,1,:created)');
                     $m->execute([':ticket'=>$id,':uid'=>$user['id'],':message'=>$message,':created'=>$now]);
+                    $messageId=(int)$this->db->lastInsertId();
                     $this->db->prepare("UPDATE tickets SET status='staff_reply',last_reply_at=:reply,updated_at=:updated WHERE id=:id")->execute([':reply'=>$now,':updated'=>$now,':id'=>$id]);
+                    if($this->applicationKey!=='')(new EmailService($this->db,$this->applicationKey))->queueTicketNotice((string)$ticket['email'],(string)$ticket['ticket_number'],(string)$ticket['subject'],'staff_reply','ticket:'.$id.':staff_reply:'.$messageId);
                     $this->redirect('/admin/tickets/'.$id);
                 }
             }
