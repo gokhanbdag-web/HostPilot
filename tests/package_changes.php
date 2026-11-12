@@ -99,7 +99,13 @@ $checks=[
  'ResellerClub renewal polling falls back to archived actions'=>str_contains($domain,'/actions/search-archived')&&str_contains($domain,'/actions/search-current'),
  'renewal expiry parser accepts timestamps and registrar date strings'=>str_contains($domainController,'new \\DateTimeImmutable((string)$raw')&&str_contains($domainController,'9999999999'),
  'manual renewal requeue clears previous registrar action identity'=>str_contains($domainController,'action_eaq_id=NULL,action_type=NULL'),
- 'domain renewal cron command is visible in automation screen'=>str_contains(file_get_contents(__DIR__.'/../app/Http/CronController.php'),'/cron/domain-renewals')&&str_contains(file_get_contents(__DIR__.'/../app/Http/CronController.php'),'domainRenewalCommand')
+ 'domain renewal cron command is visible in automation screen'=>str_contains(file_get_contents(__DIR__.'/../app/Http/CronController.php'),'/cron/domain-renewals')&&str_contains(file_get_contents(__DIR__.'/../app/Http/CronController.php'),'domainRenewalCommand'),
+ 'domain expiry reminder migration adds lookup index'=>str_contains($schema,'20261112_0016_domain_expiry_reminder_index')&&str_contains($schema,'idx_domain_expiry_reminders'),
+ 'domain expiry email uses allowed 30/15/7-day terms'=>str_contains($email,'queueDomainExpiryNotice')&&str_contains($email,'[30,15,7]')&&str_contains($email,'domain_expiry_'),
+ 'domain expiry reminder idempotency includes domain term and expiry date'=>str_contains($email,'domain-expiry:')&&str_contains($email,'INSERT IGNORE INTO email_outbox'),
+ 'domain expiry reminders require active domain and fresh registrar sync'=>str_contains($worker,"d.status='active'")&&str_contains($worker,'registrar_synced_at>=:fresh_since')&&str_contains($worker,'expiry_date>=:from30'),
+ 'domain expiry reminders are queued by authenticated email cron'=>str_contains($worker,'queueDomainExpiryReminders')&&str_contains($worker,'HostPilot email cron v1')&&str_contains($routes,"'/cron/email'"),
+ 'domain expiry reminder worker reports queue counts'=>str_contains($worker,'queued_domain_expiry_reminders')&&str_contains($worker,'already_queued_or_sent')
 
 ];
 $failed=[];
