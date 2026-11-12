@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 $schema=file_get_contents(__DIR__.'/../app/Core/Schema.php');
+$email=file_get_contents(__DIR__.'/../app/Core/EmailService.php');
+$emailSettings=file_get_contents(__DIR__.'/../app/Http/EmailSettingsController.php');
 $client=file_get_contents(__DIR__.'/../app/Http/PackageChangeController.php');
 $payment=file_get_contents(__DIR__.'/../app/Http/PaymentController.php');
 $worker=file_get_contents(__DIR__.'/../app/Http/CronController.php');
@@ -34,6 +36,16 @@ $checks=[
  'admin can see scheduled downgrade queue'=>str_contains($worker,'Planlanmış paket düşürmeleri'),
  'customer sees scheduled downgrade and effective date'=>str_contains($portal,'Planlanan paket düşürme')&&str_contains($portal,'Uygulanma tarihi'),
  'scheduled downgrade supports manual remote reconciliation'=>str_contains($worker,'Planlanmış paket düşürme henüz yürürlük tarihine ulaşmadı')&&str_contains($worker,'remote_not_applied'),
+ 'customer can cancel a scheduled downgrade'=>str_contains($client,'public function cancelScheduled')&&str_contains($client,"SET status='cancelled'")&&str_contains($routes,"'/client/services/change/cancel'"),
+ 'cancellation is limited to future scheduled downgrades'=>str_contains($client,"$change['status']!=='scheduled'")&&str_contains($client,"$change['effective_at']<=gmdate"),
+ 'customer portal displays downgrade cancellation control'=>str_contains($portal,'Paket düşürme talebini iptal et')&&str_contains($portal,'change_id'),
+ 'SMTP sender uses TLS verification and encrypted credentials'=>str_contains($email,'SecretVault')&&str_contains($email,'verify_peer_name')&&str_contains($email,'stream_socket_enable_crypto'),
+ 'SMTP credentials configured from admin screen'=>str_contains($emailSettings,'password_enc')&&str_contains($emailSettings,'/admin/settings')&&str_contains($routes,'EmailSettingsController'),
+ 'package downgrade scheduled email notification'=>str_contains($email,"'scheduled'")&&str_contains($client,"'scheduled'"),
+ 'package downgrade cancellation email notification'=>str_contains($email,"'cancelled'")&&str_contains($client,"'cancelled'"),
+ 'upgrade request and verified payment email notifications'=>str_contains($email,"'requested'")&&str_contains($payment,'EmailService')&&str_contains($payment,"'payment'"),
+ 'successful remote package change email notification'=>str_contains($worker,'EmailService')&&str_contains($worker,"'completed'"),
+
 ];
 $failed=[];
 foreach($checks as $name=>$ok){echo ($ok?'PASS':'FAIL').' - '.$name.PHP_EOL;if(!$ok)$failed[]=$name;}
