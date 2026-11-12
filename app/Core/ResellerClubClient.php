@@ -98,7 +98,11 @@ final class ResellerClubClient
     {
         if(!ctype_digit($orderId))throw new RuntimeException('Geçersiz registrar orderId.');
         if(!ctype_digit($eaqId))throw new RuntimeException('Geçersiz registrar action ID.');
-        return $this->request('GET','/actions/search-current?'.http_build_query(['orderId'=>$orderId,'eaqId'=>$eaqId,'size'=>10,'page'=>1]));
+        $query=http_build_query(['orderId'=>$orderId,'eaqId'=>$eaqId,'size'=>10,'page'=>1]);
+        $current=$this->request('GET','/actions/search-current?'.$query);
+        if(!empty($current['actions']))return $current;
+        // Completed and failed actions move out of the current list after 24 hours.
+        return $this->request('GET','/actions/search-archived?'.$query);
     }
 
     private function request(string $method,string $path,?array $payload=null):array
