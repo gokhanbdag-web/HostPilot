@@ -59,7 +59,7 @@ $checks=[
  'customer ticket creation and replies notify support staff'=>str_contains($portal,'notifyTicketStaff')&&str_contains($portal,"'created'")&&str_contains($portal,"'customer_reply'"),
  'staff ticket replies notify the customer'=>str_contains($admin,'queueTicketNotice')&&str_contains($admin,"'staff_reply'")&&str_contains($admin,'applicationKey'),
  'overdue invoice notifications are queued'=>str_contains($worker,"'overdue'")&&str_contains($worker,'queueInvoiceNotice'),
- 'failed payment notifications are queued idempotently'=>str_contains($payment,"'failed',$id")&&str_contains($email,"'payment-failed:'"),
+ 'failed payment notifications are queued idempotently'=>str_contains($payment,"'failed',\$id")&&str_contains($email,"'payment-failed:'"),
  'ResellerClub REST API uses fixed sandbox/live hosts and TLS verification'=>str_contains($domain,'api.sandbox.resellerclub.com/v2')&&str_contains($domain,'api.resellerclub.com/v2')&&str_contains($domain,'verify_peer_name'),
  'ResellerClub API key is encrypted in admin settings'=>str_contains($domainController,'SecretVault')&&str_contains($domainController,'api_key_enc')&&str_contains($routes,"'/admin/domains/registrar'"),
  'customer can check live domain availability'=>str_contains($domain,"'/domains/available?")&&str_contains($domainController,'checkAvailability')&&str_contains($routes,"'/domains/search'"),
@@ -77,7 +77,7 @@ $checks=[
  'customer nameserver changes are encrypted and queued'=>str_contains($domainController,'requestNameservers')&&str_contains($domainController,'pending_nameservers_enc')&&str_contains($domainController,'nameserver_status=\'queued\'')&&str_contains($routes,"'/client/domains/nameservers'"),
  'nameserver worker and admin reconciliation handle ambiguous outcomes'=>str_contains($domainController,'nameserverOperation')&&str_contains($domainController,'reconcileNameservers')&&str_contains($routes,"'/admin/domains/nameservers/reconcile'"),
  'versioned registrar expiry metadata migration'=>str_contains($schema,'20261112_0013_domain_expiry_sync')&&str_contains($schema,'expiry_date')&&str_contains($schema,'registrar_auto_renew'),
- 'ResellerClub domain detail lookup uses official order endpoint'=>str_contains($domain,'domainDetails')&&str_contains($domain,"'/domains/'.$orderId.'?'")&&str_contains($domain,"'options'=>'OrderDetails,StatusDetails'"),
+ 'ResellerClub domain detail lookup uses official order endpoint'=>str_contains($domain,'domainDetails')&&str_contains($domain,"domains/'")&&str_contains($domain,'http_build_query')&&str_contains($domain,"'options'=>'OrderDetails,StatusDetails'"),
  'customer expiry sync enforces ownership and active status'=>str_contains($domainController,'syncDomainDetails')&&str_contains($domainController,"WHERE id=:id AND user_id=:user")&&str_contains($domainController,"status']!=='active'")&&str_contains($routes,"'/client/domains/sync'"),
  'registrar expiry and auto-renew values are sourced and stored'=>str_contains($domainController,'expiryDate')&&str_contains($domainController,'isAutoRenew')&&str_contains($domainController,'registrar_synced_at'),
 
