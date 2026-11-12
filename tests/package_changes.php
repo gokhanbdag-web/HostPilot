@@ -112,7 +112,9 @@ $checks=[
  'registrar sync retries failures after one hour and successes daily'=>str_contains($domainController,'time()-86400')&&str_contains($domainController,'time()-3600'),
  'registrar sync protects nameserver queue locks'=>str_contains($domainController,"nameserver_status NOT IN ('queued','processing')")&&str_contains($domainController,"nameserver_status<>'processing'"),
  'registrar sync parses seconds milliseconds and date strings'=>str_contains($domainController,'parseRegistrarExpiry')&&str_contains($domainController,'floor($timestamp/1000)'),
- 'daily registrar sync command is visible in automation screen'=>str_contains($worker,'domain-expiry-sync')&&str_contains($worker,'domainSyncCommand')
+ 'daily registrar sync command is visible in automation screen'=>str_contains($worker,'domain-expiry-sync')&&str_contains($worker,'domainSyncCommand'),
+ 'admin domain list shows registrar sync history and next run'=>str_contains($domainController,'Son başarılı eşitleme')&&str_contains($domainController,'Sonraki otomatik deneme')&&str_contains($domainController,'registrar_sync_error'),
+ 'manual registrar sync queue is admin-only, csrf-protected and lock-safe'=>str_contains($domainController,'function queueExpirySync')&&str_contains($domainController,'Auth::verifyCsrf')&&str_contains($domainController,'FOR UPDATE')&&str_contains($domainController,'registrar_sync_attempted_at=NULL')&&str_contains($routes,"'/admin/domains/expiry-sync/queue'")
 
 ];
 $failed=[];
