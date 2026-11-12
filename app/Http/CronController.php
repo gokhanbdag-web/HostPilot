@@ -3,6 +3,7 @@ declare(strict_types=1);
 namespace HostPilot\Http;
 
 use HostPilot\Core\Auth;
+use HostPilot\Core\EmailService;
 use HostPilot\Core\SecretVault;
 use HostPilot\Hosting\CpanelWhmAdapter;
 use HostPilot\Hosting\DirectAdminAdapter;
@@ -160,7 +161,8 @@ final class CronController
                 $changeQuery=$this->db->prepare('SELECT * FROM service_package_changes WHERE id=:id AND service_id=:service FOR UPDATE');
                 $changeQuery->execute([':id'=>(int)$packageMatch[1],':service'=>$service['id']]);$change=$changeQuery->fetch();
                 if(!$change||$change['status']!=='needs_review')throw new \RuntimeException('Paket değişikliği inceleme kaydı bulunamadı.');
-                $scheduled=$change['change_type']==='downgrade';
+                $names=$this->db->prepare('SELECT fp.name AS from_name,tp.name AS to_name FROM products fp JOIN products tp ON tp.id=:to_product WHERE fp.id=:from_product');$names->execute([':from_product'=>$change['from_product_id'],':to_product'=>$change['to_product_id']]);$planNames=$names->fetch()?:['from_name'=>'Önceki paket','to_name'=>'Yeni paket'];
+        $scheduled=$change['change_type']==='downgrade';
                 if($scheduled){
                     if($change['invoice_id']!==null||(float)$change['target_amount']>=(float)$service['amount']||$change['effective_at']>$now||empty($service['next_due_date'])||$service['next_due_date']>gmdate('Y-m-d'))throw new \RuntimeException('Planlanmış paket düşürme henüz yürürlük tarihine ulaşmadı veya tutarsız.');
                 }else{
@@ -271,7 +273,7 @@ final class CronController
                 ->execute([':now'=>$now,':now2'=>$now,':id'=>$jobId]);
             $this->db->commit();
 
-            $serviceQuery=$this->db->prepare("SELECT s.*,u.email FROM services s JOIN users u ON u.id=s.user_id WHERE s.id=:id LIMIT 1");
+            $serviceQuery=$this->db->prepare("SELECT s.*,u.email,u.name AS customer_name FROM services s JOIN users u ON u.id=s.user_id WHERE s.id=:id LIMIT 1");
             $serviceQuery->execute([':id'=>$job['service_id']]);$service=$serviceQuery->fetch();
             if(!$service)throw new \RuntimeException('Hizmet kaydı bulunamadı.');
             if(str_starts_with((string)$job['job_type'],'terminate_')){
@@ -451,6 +453,7 @@ final class CronController
         $this->db->prepare("UPDATE provisioning_jobs SET status='completed',locked_at=NULL,last_error=NULL,updated_at=:updated WHERE id=:id")->execute([':updated'=>$now,':id'=>$job['id']]);
         $this->audit((int)$service['id'],(int)$server['id'],'package_change','success',$scheduled?'Yenileme tarihinde planlı paket düşürme uygulandı.':'Ödenmiş yükseltme sonrası uzak paket değiştirildi.');
         $this->db->commit();
+        (new EmailService($this->db,$this->applicationKey))->sendPackageChange((string)$service['email'],(string)($service['customer_name']??''),(string)$service['remote_domain'],(string)$planNames['from_name'],(string)$planNames['to_name'],'completed');
         echo json_encode(['ok'=>true,'processed'=>1,'job_id'=>(int)$job['id'],'status'=>$scheduled?'package_downgraded':'package_changed'],JSON_UNESCAPED_SLASHES);
     }
 
