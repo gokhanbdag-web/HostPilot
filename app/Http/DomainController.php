@@ -104,9 +104,32 @@ final class DomainController
         echo '<div class="layout"><aside class="sidebar"><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a class="nav-item" href="'.$this->url('/admin/domains/registrar').'">Registrar ayarları</a><a class="nav-item active" href="'.$this->url('/admin/domains/orders').'">Domain siparişleri</a></aside><main class="main"><header class="topbar"><div><small>DOMAIN / SİPARİŞLER</small><h1>Domain kayıt kuyruğu</h1></div><a href="'.$this->url('/admin/domains/registrar').'">Registrar ayarları</a></header><article class="panel"><p>Belirsiz registrar yanıtları otomatik tekrar gönderilmez; manuel doğrulama gerektirir. Aşağıdaki uzlaştırma işlemleri yalnızca registrar panelinde kontrol yaptıktan sonra kullanılmalıdır.</p>';if($notice!=='')echo '<div class="notice">'.$this->e($notice).'</div>';if($error!=='')echo '<div class="alert">'.$this->e($error).'</div>';
         if(!$rows)echo '<p>Henüz domain siparişi yok.</p>';
         foreach($rows as $row){echo '<div style="padding:14px 0;border-bottom:1px solid #26354c"><b>'.$this->e((string)$row['domain_name']).'</b> · '.$this->e($labels[$row['status']]??(string)$row['status']).'<p>'.$this->e((string)$row['name']).' · '.$this->e((string)$row['email']).' · #'.$this->e((string)$row['invoice_number']).' · '.$this->e((string)$row['invoice_status']).'</p><small>Registrar order: '.$this->e((string)($row['registrar_order_id']??'—')).' · Action: '.$this->e((string)($row['action_status']??'—')).'</small>'.(!empty($row['last_error'])?'<p class="alert">'.$this->e((string)$row['last_error']).'</p>':'').'</div>';
+            if($row['status']==='active'&&in_array($row['nameserver_status']??'', ['needs_review','failed'],true)){echo '<p>Nameserver işlemi: '.$this->e((string)$row['nameserver_status']).(!empty($row['nameserver_error'])?' · '.$this->e((string)$row['nameserver_error']):'').'</p><form method="post" action="'.$this->url('/admin/domains/nameservers/reconcile').'" style="display:flex;gap:8px;flex-wrap:wrap"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="id" value="'.(int)$row['id'].'"><button name="decision" value="remote_applied">Uzakta uygulandı — eşitle</button><button name="decision" value="remote_not_applied">Uygulanmadı — tekrar sıraya al</button><button name="decision" value="mark_failed">İşlemi kapat</button></form>';}
             if(in_array($row['status'],['needs_review','failed'],true)){echo '<form method="post" action="'.$this->url('/admin/domains/reconcile').'" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0 25px"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="id" value="'.(int)$row['id'].'"><label>Doğrulanmış customerId<input name="customer_id" inputmode="numeric"></label><label>Doğrulanmış contactId<input name="contact_id" inputmode="numeric"></label><label>Doğrulanmış registrar orderId<input name="registrar_order_id" inputmode="numeric"></label><label>Başarısızlık açıklaması<input name="reason" maxlength="1000"></label><button name="decision" value="resume_customer">Müşteri kaydı var → devam et</button><button name="decision" value="resume_contact">İletişim kaydı var → devam et</button><button name="decision" value="resume_action">Domain kayıt emri var → durumunu sorgula</button><button name="decision" value="mark_active" onclick="return confirm(\'Registrar panelinde domainin aktif olduğunu doğruladınız mı?\')">Aktif olarak işaretle</button><button name="decision" value="mark_failed">Başarısız olarak kapat</button></form>';}
         }
         echo '</article></main></div>';$this->end();
+    }
+
+    public function reconcileNameservers():void
+    {
+        if(!$this->admin())return;
+        if(($_SERVER['REQUEST_METHOD']??'GET')!=='POST'){http_response_code(405);echo 'Method not allowed';return;}
+        if(!Auth::verifyCsrf($_POST['_token']??null)){http_response_code(419);echo 'Güvenlik doğrulaması başarısız.';return;}
+        $id=(int)($_POST['id']??0);$decision=(string)($_POST['decision']??'');$now=gmdate('Y-m-d H:i:s');
+        try{
+            $this->db->beginTransaction();$q=$this->db->prepare("SELECT * FROM domain_registrations WHERE id=:id FOR UPDATE");$q->execute([':id'=>$id]);$row=$q->fetch(PDO::FETCH_ASSOC);
+            if(!$row||$row['status']!=='active'||!in_array($row['nameserver_status']??'', ['needs_review','failed'],true))throw new \\RuntimeException('Yalnızca incelemedeki aktif domain nameserver işlemleri uzlaştırılabilir.');
+            if($decision==='remote_applied'){
+                if(empty($row['pending_nameservers_enc']))throw new \\RuntimeException('Bekleyen nameserver verisi bulunamadı.');
+                $this->db->prepare("UPDATE domain_registrations SET nameservers_enc=pending_nameservers_enc,pending_nameservers_enc=NULL,nameserver_status='completed',nameserver_error=NULL,nameserver_updated_at=:now,updated_at=:now WHERE id=:id")->execute([':now'=>$now,':id'=>$id]);
+            }elseif($decision==='remote_not_applied'){
+                if(empty($row['pending_nameservers_enc']))throw new \\RuntimeException('Bekleyen nameserver verisi bulunamadı.');
+                $this->db->prepare("UPDATE domain_registrations SET nameserver_status='queued',nameserver_error=NULL,nameserver_updated_at=:now,updated_at=:now WHERE id=:id")->execute([':now'=>$now,':id'=>$id]);
+            }elseif($decision==='mark_failed'){
+                $this->db->prepare("UPDATE domain_registrations SET pending_nameservers_enc=NULL,nameserver_status='failed',nameserver_error='Yönetici nameserver işleminin uygulanmadığını ve kapatıldığını doğruladı.',nameserver_updated_at=:now,updated_at=:now WHERE id=:id")->execute([':now'=>$now,':id'=>$id]);
+            }else throw new \\RuntimeException('Geçersiz nameserver uzlaştırma kararı.');
+            $this->db->commit();$this->go('/admin/domains/orders','notice='.rawurlencode('Nameserver işlemi uzlaştırıldı.'));
+        }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();$this->go('/admin/domains/orders','error='.rawurlencode($e->getMessage()));}
     }
 
     public function reconcileOrder():void
