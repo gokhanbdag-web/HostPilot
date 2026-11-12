@@ -50,16 +50,16 @@ final class PackageChangeController
             $this->db->beginTransaction();
             $q=$this->db->prepare("SELECT s.*,p.name AS old_name,o.currency,sv.panel_type,sv.enabled AS server_enabled FROM services s JOIN products p ON p.id=s.product_id LEFT JOIN orders o ON o.id=s.order_id LEFT JOIN servers sv ON sv.id=s.server_id WHERE s.id=:id AND s.user_id=:user FOR UPDATE");
             $q->execute([':id'=>$sid,':user'=>$u['id']]);$s=$q->fetch();
-            if(!$s||$s['status']!=='active'||$s['provisioning_status']!=='completed'||empty($s['remote_username'])||empty($s['remote_domain'])||empty($s['server_id'])||empty($s['next_due_date'])||$s['next_due_date']<=gmdate('Y-m-d')||(int)$s['server_enabled']!==1)throw new RuntimeException('Hizmet paket değişikliğine uygun değil.');
-            if(!in_array($s['panel_type'],['cpanel','plesk'],true))throw new RuntimeException('Bu panelde otomatik paket değişimi henüz desteklenmiyor.');
-            $busy=$this->db->prepare("SELECT id FROM service_package_changes WHERE service_id=:id AND status IN ('pending_payment','scheduled','queued','processing','needs_review','failed') LIMIT 1 FOR UPDATE");$busy->execute([':id'=>$sid]);if($busy->fetchColumn())throw new RuntimeException('Bu hizmet için sonuçlanmamış paket değişikliği var.');
+            if(!$s||$s['status']!=='active'||$s['provisioning_status']!=='completed'||empty($s['remote_username'])||empty($s['remote_domain'])||empty($s['server_id'])||empty($s['next_due_date'])||$s['next_due_date']<=gmdate('Y-m-d')||(int)$s['server_enabled']!==1)throw new \\RuntimeException('Hizmet paket değişikliğine uygun değil.');
+            if(!in_array($s['panel_type'],['cpanel','plesk'],true))throw new \\RuntimeException('Bu panelde otomatik paket değişimi henüz desteklenmiyor.');
+            $busy=$this->db->prepare("SELECT id FROM service_package_changes WHERE service_id=:id AND status IN ('pending_payment','scheduled','queued','processing','needs_review','failed') LIMIT 1 FOR UPDATE");$busy->execute([':id'=>$sid]);if($busy->fetchColumn())throw new \\RuntimeException('Bu hizmet için sonuçlanmamış paket değişikliği var.');
             $currency=(string)($s['currency']?:'TRY');
             $p=$this->db->prepare("SELECT p.name,pp.price,m.remote_package,m.remote_package_guid,m.remote_package_external_id FROM products p JOIN product_pricing pp ON pp.product_id=p.id AND pp.currency=:currency AND pp.billing_cycle=:cycle AND pp.is_active=1 JOIN server_product_map m ON m.product_id=p.id AND m.server_id=:server WHERE p.id=:pid AND p.status='active' AND p.product_type='hosting' LIMIT 1");
             $p->execute([':currency'=>$currency,':cycle'=>$s['billing_cycle'],':server'=>$s['server_id'],':pid'=>$pid]);$plan=$p->fetch();
-            if(!$plan||(float)$plan['price']===(float)$s['amount'])throw new RuntimeException('Seçilen ürün geçerli bir farklı paket değil veya sunucuyla eşleştirilmemiş.');
-            if($s['panel_type']==='plesk'&&(!$plan['remote_package_guid']||!$plan['remote_package_external_id']))throw new RuntimeException('Plesk paketi için GUID ve harici plan kimliği eksik.');
+            if(!$plan||(float)$plan['price']===(float)$s['amount'])throw new \\RuntimeException('Seçilen ürün geçerli bir farklı paket değil veya sunucuyla eşleştirilmemiş.');
+            if($s['panel_type']==='plesk'&&(!$plan['remote_package_guid']||!$plan['remote_package_external_id']))throw new \\RuntimeException('Plesk paketi için GUID ve harici plan kimliği eksik.');
             $outstanding=$this->db->prepare("SELECT COUNT(*) FROM invoices WHERE service_id=:service AND status IN ('unpaid','partially_paid','overdue') AND amount_paid+0.005<total");
-            $outstanding->execute([':service'=>$sid]);if((int)$outstanding->fetchColumn()>0)throw new RuntimeException('Ödenmemiş hizmet faturası varken paket değiştirilemez.');
+            $outstanding->execute([':service'=>$sid]);if((int)$outstanding->fetchColumn()>0)throw new \\RuntimeException('Ödenmemiş hizmet faturası varken paket değiştirilemez.');
             $now=gmdate('Y-m-d H:i:s');
             if((float)$plan['price']<(float)$s['amount']){
                 $effective=(string)$s['next_due_date'].' 00:00:00';
