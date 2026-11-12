@@ -349,7 +349,7 @@ final class Schema
                 UNIQUE KEY uq_domain_registration_idempotency(idempotency_key),
                 KEY idx_domain_registration_queue(status,available_at,id),
                 KEY idx_domain_registration_user(user_id,created_at),
-                KEY idx_domain_registration_domain(domain_name,status),
+                UNIQUE KEY uq_domain_registration_name(domain_name),
                 CONSTRAINT fk_domain_registration_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE RESTRICT,
                 CONSTRAINT fk_domain_registration_order FOREIGN KEY(order_id) REFERENCES orders(id) ON DELETE RESTRICT,
                 CONSTRAINT fk_domain_registration_invoice FOREIGN KEY(invoice_id) REFERENCES invoices(id) ON DELETE RESTRICT
