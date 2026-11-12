@@ -256,12 +256,63 @@ final class CronController
         if($this->applicationKey===''||$provided===''||!hash_equals($expected,$provided)){http_response_code(403);echo 'Forbidden';return;}
         header('Content-Type: application/json; charset=utf-8');
         try{
+            $reminders=$this->queueDomainExpiryReminders();
             $stats=(new EmailService($this->db,$this->applicationKey))->processQueue(10);
-            echo json_encode(['ok'=>true,'processed'=>array_sum($stats),'results'=>$stats],JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE);
+            echo json_encode(['ok'=>true,'queued_domain_expiry_reminders'=>$reminders,'processed'=>array_sum($stats),'results'=>$stats],JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE);
         }catch(Throwable $e){
             error_log('[HostPilot] Email queue worker failed: '.$e->getMessage());
             http_response_code(500);echo json_encode(['ok'=>false,'error'=>'Email queue worker failed.'],JSON_UNESCAPED_SLASHES);
         }
+    }
+
+    /**
+     * Queue 30/15/7-day domain reminders only from recently synchronized registrar expiry data.
+     * email_outbox's unique idempotency key guarantees one reminder per domain, term and expiry date.
+     */
+    private function queueDomainExpiryReminders():array
+    {
+        $now=gmdate('Y-m-d H:i:s');
+        $freshSince=gmdate('Y-m-d H:i:s',time()-30*86400);
+        $targets=[];
+        foreach([30,15,7] as $days){
+            $start=(new \\DateTimeImmutable('today',new \\DateTimeZone('UTC')))->modify('+'.$days.' days')->format('Y-m-d').' 00:00:00';
+            $end=(new \\DateTimeImmutable($start,new \\DateTimeZone('UTC')))->modify('+1 day')->format('Y-m-d H:i:s');
+            $targets[$days]=[$start,$end];
+        }
+        $sql="SELECT d.id,d.domain_name,d.expiry_date,d.registrar_auto_renew,u.email,u.name
+              FROM domain_registrations d
+              JOIN users u ON u.id=d.user_id
+              WHERE d.status='active'
+                AND d.expiry_date IS NOT NULL
+                AND d.registrar_synced_at>=:fresh_since
+                AND d.registrar_synced_at<=:now
+                AND ((d.expiry_date>=:from30 AND d.expiry_date<:to30)
+                  OR (d.expiry_date>=:from15 AND d.expiry_date<:to15)
+                  OR (d.expiry_date>=:from7 AND d.expiry_date<:to7))
+              ORDER BY d.expiry_date,d.id";
+        $q=$this->db->prepare($sql);
+        $q->execute([
+            ':fresh_since'=>$freshSince,':now'=>$now,
+            ':from30'=>$targets[30][0],':to30'=>$targets[30][1],
+            ':from15'=>$targets[15][0],':to15'=>$targets[15][1],
+            ':from7'=>$targets[7][0],':to7'=>$targets[7][1],
+        ]);
+        $email=new EmailService($this->db,$this->applicationKey);
+        $queued=0;$duplicates=0;$invalid=0;
+        foreach($q->fetchAll(PDO::FETCH_ASSOC) as $row){
+            $expiry=(string)$row['expiry_date'];
+            $expiryDay=substr($expiry,0,10);
+            $days=(int)((strtotime($expiryDay.' 00:00:00 UTC')-strtotime(gmdate('Y-m-d').' 00:00:00 UTC'))/86400);
+            if(!in_array($days,[30,15,7],true))continue;
+            $created=$email->queueDomainExpiryNotice(
+                (string)$row['email'],(string)$row['name'],(string)$row['domain_name'],
+                $expiry,$days,(int)($row['registrar_auto_renew']??0)===1,(int)$row['id']
+            );
+            if($created)$queued++;
+            elseif(filter_var((string)$row['email'],FILTER_VALIDATE_EMAIL))$duplicates++;
+            else $invalid++;
+        }
+        return ['queued'=>$queued,'already_queued_or_sent'=>$duplicates,'invalid_recipients'=>$invalid];
     }
 
     public function runProvisioning():void
