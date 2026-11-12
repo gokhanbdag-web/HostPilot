@@ -70,7 +70,7 @@ final class DomainController
         try{
             $now=gmdate('Y-m-d H:i:s');
             $this->db->beginTransaction();
-            $pick=$this->db->prepare("SELECT * FROM domain_registrations WHERE status IN ('queued','pending_remote') AND available_at<=:now AND (locked_at IS NULL OR locked_at<:stale) ORDER BY available_at,id LIMIT 1 FOR UPDATE");
+            $pick=$this->db->prepare("SELECT * FROM domain_registrations WHERE status IN ('queued','customer_created','contact_created','pending_remote') AND available_at<=:now AND (locked_at IS NULL OR locked_at<:stale) ORDER BY available_at,id LIMIT 1 FOR UPDATE");
             $pick->execute([':now'=>$now,':stale'=>gmdate('Y-m-d H:i:s',time()-900)]);
             $row=$pick->fetch(PDO::FETCH_ASSOC);
             if(!$row){$this->db->commit();echo json_encode(['ok'=>true,'processed'=>0,'message'=>'Bekleyen domain kaydı yok.']);return;}
@@ -82,26 +82,38 @@ final class DomainController
             $cfg=$this->load();
             if(($cfg['enabled']??'0')!=='1'||empty($cfg['api_key_enc'])||empty($cfg['user_id']))throw new \\RuntimeException('Domain registrar bağlantısı etkin değil veya eksik.');
             $api=new ResellerClubClient((string)$cfg['user_id'],$this->vault->decrypt((string)$cfg['api_key_enc']),(string)($cfg['environment']??'sandbox'));
-            if($stage==='queued'){
+            if(in_array($stage,['queued','customer_created','contact_created'],true)){
                 $payload=json_decode($this->vault->decrypt((string)$row['registrar_payload_enc']),true,32,JSON_THROW_ON_ERROR);
                 if(!is_array($payload)||empty($payload['customer'])||empty($payload['contact']))throw new \\RuntimeException('Şifreli domain kayıt bilgileri okunamadı.');
-                $remoteCallStarted=true;
-                $availability=$api->checkAvailability((string)$row['domain_name']);
-                if(empty($availability['available']))throw new \\RuntimeException('Ödeme tamamlandı ancak alan adı son kontrol sırasında artık uygun değil. Yönetici incelemesi gerekli.');
-                $remoteCallStarted=true;
-                $customerId=$api->createCustomer((array)$payload['customer']);
-                $this->db->prepare("UPDATE domain_registrations SET registrar_customer_id=:customer,status='customer_created',locked_at=NULL,available_at=:available,updated_at=:updated WHERE id=:id")
-                    ->execute([':customer'=>$customerId,':available'=>gmdate('Y-m-d H:i:s'),':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
-                $payload['contact']['customerId']=$customerId;
-                $remoteCallStarted=true;
-                $contactId=$api->createContact((array)$payload['contact']);
-                $this->db->prepare("UPDATE domain_registrations SET registrar_contact_id=:contact,status='contact_created',locked_at=NULL,available_at=:available,updated_at=:updated WHERE id=:id")
-                    ->execute([':contact'=>$contactId,':available'=>gmdate('Y-m-d H:i:s'),':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
-                $remoteCallStarted=true;
-                $result=$api->registerDomain((string)$row['domain_name'],(int)$row['years'],$customerId,$contactId,(array)($payload['nameservers']??[]),(string)($payload['invoiceOption']??'OnlyAdd'),(bool)($payload['autoRenew']??false));
-                $this->db->prepare("UPDATE domain_registrations SET registrar_order_id=:order_id,status='pending_remote',action_status=:action,action_message=:message,locked_at=NULL,available_at=:available,updated_at=:updated WHERE id=:id")
-                    ->execute([':order_id'=>(string)$result['orderId'],':action'=>(string)($result['actionStatus']??'Added'),':message'=>substr((string)($result['message']??'Kayıt talebi registrar tarafından alındı.'),0,500),':available'=>gmdate('Y-m-d H:i:s',time()+45),':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
-                echo json_encode(['ok'=>true,'processed'=>1,'domain'=>$row['domain_name'],'status'=>'pending_remote'],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);return;
+                $customerId=(string)($row['registrar_customer_id']??'');
+                $contactId=(string)($row['registrar_contact_id']??'');
+                if($stage==='queued'){
+                    $remoteCallStarted=true;
+                    $availability=$api->checkAvailability((string)$row['domain_name']);
+                    if(empty($availability['available']))throw new \\RuntimeException('Ödeme tamamlandı ancak alan adı son kontrol sırasında artık uygun değil. Yönetici incelemesi gerekli.');
+                    $remoteCallStarted=true;
+                    $customerId=$api->createCustomer((array)$payload['customer']);
+                    $this->db->prepare("UPDATE domain_registrations SET registrar_customer_id=:customer,status='customer_created',locked_at=NULL,available_at=:available,updated_at=:updated WHERE id=:id")
+                        ->execute([':customer'=>$customerId,':available'=>gmdate('Y-m-d H:i:s'),':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
+                    $stage='customer_created';
+                }
+                if($stage==='customer_created'){
+                    if($customerId===''||!ctype_digit($customerId))throw new \\RuntimeException('Registrar customerId kaydı eksik; manuel kontrol gerekli.');
+                    $payload['contact']['customerId']=$customerId;
+                    $remoteCallStarted=true;
+                    $contactId=$api->createContact((array)$payload['contact']);
+                    $this->db->prepare("UPDATE domain_registrations SET registrar_contact_id=:contact,status='contact_created',locked_at=NULL,available_at=:available,updated_at=:updated WHERE id=:id")
+                        ->execute([':contact'=>$contactId,':available'=>gmdate('Y-m-d H:i:s'),':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
+                    $stage='contact_created';
+                }
+                if($stage==='contact_created'){
+                    if($customerId===''||$contactId===''||!ctype_digit($customerId)||!ctype_digit($contactId))throw new \\RuntimeException('Registrar müşteri/iletişim kimliği eksik; manuel kontrol gerekli.');
+                    $remoteCallStarted=true;
+                    $result=$api->registerDomain((string)$row['domain_name'],(int)$row['years'],$customerId,$contactId,(array)($payload['nameservers']??[]),(string)($payload['invoiceOption']??'OnlyAdd'),(bool)($payload['autoRenew']??false));
+                    $this->db->prepare("UPDATE domain_registrations SET registrar_order_id=:order_id,status='pending_remote',action_status=:action,action_message=:message,locked_at=NULL,available_at=:available,updated_at=:updated WHERE id=:id")
+                        ->execute([':order_id'=>(string)$result['orderId'],':action'=>(string)($result['actionStatus']??'Added'),':message'=>substr((string)($result['message']??'Kayıt talebi registrar tarafından alındı.'),0,500),':available'=>gmdate('Y-m-d H:i:s',time()+45),':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
+                    echo json_encode(['ok'=>true,'processed'=>1,'domain'=>$row['domain_name'],'status'=>'pending_remote'],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);return;
+                }
             }
             if($stage==='pending_remote'){
                 $orderId=(string)($row['registrar_order_id']??'');
