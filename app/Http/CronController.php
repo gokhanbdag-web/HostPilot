@@ -400,7 +400,7 @@ final class CronController
             }
 
             // Never bill the old package while a scheduled downgrade is queued, processing, failed, or under review.
-            $due=$this->db->prepare("SELECT s.*,p.name AS product_name,u.email,u.name AS customer_name FROM services s JOIN products p ON p.id=s.product_id JOIN users u ON u.id=s.user_id WHERE s.status='active' AND s.provisioning_status='completed' AND s.suspension_source='none' AND s.next_due_date IS NOT NULL AND s.next_due_date<=:today AND NOT EXISTS (SELECT 1 FROM service_package_changes c WHERE c.service_id=s.id AND c.change_type='downgrade' AND c.invoice_id IS NULL AND c.status IN ('scheduled','queued','processing','needs_review','failed')) ORDER BY s.next_due_date,s.id LIMIT 1 FOR UPDATE");
+            $due=$this->db->prepare("SELECT s.*,p.name AS product_name,u.email,u.name AS customer_name,o.currency AS currency FROM services s JOIN products p ON p.id=s.product_id JOIN users u ON u.id=s.user_id JOIN orders o ON o.id=s.order_id WHERE s.status='active' AND s.provisioning_status='completed' AND s.suspension_source='none' AND s.next_due_date IS NOT NULL AND s.next_due_date<=:today AND NOT EXISTS (SELECT 1 FROM service_package_changes c WHERE c.service_id=s.id AND c.change_type='downgrade' AND c.invoice_id IS NULL AND c.status IN ('scheduled','queued','processing','needs_review','failed')) ORDER BY s.next_due_date,s.id LIMIT 1 FOR UPDATE");
             $due->execute([':today'=>$today]);$service=$due->fetch();
             if($service){
                 if(empty($service['order_id']))throw new \RuntimeException('Yenileme faturası için hizmetin sipariş bağlantısı bulunamadı.');
