@@ -66,7 +66,7 @@ $checks=[
  'versioned domain registration queue migration'=>str_contains($schema,'20261112_0011_domain_registration_queue')&&str_contains($schema,'domain_registrations')&&str_contains($schema,'uq_domain_registration_idempotency'),
  'registrar supports customer contact registration and action polling'=>str_contains($domain,'createCustomer')&&str_contains($domain,'createContact')&&str_contains($domain,'registerDomain')&&str_contains($domain,'actionStatus'),
  'domain checkout captures customer contact and encrypts registrar payload'=>str_contains($portal,'registrar_payload_enc')===false&&str_contains($routes,"'/cron/domains'")&&str_contains(file_get_contents(__DIR__.'/../app/Http/CatalogController.php'),'registrar_payload_enc'),
- 'verified domain invoice queues registrar work and skips hosting service'=>str_contains($payment,"product_type<>'domain'")&&str_contains($payment,'UPDATE domain_registrations SET status=\'queued\''),
+ 'verified domain invoice queues registrar work and skips hosting service'=>str_contains($payment,"product_type<>\\'domain\\'")&&str_contains($payment,'UPDATE domain_registrations SET status=\'queued\''),
  'domain worker resumes stages and reviews ambiguous outcomes'=>str_contains($domainController,'customer_created')&&str_contains($domainController,'contact_created')&&str_contains($domainController,'needs_review')&&str_contains($domainController,'HostPilot domain cron v1'),
  'customer and admin can track domain registrations'=>str_contains($domainController,'myDomains')&&str_contains($domainController,'adminOrders')&&str_contains($routes,"'/client/domains'")&&str_contains($routes,"'/admin/domains/orders'"),
 
