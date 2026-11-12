@@ -392,5 +392,40 @@ final class Schema
             $record->execute([':name'=>$domainExpiryName,':applied'=>gmdate('Y-m-d H:i:s')]);
         }
 
+        $domainRenewalName='20261112_0014_domain_renewal_queue';
+        $drn=$db->prepare('SELECT id FROM migrations WHERE migration=:name LIMIT 1');
+        $drn->execute([':name'=>$domainRenewalName]);
+        if(!$drn->fetchColumn()){
+            $db->exec("CREATE TABLE IF NOT EXISTS domain_renewals (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                domain_registration_id BIGINT UNSIGNED NOT NULL,
+                user_id BIGINT UNSIGNED NOT NULL,
+                order_id BIGINT UNSIGNED NOT NULL,
+                invoice_id BIGINT UNSIGNED NOT NULL,
+                years TINYINT UNSIGNED NOT NULL,
+                registrar_order_id VARCHAR(40) NOT NULL,
+                expiry_before DATETIME NOT NULL,
+                status VARCHAR(24) NOT NULL DEFAULT 'awaiting_payment',
+                action_status VARCHAR(80) NULL,
+                last_error VARCHAR(1000) NULL,
+                idempotency_key CHAR(64) NOT NULL,
+                available_at DATETIME NOT NULL,
+                locked_at DATETIME NULL,
+                renewed_expiry DATETIME NULL,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL,
+                UNIQUE KEY uq_domain_renewal_order(order_id),
+                UNIQUE KEY uq_domain_renewal_idempotency(idempotency_key),
+                KEY idx_domain_renewal_queue(status,available_at,id),
+                KEY idx_domain_renewal_domain(domain_registration_id,created_at),
+                CONSTRAINT fk_domain_renewal_domain FOREIGN KEY(domain_registration_id) REFERENCES domain_registrations(id) ON DELETE RESTRICT,
+                CONSTRAINT fk_domain_renewal_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE RESTRICT,
+                CONSTRAINT fk_domain_renewal_order FOREIGN KEY(order_id) REFERENCES orders(id) ON DELETE RESTRICT,
+                CONSTRAINT fk_domain_renewal_invoice FOREIGN KEY(invoice_id) REFERENCES invoices(id) ON DELETE RESTRICT
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            $record=$db->prepare('INSERT IGNORE INTO migrations(migration,batch,applied_at) VALUES(:name,14,:applied)');
+            $record->execute([':name'=>$domainRenewalName,':applied'=>gmdate('Y-m-d H:i:s')]);
+        }
+
     }
 }
