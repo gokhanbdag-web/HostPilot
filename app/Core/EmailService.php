@@ -61,11 +61,11 @@ final class EmailService
         $name=$customerName!==''?$customerName:'Müşterimiz';
         $expiry=strtotime($expiryDate);
         if($expiry===false)return false;
-        $body="Merhaba ".$name.",\\n\\n";
-        $body.="\\\"".$domain."\\\" alan adınızın registrar tarafından bildirilen bitiş tarihine ".$daysRemaining." gün kaldı.\\n";
-        $body.="Bitiş tarihi: ".gmdate('d.m.Y H:i',$expiry)." UTC\\n";
-        $body.="Registrar otomatik yenileme durumu: ".($autoRenew?'Açık':'Kapalı veya etkin değil')."\\n\\n";
-        $body.="Kesinti yaşamamak için bitiş tarihinden önce yenileme işlemini kontrol etmenizi öneririz. HostPilot müşteri panelinizden domain durumunu ve yenileme seçeneklerini görüntüleyebilirsiniz.\\n\\n";
+        $body="Merhaba ".$name.",\n\n";
+        $body.='"'.$domain.'" alan adınızın registrar tarafından bildirilen bitiş tarihine '.$daysRemaining." gün kaldı.\n";
+        $body.="Bitiş tarihi: ".gmdate('d.m.Y H:i',$expiry)." UTC\n";
+        $body.="Registrar otomatik yenileme durumu: ".($autoRenew?'Açık':'Kapalı veya etkin değil')."\n\n";
+        $body.="Kesinti yaşamamak için bitiş tarihinden önce yenileme işlemini kontrol etmenizi öneririz. HostPilot müşteri panelinizden domain durumunu ve yenileme seçeneklerini görüntüleyebilirsiniz.\n\n";
         $body.="Bu e-posta otomatik olarak gönderilmiştir.";
         $key='domain-expiry:'.$domainRegistrationId.':'.$daysRemaining.':'.$expiryDate;
         return $this->queue($recipient,$subject,$body,$key,'domain_expiry_'.$daysRemaining);
