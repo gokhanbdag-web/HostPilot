@@ -374,7 +374,7 @@ final class DomainController
                 $this->db->prepare("UPDATE domain_registrations SET expiry_date=:expiry,registrar_synced_at=:now,updated_at=:now WHERE id=:id")->execute([':expiry'=>$expiry,':now'=>$now,':id'=>$row['domain_registration_id']]);
                 $this->db->commit();echo json_encode(['ok'=>true,'processed'=>1,'renewal'=>'completed','expiry'=>$expiry]);return;
             }
-            if(strcasecmp($actionStatus,'Failed')===0){$this->db->prepare("UPDATE domain_renewals SET status='failed',action_status=:action,last_error=:error,locked_at=NULL,updated_at=:now WHERE id=:id")->execute([':action'=>$actionStatus,':error'=>$message?:'Registrar yenileme işlemini başarısız bildirdi.',' :now'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);echo json_encode(['ok'=>true,'processed'=>1,'renewal'=>'failed']);return;}
+            if(strcasecmp($actionStatus,'Failed')===0){$this->db->prepare("UPDATE domain_renewals SET status='failed',action_status=:action,last_error=:error,locked_at=NULL,updated_at=:now WHERE id=:id")->execute([':action'=>$actionStatus,':error'=>$message?:'Registrar yenileme işlemini başarısız bildirdi.',':now'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);echo json_encode(['ok'=>true,'processed'=>1,'renewal'=>'failed']);return;}
             $this->db->prepare("UPDATE domain_renewals SET status='pending_remote',action_status=:action,last_error=:error,locked_at=NULL,available_at=:next,updated_at=:now WHERE id=:id")->execute([':action'=>$actionStatus?:'Pending',':error'=>$message?:null,':next'=>gmdate('Y-m-d H:i:s',time()+180),':now'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
             echo json_encode(['ok'=>true,'processed'=>1,'renewal'=>'pending_remote','action_status'=>$actionStatus]);
         }catch(Throwable $e){
