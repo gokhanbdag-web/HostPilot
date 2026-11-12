@@ -51,6 +51,7 @@ final class ClientController
         $this->shell($u,'Hizmetlerim');
         echo '<section class="panel"><div class="panelhead"><div><h1>Hosting hizmetlerim</h1><p>Aktif hizmetleriniz ve kontrol paneli erişim bilgileriniz</p></div><a class="back" href="'.$this->url('/client').'">← Müşteri paneli</a></div>';
         if(!empty($_GET['error']))echo '<div class="error">'.$this->e((string)$_GET['error']).'</div>';
+        if(!empty($_GET['notice']))echo '<div class="notice">'.$this->e((string)$_GET['notice']).'</div>';
         if(!$rows)echo '<div class="empty">Henüz hesabınıza bağlı bir hosting hizmeti bulunmuyor.</div>';
         foreach($rows as $row){
             echo '<article class="kb"><small>'.$this->e(strtoupper((string)($row['panel_type']??'BEKLEMEDE'))).' · '.$this->e((string)$row['status']).'</small><h2>'.$this->e($row['product_name']).'</h2><p>Domain: <b>'.$this->e((string)($row['remote_domain']??$row['domain']??'Henüz tanımlanmadı')).'</b><br>Sunucu: '.$this->e((string)($row['server_name']??'Henüz atanmadı')).'<br>Hesap durumu: '.$this->e((string)($row['provisioning_status']??'not_started')).'</p>';
@@ -59,8 +60,17 @@ final class ClientController
             }elseif(($row['provisioning_status']??'')==='needs_review'){
                 echo '<p>Otomatik işlem sonucu kesinleştirilemedi. Yinelenen hesap açılmasını önlemek için yönetici kontrolü bekleniyor.</p>';
             }
-            if(($row['status']??'')==='active'&&($row['provisioning_status']??'')==='completed'&&in_array(($row['panel_type']??''),['cpanel','plesk'],true)){
-                echo '<p><a class="quick" href="'.$this->url('/client/services/change?service_id='.(int)$row['id']).'">Paketimi yükselt →</a></p>';
+            $changeQuery=$this->db->prepare("SELECT c.status,c.effective_at,c.invoice_id,tp.name AS target_name FROM service_package_changes c JOIN products tp ON tp.id=c.to_product_id WHERE c.service_id=:service AND c.status IN ('pending_payment','scheduled','queued','processing','needs_review','failed') ORDER BY c.id DESC LIMIT 1");
+            $changeQuery->execute([':service'=>$row['id']]);$change=$changeQuery->fetch();
+            if($change){
+                if($change['status']==='scheduled')echo '<p>Planlanan paket düşürme: <b>'.$this->e($change['target_name']).'</b><br>Uygulanma tarihi: '.$this->e(date('d.m.Y',strtotime($change['effective_at']))).'. Mevcut döneminiz sonuna kadar şimdiki paketiniz geçerlidir.</p>';
+                elseif($change['status']==='pending_payment')echo '<p>Yükseltme talebiniz ödeme bekliyor.</p>';
+                elseif($change['status']==='needs_review')echo '<p>Paket değişikliği kontrol paneliyle eşleştiriliyor; yönetici incelemesi bekleniyor.</p>';
+                elseif($change['status']==='failed')echo '<p>Paket değişikliği tamamlanamadı; destek/yönetici incelemesi bekleniyor.</p>';
+                else echo '<p>Paket değişikliği işlemi: '.$this->e((string)$change['status']).'</p>';
+            }
+            if(($row['status']??'')==='active'&&($row['provisioning_status']??'')==='completed'&&in_array(($row['panel_type']??''),['cpanel','plesk'],true)&&!$change){
+                echo '<p><a class="quick" href="'.$this->url('/client/services/change?service_id='.(int)$row['id']).'">Paketimi değiştir veya düşür →</a></p>';
             }
             if(($row['provisioning_status']??'')==='completed'&&$row['remote_username']){
                 $password='';try{$password=$this->vault->decrypt((string)$row['remote_password_enc']);}catch(Throwable){}
