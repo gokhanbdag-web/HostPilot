@@ -51,6 +51,7 @@
 - [x] Administrator payment transaction history view.
 - [ ] Reconciliation UI and automated duplicate-notification integration tests.
 - [ ] Invoice email and customer invoice portal.
+- [x] Native SMTP settings with encrypted credentials, TLS certificate verification, administrator test-send, and customer package-change notifications.
 
 **Exit criteria:** Sandbox payment can settle an invoice exactly once; failures and retries are handled.
 
@@ -93,7 +94,8 @@
 - [ ] Ticket departments, priorities, assignment, internal notes, attachments.
 - [ ] Customer ticket portal and email notifications.
 - [ ] FAQ and knowledge base search/feedback.
-- [ ] Announcements and service notifications.
+- [x] Package-change lifecycle notifications by email (scheduled, cancelled, upgrade payment confirmed, remote package change completed).
+- [ ] Ticket email notifications, announcements, and general service notifications.
 - [ ] Client Area service/domain/invoice management.
 
 **Exit criteria:** Complete customer support workflow from ticket creation through closure.
