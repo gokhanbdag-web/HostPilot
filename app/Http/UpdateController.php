@@ -121,17 +121,20 @@ final class UpdateController
         $lastStart = -1;
         $lastSuccess = -1;
         $lastFailure = -1;
+        $lastStartRecord = '';
         foreach ($lines as $index => $line) {
-            if (preg_match('/^=== DEPLOY /iu', $line)) $lastStart = $index;
+            if (preg_match('/^=== DEPLOY /iu', $line)) { $lastStart = $index; $lastStartRecord = $line; }
             if (str_contains($line, 'BAŞARILI:')) $lastSuccess = $index;
             if (preg_match('/^(?:ERROR:|HATA:|fatal:)/iu', $line)) $lastFailure = $index;
         }
         if ($lastSuccess >= 0 && $lastSuccess > $lastStart && $lastSuccess > $lastFailure) {
             $record = $lines[$lastSuccess];
             $timestamp = 'Günlükte ayrıca tarih bulunmuyor';
-            if (preg_match('/\\b(20\\d{2}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}(?:Z)?)\\b/u', $record, $match)) {
+            if (preg_match('/\b(20\d{2}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:Z)?)\b/u', $record, $match)) {
                 $timestamp = $match[1];
-            } elseif (preg_match('/\\[(20\\d{2}-\\d{2}-\\d{2}[^\\]]+)\\]/u', $record, $match)) {
+            } elseif (preg_match('/\[(20\d{2}-\d{2}-\d{2}[^\]]+)\]/u', $record, $match)) {
+                $timestamp = $match[1];
+            } elseif (preg_match('/\b(20\d{2}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:Z)?)\b/u', $lastStartRecord, $match)) {
                 $timestamp = $match[1];
             }
             return ['ok' => true, 'label' => 'DAĞITIM BAŞARILI', 'detail' => 'Başarılı', 'timestamp' => $timestamp, 'record' => substr($record, 0, 220)];
