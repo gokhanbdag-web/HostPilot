@@ -48,3 +48,17 @@ License and commercial distribution terms are to be decided before the first pub
 ### Domain registrar (ResellerClub REST API v2)
 
 The ResellerClub REST API v2 integration now supports customer availability lookup, domain-product checkout, payment-gated registration queueing, customer/contact creation, domain registration submission, and asynchronous action polling. Configure the numeric ResellerClub User ID and API key at `/admin/domains/registrar`, choose sandbox or live, and enable the connection. The API key is encrypted with the installation key. Customer availability lookup is `/domains/search`; domain products collect the domain and registrant address/phone details at checkout. Registrar payloads are encrypted at rest; the temporary registrar customer password is removed after customer creation and contact details are erased from the payload after contact creation. Verified full invoice payment queues registration; domain products are excluded from hosting-service provisioning. `/cron/domains?token=...` is an authenticated browser cron worker; generate its token as `hash_hmac('sha256', 'HostPilot domain cron v1', APP_KEY)`. The worker rechecks availability, saves each external stage before proceeding, submits registrations with the conservative `OnlyAdd` invoice option (so it does not silently spend the reseller wallet), and polls registrar actions. A timeout or uncertain remote side effect is moved to manual review rather than blindly retried. Customers can track `/client/domains` and request nameserver changes for active domains; nameserver requests are encrypted, queued, and applied by the domain worker using the documented `PUT /domains/{orderId}/nameservers` endpoint. Ambiguous nameserver results require administrator reconciliation. Staff can inspect `/admin/domains/orders` and reconcile uncertain registration or nameserver operations. A funded reseller account / payment of the registrar-side invoice may still be required before the registrar completes an `OnlyAdd` order. Use sandbox credentials and a funded test account before enabling live sales. Live registrar calls have not been tested without merchant credentials.
+
+
+## Developer automation (SSH-free daily workflow)
+
+Every push to `main` and every pull request targeting `main` runs the GitHub Actions workflow at `.github/workflows/quality.yml`. It checks the syntax of every tracked PHP file with PHP 8.3, enforces the no-Composer requirement, and rejects tracked installation configuration or lock files.
+
+The production server continues to deploy through its existing authenticated server-side GitHub webhook and deployment script. Developers do not need to open SSH or run shell commands for ordinary code changes. The workflow is an automated quality check; it does not replace or claim to gate the existing server-side deployment hook. Confirm production deployment using the deployment log and live health endpoint.
+
+Deployment safeguards:
+- Keep `storage/` out of Git-based code synchronization; it contains installation-specific configuration and data.
+- Never commit `storage/config.php`, `storage/installed.lock`, environment files, API keys, or customer data.
+- Keep the live `storage/` directory and database untouched during code deployments.
+- Verify the deployment result and `/health` after each release; a green CI check alone is not proof that production deployment succeeded.
+- Keep server credentials and webhook secrets in server-side secret storage, never in repository files.
