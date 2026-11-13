@@ -25,6 +25,8 @@ final class UpdateController
         $version = $versionFile !== '' && is_file($versionFile)
             ? trim((string)file_get_contents($versionFile))
             : 'Bilinmiyor';
+        $checks = $this->runtimeChecks();
+        $healthy = !in_array(false, array_column($checks, 'ok'), true);
         $logFile = '/opt/hostpilot-deploy/deploy.log';
         $logReadable = is_file($logFile) && is_readable($logFile);
         $logLines = $logReadable ? $this->deploymentSummary($logFile) : [];
@@ -45,7 +47,10 @@ final class UpdateController
         echo '<article class="metric"><span>Dağıtım günlüğü</span><strong style="font-size:22px">' . ($logReadable ? 'Erişilebilir' : 'Erişilemiyor') . '</strong><small>' . ($logReadable ? 'Sunucu dağıtım kaydı okunabildi' : 'Web kullanıcısının sunucu günlüğüne erişimi yok') . '</small></article>';
         echo '<article class="metric"><span>Son başarılı dağıtım</span><strong style="font-size:16px">' . ($lastSuccess ? $this->e(substr($lastSuccess, 0, 100)) : 'Kayıt yok') . '</strong><small>Dağıtım günlüğünden doğrulanır</small></article>';
         echo '</section>';
-        echo '<article class="panel roadmap"><h3>Otomatik güncelleme akışı</h3><div class="status"><span>1. GitHub main dalına gönderim</span><strong>Kaynak kod</strong></div><div class="status"><span>2. GitHub Actions PHP ve güvenlik kontrolleri</span><strong>CI kontrolü</strong></div><div class="status"><span>3. Sunucu webhook dağıtımı</span><strong>Mevcut otomasyon</strong></div><div class="status"><span>4. Dağıtım sonrası sağlık kontrolü</span><strong>Harici doğrulama gerekli</strong></div><div class="notice">GitHub Actions kontrolünün başarılı olması, canlı sunucuya dağıtımın tamamlandığını tek başına kanıtlamaz. Canlı dağıtım sonucu sunucu günlüğü ve /health yanıtı ile doğrulanmalıdır.</div></article>';
+        echo '<article class="panel roadmap"><div class="panel-head"><div><h3>Canlı sistem sağlık kontrolü</h3><p>Bu sayfa her açıldığında sunucuda yeniden kontrol edilir</p></div><strong style="color:' . ($healthy ? '#7ce0b5' : '#ffb86b') . '">' . ($healthy ? 'SAĞLIKLI' : 'KONTROL GEREKLİ') . '</strong></div>';
+        foreach ($checks as $check) echo '<div class="status"><span>' . $this->e($check['label']) . '</span><strong style="color:' . ($check['ok'] ? '#7ce0b5' : '#ffb86b') . '">' . $this->e($check['detail']) . '</strong></div>';
+        echo '<div class="notice">Ayrıca dışarıdan çalışan GitHub Actions dağıtım kontrolü /health adresini tekrar deneyerek canlı yanıtı doğrular.</div></article>';
+        echo '<article class="panel roadmap"><h3>Otomatik güncelleme akışı</h3><div class="status"><span>1. GitHub main dalına gönderim</span><strong>Kaynak kod</strong></div><div class="status"><span>2. GitHub Actions PHP ve güvenlik kontrolleri</span><strong>CI kontrolü</strong></div><div class="status"><span>3. Sunucu webhook dağıtımı</span><strong>Mevcut otomasyon</strong></div><div class="status"><span>4. Dağıtım sonrası sağlık kontrolü</span><strong>Otomatik doğrulama</strong></div></article>
         echo '<article class="panel roadmap"><div class="panel-head"><div><h3>Dağıtım geçmişi</h3><p>Sunucudaki dağıtım günlüğünden güvenli özet</p></div><a class="logout" href="' . $this->url('/admin/updates') . '">Yenile</a></div>';
         if (!$logReadable) {
             echo '<div class="notice">Dağıtım günlüğü PHP web kullanıcısı tarafından okunamıyor. Günlük dosyası dışarı açılmadı; sunucu izinlerini değiştirmeden önce güvenli, salt-okunur bir raporlama kanalı kurulmalı.</div>';
@@ -55,9 +60,24 @@ final class UpdateController
             foreach ($logLines as $line) echo '<div class="status"><span style="overflow-wrap:anywhere">' . $this->e($line) . '</span></div>';
         }
         echo '</article>';
-        echo '<article class="panel roadmap"><h3>Güvenli işlem sınırları</h3><p>Bu ilk sürüm yalnızca görüntüleme yapar. Veritabanı, storage/config.php, kurulum kilidi ve müşteri dosyaları güncelleme sırasında korunur. Geri alma özelliği, yedek doğrulaması ve yetkili sunucu işlemi için ayrı güvenlik katmanı tamamlanmadan etkinleştirilmeyecektir.</p></article>';
+        echo '<article class="panel roadmap"><h3>Güvenli geri alma</h3><p>Geri alma düğmesi şimdilik kapalıdır. Mevcut yedek arşivleri PHP web isteğiyle doğrudan açmak; yol doğrulaması, arşiv bütünlüğü, kilitleme ve canlı kodu atomik değiştirme garantisi olmadan güvenli değildir. Bu sunucu tarafı korumalar doğrulanmadan geri alma işlemi başlatılmaz. Veritabanı ve müşteri dosyaları hiçbir kod geri almasında silinmez.</p></article>';
         echo '</main></div>';
         $this->endPage();
+    }
+
+    private function runtimeChecks(): array
+    {
+        $root = defined('HOSTPILOT_ROOT') ? HOSTPILOT_ROOT : '';
+        $storage = defined('HOSTPILOT_STORAGE') ? HOSTPILOT_STORAGE : '';
+        $checks = [];
+        $checks[] = ['label' => 'PHP sürümü', 'ok' => PHP_VERSION_ID >= 80200, 'detail' => PHP_VERSION];
+        $checks[] = ['label' => 'Veritabanı sorgusu', 'ok' => true, 'detail' => 'Bağlantı ve SELECT 1 başarılı'];
+        try { $this->db->query('SELECT 1')->fetchColumn(); } catch (Throwable) { $checks[count($checks)-1]['ok'] = false; $checks[count($checks)-1]['detail'] = 'Sorgu başarısız'; }
+        $checks[] = ['label' => 'Kurulum kilidi', 'ok' => $storage !== '' && is_file($storage . DIRECTORY_SEPARATOR . 'installed.lock'), 'detail' => 'Kurulum kilidi mevcut'];
+        $checks[] = ['label' => 'Özel yapılandırma', 'ok' => $storage !== '' && is_file($storage . DIRECTORY_SEPARATOR . 'config.php') && is_readable($storage . DIRECTORY_SEPARATOR . 'config.php'), 'detail' => 'storage/config.php mevcut ve okunabilir'];
+        $checks[] = ['label' => 'Storage erişimi', 'ok' => $storage !== '' && is_dir($storage) && is_writable($storage), 'detail' => 'Storage dizini yazılabilir'];
+        $checks[] = ['label' => 'Sürüm dosyası', 'ok' => $root !== '' && is_file($root . DIRECTORY_SEPARATOR . 'VERSION'), 'detail' => 'VERSION dosyası mevcut'];
+        return $checks;
     }
 
     private function deploymentSummary(string $path): array
