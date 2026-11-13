@@ -53,13 +53,13 @@ final class ServerController
         if(!$this->csrf()){$this->go('/admin/servers','error=Güvenlik doğrulaması başarısız.');}
         try{
             $name=trim((string)($_POST['name']??''));$panel=(string)($_POST['panel_type']??'');$base=HostingTransport::validateBaseUrl((string)($_POST['base_url']??''));$user=trim((string)($_POST['username']??''));$secret=(string)($_POST['secret']??'');$mode=(string)($_POST['auth_mode']??'key');$ip=trim((string)($_POST['shared_ip']??''));
-            if($name===''||!in_array($panel,['cpanel','directadmin','plesk'],true)||$secret==='')throw new \\RuntimeException('Sunucu adı, panel türü, adres ve API sırrı zorunludur.');
-            if($panel==='plesk'&&!in_array($mode,['key','password'],true))throw new \\RuntimeException('Plesk kimlik doğrulama yöntemi geçersiz.');
+            if($name===''||!in_array($panel,['cpanel','directadmin','plesk'],true)||$secret==='')throw new \RuntimeException('Sunucu adı, panel türü, adres ve API sırrı zorunludur.');
+            if($panel==='plesk'&&!in_array($mode,['key','password'],true))throw new \RuntimeException('Plesk kimlik doğrulama yöntemi geçersiz.');
             if($panel==='plesk'&&$mode==='key')$user='';
-            elseif($user==='')throw new \\RuntimeException('Seçilen bağlantı yöntemi için API kullanıcı adı zorunludur.');
+            elseif($user==='')throw new \RuntimeException('Seçilen bağlantı yöntemi için API kullanıcı adı zorunludur.');
             if($panel!=='plesk')$mode='password';
-            if($panel==='plesk'&&$ip!==''&&!filter_var($ip,FILTER_VALIDATE_IP))throw new \\RuntimeException('Plesk paylaşımlı IP adresi geçersiz.');
-            if($panel==='plesk'&&$ip==='')throw new \\RuntimeException('Plesk üzerinde hosting hesabı oluşturmak için paylaşımlı IP adresi gereklidir.');
+            if($panel==='plesk'&&$ip!==''&&!filter_var($ip,FILTER_VALIDATE_IP))throw new \RuntimeException('Plesk paylaşımlı IP adresi geçersiz.');
+            if($panel==='plesk'&&$ip==='')throw new \RuntimeException('Plesk üzerinde hosting hesabı oluşturmak için paylaşımlı IP adresi gereklidir.');
             $q=$this->db->prepare("INSERT INTO servers(name,panel_type,base_url,username,secret_enc,auth_mode,shared_ip,enabled,created_at,updated_at) VALUES(:name,:panel,:base,:username,:secret,:mode,:ip,1,:created,:updated)");
             $now=gmdate('Y-m-d H:i:s');$q->execute([':name'=>$name,':panel'=>$panel,':base'=>$base,':username'=>$user,':secret'=>$this->vault->encrypt($secret),':mode'=>$mode,':ip'=>$ip!==''?$ip:null,':created'=>$now,':updated'=>$now]);
             $this->go('/admin/servers','notice=Sunucu bağlantısı kaydedildi. Şimdi bağlantı testini çalıştırın.');
