@@ -9,7 +9,7 @@ use Throwable;
 
 final class UpdateController
 {
-    public function __construct(private readonly PDO $db, private readonly string $basePath = '') {}
+    public function __construct(private readonly PDO $db, private readonly string $basePath = '', private readonly string $baseUrl = '') {}
 
     public function index(): void
     {
@@ -36,6 +36,8 @@ final class UpdateController
         }
 
         $updateNotes = $this->readUpdateNotes();
+        $deployment = $this->deploymentResult($logLines, $logReadable);
+        $httpHealth = $this->httpHealthCheck();
 
         $this->page('Güncelleme Merkezi');
         echo '<div class="layout"><aside class="sidebar"><a class="brand" href="' . $this->url('/admin') . '">HOST<span>PILOT</span></a>';
@@ -49,6 +51,14 @@ final class UpdateController
         echo '<article class="metric"><span>Dağıtım günlüğü</span><strong style="font-size:22px">' . ($logReadable ? 'Erişilebilir' : 'Erişilemiyor') . '</strong><small>' . ($logReadable ? 'Sunucu dağıtım kaydı okunabildi' : 'Web kullanıcısının sunucu günlüğüne erişimi yok') . '</small></article>';
         echo '<article class="metric"><span>Son başarılı dağıtım</span><strong style="font-size:16px">' . ($lastSuccess ? $this->e(substr($lastSuccess, 0, 100)) : 'Kayıt yok') . '</strong><small>Dağıtım günlüğünden doğrulanır</small></article>';
         echo '</section>';
+        echo '<article class="panel roadmap"><div class="panel-head"><div><h3>Son dağıtım sonucu</h3><p>Dağıtım günlüğü ve canlı HTTP sağlık yanıtına göre doğrulanır.</p></div><strong style="color:' . ($deployment['ok'] === true ? '#7ce0b5' : ($deployment['ok'] === false ? '#ffb86b' : '#aab7cc')) . '">' . $this->e($deployment['label']) . '</strong></div>';
+        echo '<div class="status"><span>Dağıtım durumu</span><strong>' . $this->e($deployment['detail']) . '</strong></div>';
+        echo '<div class="status"><span>Tarih ve saat</span><strong>' . $this->e($deployment['timestamp']) . '</strong></div>';
+        echo '<div class="status"><span>HTTP sağlık kontrolü</span><strong style="color:' . ($httpHealth['ok'] ? '#7ce0b5' : '#ffb86b') . '">' . $this->e($httpHealth['label']) . '</strong></div>';
+        echo '<div class="status"><span>HTTP yanıtı</span><strong>' . $this->e($httpHealth['detail']) . '</strong></div>';
+        echo '<div class="status"><span>Kontrol zamanı</span><strong>' . $this->e($httpHealth['checked_at']) . '</strong></div>';
+        if ($deployment['record'] !== '') echo '<div class="notice">Dağıtım kaydı: ' . $this->e($deployment['record']) . '</div>';
+        echo '</article>';
         echo '<article class="panel roadmap"><div class="panel-head"><div><h3>Güncelleme notları</h3><p>Yeni sürüm notları sayfa yenilenmeden otomatik kontrol edilir.</p></div><small id="update-notes-time">Canlı kontrol hazır</small></div><pre id="update-notes" style="white-space:pre-wrap;overflow-wrap:anywhere;color:#b8c5d8;font:12px/1.8 inherit;margin:12px 0 0">' . $this->e($updateNotes !== '' ? $updateNotes : 'Henüz güncelleme notu yayınlanmadı.') . '</pre></article>';
         echo '<article class="panel roadmap"><div class="panel-head"><div><h3>Canlı sistem sağlık kontrolü</h3><p>Bu sayfa her açıldığında sunucuda yeniden kontrol edilir</p></div><strong style="color:' . ($healthy ? '#7ce0b5' : '#ffb86b') . '">' . ($healthy ? 'SAĞLIKLI' : 'KONTROL GEREKLİ') . '</strong></div>';
         foreach ($checks as $check) echo '<div class="status"><span>' . $this->e($check['label']) . '</span><strong style="color:' . ($check['ok'] ? '#7ce0b5' : '#ffb86b') . '">' . $this->e($check['detail']) . '</strong></div>';
@@ -103,6 +113,81 @@ final class UpdateController
         header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
         header('X-Content-Type-Options: nosniff');
         echo json_encode(['version' => $version, 'notes' => $this->readUpdateNotes(), 'checked_at' => gmdate('c')], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    private function deploymentResult(array $lines, bool $logReadable): array
+    {
+        if (!$logReadable) return ['ok' => null, 'label' => 'DOĞRULANAMADI', 'detail' => 'Dağıtım günlüğü okunamıyor', 'timestamp' => 'Kayıt erişilebilir değil', 'record' => ''];
+        $lastStart = -1;
+        $lastSuccess = -1;
+        $lastFailure = -1;
+        foreach ($lines as $index => $line) {
+            if (preg_match('/^=== DEPLOY /iu', $line)) $lastStart = $index;
+            if (str_contains($line, 'BAŞARILI:')) $lastSuccess = $index;
+            if (preg_match('/^(?:ERROR:|HATA:|fatal:)/iu', $line)) $lastFailure = $index;
+        }
+        if ($lastSuccess >= 0 && $lastSuccess > $lastStart && $lastSuccess > $lastFailure) {
+            $record = $lines[$lastSuccess];
+            $timestamp = 'Günlükte ayrıca tarih bulunmuyor';
+            if (preg_match('/\\b(20\\d{2}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}(?:Z)?)\\b/u', $record, $match)) {
+                $timestamp = $match[1];
+            } elseif (preg_match('/\\[(20\\d{2}-\\d{2}-\\d{2}[^\\]]+)\\]/u', $record, $match)) {
+                $timestamp = $match[1];
+            }
+            return ['ok' => true, 'label' => 'DAĞITIM BAŞARILI', 'detail' => 'Başarılı', 'timestamp' => $timestamp, 'record' => substr($record, 0, 220)];
+        }
+        if ($lastFailure >= 0 && $lastFailure > $lastStart) {
+            return ['ok' => false, 'label' => 'DAĞITIM BAŞARISIZ', 'detail' => 'Son dağıtım hatayla sonuçlandı', 'timestamp' => 'Hata kaydı mevcut; tarih günlükte', 'record' => substr($lines[$lastFailure], 0, 220)];
+        }
+        return ['ok' => null, 'label' => 'KAYIT BULUNAMADI', 'detail' => 'Son dağıtım sonucu doğrulanamadı', 'timestamp' => 'Dağıtım tarihi doğrulanamadı', 'record' => ''];
+    }
+
+    private function httpHealthCheck(): array
+    {
+        $checkedAt = date('d.m.Y H:i:s');
+        if ($this->baseUrl === '' || !function_exists('curl_init')) {
+            return ['ok' => false, 'label' => 'DOĞRULANAMADI', 'detail' => 'HTTP sağlık kontrolü yapılamadı', 'checked_at' => $checkedAt];
+        }
+        $url = rtrim($this->baseUrl, '/') . '/health';
+        $curl = curl_init($url);
+        if ($curl === false) {
+            return ['ok' => false, 'label' => 'BAŞARISIZ', 'detail' => 'HTTP/1.1 yanıtı alınamadı', 'checked_at' => $checkedAt];
+        }
+        curl_setopt_array($curl, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => false,
+            CURLOPT_CONNECTTIMEOUT => 3,
+            CURLOPT_TIMEOUT => 8,
+            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_HTTPHEADER => ['Accept: application/json', 'Cache-Control: no-cache'],
+        ]);
+        $body = curl_exec($curl);
+        $code = (int)curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        $error = curl_error($curl);
+        curl_close($curl);
+        $payload = is_string($body) ? json_decode($body, true) : null;
+        $healthy = $code === 200 && is_array($payload) && ($payload['status'] ?? '') === 'healthy';
+        $reason = $code > 0 ? 'HTTP/1.1 ' . $code . ' ' . $this->httpReason($code) : 'HTTP bağlantısı kurulamadı';
+        if ($error !== '' && $code === 0) $reason .= ' · ' . $error;
+        return [
+            'ok' => $healthy,
+            'label' => $healthy ? 'BAŞARILI' : 'BAŞARISIZ',
+            'detail' => $reason . ($healthy ? ' · Uygulama sağlıklı' : ' · Uygulama sağlık yanıtı doğrulanamadı'),
+            'checked_at' => $checkedAt,
+        ];
+    }
+
+    private function httpReason(int $code): string
+    {
+        return match ($code) {
+            200 => 'OK', 201 => 'Created', 204 => 'No Content', 301 => 'Moved Permanently',
+            302 => 'Found', 400 => 'Bad Request', 401 => 'Unauthorized', 403 => 'Forbidden',
+            404 => 'Not Found', 429 => 'Too Many Requests', 500 => 'Internal Server Error',
+            502 => 'Bad Gateway', 503 => 'Service Unavailable', 504 => 'Gateway Timeout',
+            default => 'HTTP Response',
+        };
     }
 
     private function readUpdateNotes(): string
