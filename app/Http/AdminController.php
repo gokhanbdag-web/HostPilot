@@ -60,6 +60,29 @@ final class AdminController
         Auth::logout(); $this->redirect('/admin/login');
     }
 
+    public function customers(): void
+    {
+        if (!Auth::check()) $this->redirect('/admin/login');
+        $user=Auth::user();
+        if (!in_array($user['role'], ['super_admin','admin','staff'], true)) { http_response_code(403); echo 'Yetkisiz erişim.'; return; }
+        $term=trim((string)($_GET['q']??''));
+        $page=max(1,(int)($_GET['page']??1));$limit=25;$offset=($page-1)*$limit;
+        $where="role='customer'";$params=[];
+        if($term!==''){$where.=" AND (name LIKE :q1 OR email LIKE :q2 OR username LIKE :q3)";$like='%'.$term.'%';$params=[':q1'=>$like,':q2'=>$like,':q3'=>$like];}
+        $count=$this->db->prepare("SELECT COUNT(*) FROM users WHERE ".$where);$count->execute($params);$total=(int)$count->fetchColumn();
+        $list=$this->db->prepare("SELECT id,name,email,username,status,created_at FROM users WHERE ".$where." ORDER BY created_at DESC,id DESC LIMIT ".$limit." OFFSET ".$offset);$list->execute($params);$rows=$list->fetchAll();
+        $this->startPage('Müşteriler');
+        echo '<div class="layout"><aside class="sidebar"><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a class="nav-item" href="'.$this->url('/admin').'">▦ Genel Bakış</a><a class="nav-item active" href="'.$this->url('/admin/customers').'">♙ Müşteriler</a><a class="nav-item" href="'.$this->url('/admin/orders').'">⇄ Siparişler</a></aside><main class="main"><header class="topbar"><div><small>YÖNETİM / MÜŞTERİLER</small><h1>Müşteri yönetimi</h1></div><a class="logout" href="'.$this->url('/admin').'">Kontrol merkezi</a></header><article class="panel"><div class="panel-head"><div><h3>Kayıtlı müşteriler</h3><p>'.$total.' müşteri hesabı</p></div><form method="get" action="'.$this->url('/admin/customers').'"><input name="q" value="'.$this->e($term).'" placeholder="Ad, e-posta veya kullanıcı adı" style="padding:10px;background:#0b1425;color:#fff;border:1px solid #34445e;border-radius:8px"><button style="padding:10px 14px">Ara</button></form></div>';
+        if(!$rows)echo '<p>Aramanızla eşleşen müşteri bulunamadı.</p>';
+        foreach($rows as $row){
+            $created=date('d.m.Y',strtotime((string)$row['created_at']));
+            echo '<div class="ticket-admin"><span><b>'.$this->e((string)$row['name']).'</b><small>'.$this->e((string)$row['email']).' · @'.$this->e((string)$row['username']).' · Kayıt: '.$created.'</small></span><em>'.$this->e((string)$row['status']).'</em></div>';
+        }
+        $pages=max(1,(int)ceil($total/$limit));
+        if($pages>1){echo '<nav style="display:flex;gap:12px;padding-top:18px">';for($n=1;$n<=$pages;$n++){if($n===$page)echo '<strong>'.$n.'</strong>';else echo '<a href="'.$this->url('/admin/customers').'?q='.rawurlencode($term).'&page='.$n.'">'.$n.'</a>';}echo '</nav>';}
+        echo '</article></main></div>';$this->endPage();
+    }
+
     public function tickets(): void
     {
         if (!Auth::check()) $this->redirect('/admin/login');
