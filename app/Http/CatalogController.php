@@ -15,7 +15,7 @@ final class CatalogController
         $demoCheck=$this->db->prepare("SELECT setting_value FROM settings WHERE setting_group='demo' AND setting_key='seed_version' LIMIT 1");$demoCheck->execute();$demoActive=(string)$demoCheck->fetchColumn()==='1';
         $q=$this->db->query("SELECT p.id,p.name,p.slug,p.description,p.product_type,MIN(pp.price) AS from_price,MIN(pp.currency) AS currency FROM products p LEFT JOIN product_pricing pp ON pp.product_id=p.id AND pp.is_active=1 WHERE p.status='active' GROUP BY p.id ORDER BY p.featured DESC,p.sort_order,p.name");
         $rows=$q->fetchAll();$this->start('Hosting ve domain paketleri');
-        echo '<main class="store"><header><a class="brand" href="'.$this->url('/').'">HOST<span>PILOT</span></a><nav><a href="'.$this->url('/knowledgebase').'">Yardım merkezi</a><a href="'.$this->url('/client').'">Müşteri paneli</a></nav></header><section class="storehero"><small>HOSTING • DOMAIN • ALTYAPI</small><h1>İşletmeniz için doğru çözüm.</h1><p>İhtiyacınıza uygun hizmeti seçin, siparişinizi güvenle oluşturun.</p></section>';
+        echo '<main class="store"><header><a class="brand" href="'.$this->url('/').'">HOST<span>PILOT</span></a><nav><a href="'.$this->url('/knowledgebase').'">Yardım merkezi</a><a href="'.$this->url('/client').'">Müşteri paneli</a><a href="'.$this->url('/cart').'">Sepet ('.count(is_array($_SESSION['hostpilot_cart']??null)?$_SESSION['hostpilot_cart']:[]).')</a></nav></header><section class="storehero"><small>HOSTING • DOMAIN • ALTYAPI</small><h1>İşletmeniz için doğru çözüm.</h1><p>İhtiyacınıza uygun hizmeti seçin, siparişinizi güvenle oluşturun.</p></section>';
         if($demoActive)echo '<div class="demo-banner" role="note" style="margin:18px 0;padding:13px 16px;border:1px solid #8b6b2c;background:#302716;color:#f6d78b;border-radius:10px"><strong>DEMO KATALOĞU</strong> · Örnek paketler ve fiyatlardır. Ödeme ve sunucu bağlantıları yapılandırılmadan gerçek sipariş/aktivasyon yapılmaz.</div>';
         echo '<section class="products">';
         if(!$rows)echo '<div class="empty">Satışa açık ürün bulunmuyor. Paketler yakında burada yayınlanacak.</div>';
@@ -29,60 +29,135 @@ final class CatalogController
         if(!$p){http_response_code(404);echo 'Ürün bulunamadı.';return;}
         $prices=$this->db->prepare('SELECT billing_cycle,price,currency,setup_fee FROM product_pricing WHERE product_id=:id AND is_active=1 ORDER BY FIELD(billing_cycle,\'monthly\',\'quarterly\',\'semiannually\',\'annually\',\'biennially\',\'triennially\')');$prices->execute([':id'=>$p['id']]);$rows=$prices->fetchAll();
         $this->start($p['name']);
-        echo '<main class="detail"><a class="brand" href="'.$this->url('/').'">HOST<span>PILOT</span></a><a class="back" href="'.$this->url('/').'">← Tüm paketler</a><section class="productdetail"><small>'.$this->e($p['group_name']??'HİZMET PAKETİ').'</small><h1>'.$this->e($p['name']).'</h1><div class="description">'.nl2br($this->e((string)$p['description'])).'</div><h2>Faturalandırma dönemi seçin</h2>';
-        if(!$rows) {
-            echo '<p>Bu ürün için henüz aktif fiyat tanımlanmamış.</p>';
-        } else {
-            echo '<form method="post" action="'.$this->url('/order/create').'" class="price"><input type="hidden" name="_token" value="'.(class_exists(Auth::class)?$this->e(Auth::csrfToken()):'').'"><input type="hidden" name="product_id" value="'.(int)$p['id'].'">';
-            foreach($rows as $index=>$r) {
-                echo '<label class="billing-option"><input type="radio" name="billing_cycle" value="'.$this->e($r['billing_cycle']).'" '.($index===0?'checked':'').' required> '.$this->e($this->cycle($r['billing_cycle'])).' — <b>'.number_format((float)$r['price'],2,',','.').' '.$this->e($r['currency']).'</b></label>';
-            }
-            if(($p['product_type']??'')==='domain') {
-                echo '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;width:100%"><label>Alan adı<input name="domain_name" maxlength="253" placeholder="ornek.com" required></label><label>Adres<input name="addressLine1" maxlength="190" required></label><label>Şehir<input name="city" maxlength="80" required></label><label>Ülke kodu (ISO)<input name="country" value="TR" minlength="2" maxlength="2" required></label><label>Posta kodu<input name="zipcode" maxlength="20" required></label><label>Telefon ülke kodu<input name="phoneCountryCode" value="90" maxlength="5" required></label><label>Telefon<input name="phone" maxlength="25" required></label></div>';
-            }
-            echo '<button class="button">Siparişe devam et</button></form>';
+        echo '<main class="detail"><a class="brand" href="'.$this->url('/').'">HOST<span>PILOT</span></a><a class="back" href="'.$this->url('/').'">← Tüm paketler</a> <a class="back" href="'.$this->url('/cart').'">Sepet ('.count(is_array($_SESSION['hostpilot_cart']??null)?$_SESSION['hostpilot_cart']:[]).')</a><section class="productdetail"><small>'.$this->e($p['group_name']??'HİZMET PAKETİ').'</small><h1>'.$this->e($p['name']).'</h1><div class="description">'.nl2br($this->e((string)$p['description'])).'</div><h2>Faturalandırma dönemi seçin</h2>';
+        if(!$rows)echo '<p>Bu ürün için henüz aktif fiyat tanımlanmamış.</p>';
+        else{
+            echo '<form method="post" action="'.$this->url('/cart/add').'" class="price"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="product_id" value="'.(int)$p['id'].'">';
+            foreach($rows as $index=>$r)echo '<label class="billing-option"><input type="radio" name="billing_cycle" value="'.$this->e($r['billing_cycle']).'" '.($index===0?'checked':'').' required> '.$this->e($this->cycle($r['billing_cycle'])).' — <b>'.number_format((float)$r['price']+(float)$r['setup_fee'],2,',','.').' '.$this->e($r['currency']).'</b></label>';
+            if(($p['product_type']??'')==='domain')echo '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;width:100%"><label>Alan adı<input name="domain_name" maxlength="253" placeholder="ornek.com" required></label><label>Adres<input name="addressLine1" maxlength="190" required></label><label>Şehir<input name="city" maxlength="80" required></label><label>Ülke kodu (ISO)<input name="country" value="TR" minlength="2" maxlength="2" required></label><label>Posta kodu<input name="zipcode" maxlength="20" required></label><label>Telefon ülke kodu<input name="phoneCountryCode" value="90" maxlength="5" required></label><label>Telefon<input name="phone" maxlength="25" required></label></div>';
+            echo '<button class="button">Sepete ekle</button> <a class="back" href="'.$this->url('/cart').'">Sepeti görüntüle</a></form>';
         }
-        echo '</section></main>';
-        $this->end();
+        echo '</section></main>';$this->end();
+    }
+
+    public function addToCart():void
+    {
+        if(($_SERVER['REQUEST_METHOD']??'GET')!=='POST'||!Auth::verifyCsrf($_POST['_token']??null)){http_response_code(400);echo 'Güvenlik doğrulaması başarısız.';return;}
+        $productId=(int)($_POST['product_id']??0);$cycle=(string)($_POST['billing_cycle']??'');
+        $q=$this->db->prepare("SELECT p.id,p.name,p.product_type,pp.billing_cycle,pp.currency FROM products p JOIN product_pricing pp ON pp.product_id=p.id WHERE p.id=:id AND p.status='active' AND pp.billing_cycle=:cycle AND pp.is_active=1 LIMIT 1");
+        $q->execute([':id'=>$productId,':cycle'=>$cycle]);$product=$q->fetch();
+        if(!$product){http_response_code(422);echo 'Seçilen paket veya fiyat artık satışta değil.';return;}
+        $domain=[];
+        if($product['product_type']==='domain'){
+            $domainName=strtolower(trim((string)($_POST['domain_name']??'')));
+            $address=trim((string)($_POST['addressLine1']??''));$city=trim((string)($_POST['city']??''));$country=strtoupper(trim((string)($_POST['country']??'')));
+            $zip=trim((string)($_POST['zipcode']??''));$phoneCode=preg_replace('/\\D/','',(string)($_POST['phoneCountryCode']??''));$phone=preg_replace('/\\D/','',(string)($_POST['phone']??''));
+            $years=['annually'=>1,'biennially'=>2,'triennially'=>3,'onetime'=>1][$cycle]??0;
+            if(!preg_match('/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$/',$domainName)||$address===''||$city===''||!preg_match('/^[A-Z]{2}$/',$country)||$zip===''||$phoneCode===''||$phone===''||$years<1){http_response_code(422);echo 'Domain ve kayıt sahibi bilgilerini eksiksiz girin; domain için yıllık dönem seçin.';return;}
+            $domain=['domain_name'=>$domainName,'addressLine1'=>$address,'city'=>$city,'country'=>$country,'zipcode'=>$zip,'phoneCountryCode'=>$phoneCode,'phone'=>$phone];
+        }
+        $cart=$_SESSION['hostpilot_cart']??[];if(!is_array($cart))$cart=[];
+        $key=$productId.':'.$cycle;
+        if(isset($cart[$key])){http_response_code(409);echo 'Bu paket ve dönem zaten sepetinizde. Sepetinizi görüntüleyebilirsiniz: '.$this->url('/cart');return;}
+        if($product['product_type']==='domain'){
+            foreach($cart as $entry)if(($entry['product_type']??'')==='domain'){http_response_code(409);echo 'Tek siparişte şimdilik yalnızca bir domain bulunabilir.';return;}
+        }
+        foreach($cart as $entry)if(($entry['currency']??'')!==$product['currency']){http_response_code(409);echo 'Tek siparişte aynı para birimindeki ürünler bulunmalıdır.';return;}
+        $cart[$key]=['product_id'=>$productId,'billing_cycle'=>$cycle,'product_type'=>$product['product_type'],'currency'=>$product['currency'],'domain'=>$domain];
+        $_SESSION['hostpilot_cart']=$cart;
+        $this->redirect('/cart');
+    }
+
+    public function cart():void
+    {
+        $cart=$_SESSION['hostpilot_cart']??[];if(!is_array($cart))$cart=[];
+        $rows=[];$total=0.0;$currency='TRY';
+        foreach($cart as $key=>$entry){
+            $q=$this->db->prepare("SELECT p.id,p.name,p.slug,p.product_type,pp.price,pp.setup_fee,pp.currency,pp.billing_cycle FROM products p JOIN product_pricing pp ON pp.product_id=p.id WHERE p.id=:id AND p.status='active' AND pp.billing_cycle=:cycle AND pp.is_active=1 LIMIT 1");
+            $q->execute([':id'=>(int)($entry['product_id']??0),':cycle'=>(string)($entry['billing_cycle']??'')]);$p=$q->fetch();
+            if(!$p){unset($cart[$key]);continue;}
+            $p['cart_key']=(string)$key;$p['line_total']=(float)$p['price']+(float)$p['setup_fee'];$rows[]=$p;$total+=$p['line_total'];$currency=(string)$p['currency'];
+        }
+        $_SESSION['hostpilot_cart']=$cart;
+        $this->start('Alışveriş sepeti');
+        echo '<main class="detail"><a class="brand" href="'.$this->url('/').'">HOST<span>PILOT</span></a><section class="productdetail"><small>SİPARİŞ</small><h1>Alışveriş sepetiniz</h1>';
+        if(!$rows)echo '<p>Sepetiniz şu anda boş. <a href="'.$this->url('/').'">Paketleri inceleyin.</a></p>';
+        else{
+            foreach($rows as $p){
+                echo '<article class="order"><b>'.$this->e($p['name']).'</b><span>'.number_format($p['line_total'],2,',','.').' '.$this->e($p['currency']).'</span><p>'.$this->e($this->cycle($p['billing_cycle'])).' · '.$this->e($p['product_type']).'</p>';
+                if($p['product_type']==='domain')echo '<small>Domain: '.$this->e((string)($_SESSION['hostpilot_cart'][$p['cart_key']]['domain']['domain_name']??'')).'</small>';
+                echo '<form method="post" action="'.$this->url('/cart/remove').'"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="cart_key" value="'.$this->e($p['cart_key']).'"><button class="button" style="background:#6b3444">Sepetten çıkar</button></form></article>';
+            }
+            echo '<h2>Toplam: '.number_format($total,2,',','.').' '.$this->e($currency).'</h2><p>Fiyatlar ödeme öncesinde yeniden doğrulanır.</p>';
+            if(Auth::check()&&(Auth::user()['role']??'')==='customer')echo '<form method="post" action="'.$this->url('/order/create').'"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><button class="button">Siparişi oluştur ve faturaya geç</button></form>';
+            else echo '<p><a class="button" href="'.$this->url('/client/login').'">Giriş yaparak devam et</a></p>';
+        }
+        echo '<p><a class="back" href="'.$this->url('/').'">← Paketlere dön</a></p></section></main>';$this->end();
+    }
+
+    public function removeFromCart():void
+    {
+        if(($_SERVER['REQUEST_METHOD']??'GET')!=='POST'||!Auth::verifyCsrf($_POST['_token']??null)){http_response_code(400);echo 'Güvenlik doğrulaması başarısız.';return;}
+        $key=(string)($_POST['cart_key']??'');$cart=$_SESSION['hostpilot_cart']??[];
+        if(is_array($cart)&&isset($cart[$key]))unset($cart[$key]);
+        $_SESSION['hostpilot_cart']=is_array($cart)?$cart:[];
+        $this->redirect('/cart');
     }
 
     public function createOrder():void
     {
-        if(!Auth::check()){$this->redirect('/client/login');}
+        if(!Auth::check())$this->redirect('/client/login');
         $user=Auth::user();if(($user['role']??'')!=='customer'){$this->redirect('/client/login?reason=customer');}
         if(($_SERVER['REQUEST_METHOD']??'GET')!=='POST'||!Auth::verifyCsrf($_POST['_token']??null)){http_response_code(400);echo 'Geçersiz veya süresi dolmuş istek.';return;}
-        $productId=(int)($_POST['product_id']??0);$cycle=(string)($_POST['billing_cycle']??'');
-        $q=$this->db->prepare("SELECT p.id,p.name,p.product_type,pp.price,pp.currency,pp.billing_cycle FROM products p JOIN product_pricing pp ON pp.product_id=p.id WHERE p.id=:id AND p.status='active' AND pp.billing_cycle=:cycle AND pp.is_active=1 LIMIT 1");$q->execute([':id'=>$productId,':cycle'=>$cycle]);$p=$q->fetch();
-        if(!$p){http_response_code(422);echo 'Seçilen paket veya fiyat artık satışta değil. Lütfen yeniden deneyin.';return;}
+        $cart=$_SESSION['hostpilot_cart']??[];if(!is_array($cart)||!$cart){http_response_code(422);echo 'Sepetiniz boş.';return;}
+        $items=[];$currency='';$total=0.0;$domainData=null;
+        foreach($cart as $entry){
+            $q=$this->db->prepare("SELECT p.id,p.name,p.product_type,pp.price,pp.setup_fee,pp.currency,pp.billing_cycle FROM products p JOIN product_pricing pp ON pp.product_id=p.id WHERE p.id=:id AND p.status='active' AND pp.billing_cycle=:cycle AND pp.is_active=1 LIMIT 1");
+            $q->execute([':id'=>(int)($entry['product_id']??0),':cycle'=>(string)($entry['billing_cycle']??'')]);$p=$q->fetch();
+            if(!$p){http_response_code(422);echo 'Sepetinizdeki bir ürünün fiyatı veya satış durumu değişmiş. Lütfen sepetinizi güncelleyin.';return;}
+            if($currency!==''&&$currency!==$p['currency']){http_response_code(422);echo 'Tek siparişte farklı para birimleri kullanılamaz.';return;}
+            $currency=(string)$p['currency'];$baseAmount=round((float)$p['price'],2);$setupAmount=round((float)$p['setup_fee'],2);$p['base_total']=$baseAmount;$p['setup_fee_total']=$setupAmount;$p['line_total']=$baseAmount+$setupAmount;$items[]=$p;$total+=$p['line_total'];
+            if($p['product_type']==='domain'){
+                if($domainData!==null){http_response_code(422);echo 'Tek siparişte yalnızca bir domain bulunabilir.';return;}
+                $domainData=$entry['domain']??null;
+                $years=['annually'=>1,'biennially'=>2,'triennially'=>3,'onetime'=>1][$p['billing_cycle']]??0;
+                if(!is_array($domainData)||!preg_match('/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$/',(string)($domainData['domain_name']??''))||$years<1){http_response_code(422);echo 'Domain kayıt bilgileri geçersiz. Lütfen ürünü sepetten çıkarıp yeniden ekleyin.';return;}
+            }
+        }
+        if($total<=0||$currency===''){http_response_code(422);echo 'Sipariş toplamı geçersiz.';return;}
         $registrarPayload=null;$domainName='';
-        if(($p['product_type']??'')==='domain'){
-            $domainName=strtolower(trim((string)($_POST['domain_name']??'')));
-            $address=trim((string)($_POST['addressLine1']??''));$city=trim((string)($_POST['city']??''));$country=strtoupper(trim((string)($_POST['country']??'')));
-            $zip=trim((string)($_POST['zipcode']??''));$phoneCode=preg_replace('/\\D/','',(string)($_POST['phoneCountryCode']??''));$phone=preg_replace('/\\D/','',(string)($_POST['phone']??''));
-            if(!preg_match('/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$/',$domainName)||$address===''||$city===''||!preg_match('/^[A-Z]{2}$/',$country)||$zip===''||$phoneCode===''||$phone===''){http_response_code(422);echo 'Domain ve kayıt sahibi iletişim bilgilerini eksiksiz girin.';return;}
-            $years=['annually'=>1,'biennially'=>2,'triennially'=>3,'onetime'=>1][$cycle]??0;
-            if($years<1){http_response_code(422);echo 'Domain ürünlerinde yıllık, iki yıllık veya üç yıllık fiyat dönemi tanımlayın.';return;}
+        if($domainData!==null){
+            $address=trim((string)($domainData['addressLine1']??''));$city=trim((string)($domainData['city']??''));$country=strtoupper(trim((string)($domainData['country']??'')));
+            $zip=trim((string)($domainData['zipcode']??''));$phoneCode=preg_replace('/\\D/','',(string)($domainData['phoneCountryCode']??''));$phone=preg_replace('/\\D/','',(string)($domainData['phone']??''));
+            $domainName=(string)$domainData['domain_name'];
+            if($address===''||$city===''||!preg_match('/^[A-Z]{2}$/',$country)||$zip===''||$phoneCode===''||$phone===''){http_response_code(422);echo 'Domain kayıt sahibi iletişim bilgileri eksik.';return;}
+            if($this->applicationKey===''){http_response_code(503);echo 'Güvenli domain siparişi şu anda yapılandırılamıyor.';return;}
             $customerName=trim((string)$user['name']);$username='hp'.strtolower(bin2hex(random_bytes(6)));$password='Hp!'.bin2hex(random_bytes(12)).'9a';
             $customer=['username'=>$username,'password'=>$password,'name'=>$customerName,'addressLine1'=>$address,'city'=>$city,'country'=>$country,'zipcode'=>$zip,'phoneCountryCode'=>$phoneCode,'phone'=>$phone];
             $contact=['name'=>$customerName,'email'=>(string)$user['email'],'addressLine1'=>$address,'city'=>$city,'country'=>$country,'zipcode'=>$zip,'phoneCountryCode'=>$phoneCode,'phone'=>$phone];
             $registrarPayload=['customer'=>$customer,'contact'=>$contact,'nameservers'=>[],'invoiceOption'=>'OnlyAdd','autoRenew'=>false];
-            if($this->applicationKey===''){http_response_code(503);echo 'Güvenli domain siparişi şu anda yapılandırılamıyor.';return;}
         }
-        $now=gmdate('Y-m-d H:i:s');$total=(string)$p['price'];$number='HP'.gmdate('ymd').strtoupper(bin2hex(random_bytes(4)));
-        try{$this->db->beginTransaction();$o=$this->db->prepare("INSERT INTO orders(order_number,user_id,status,currency,subtotal,tax_total,total,created_at,updated_at) VALUES(:number,:uid,'pending',:currency,:subtotal,0,:total,:created,:updated)");$o->execute([':number'=>$number,':uid'=>$user['id'],':currency'=>$p['currency'],':subtotal'=>$total,':total'=>$total,':created'=>$now,':updated'=>$now]);$orderId=(int)$this->db->lastInsertId();$i=$this->db->prepare('INSERT INTO order_items(order_id,product_id,product_name,billing_cycle,quantity,unit_price,line_total,created_at) VALUES(:oid,:pid,:name,:cycle,1,:price,:line,:created)');$i->execute([':oid'=>$orderId,':pid'=>$p['id'],':name'=>$p['name'],':cycle'=>$p['billing_cycle'],':price'=>$total,':line'=>$total,':created'=>$now]);
+        $now=gmdate('Y-m-d H:i:s');$number='HP'.gmdate('ymd').strtoupper(bin2hex(random_bytes(4)));
+        try{
+            $this->db->beginTransaction();
+            $o=$this->db->prepare("INSERT INTO orders(order_number,user_id,status,currency,subtotal,tax_total,total,created_at,updated_at) VALUES(:number,:uid,'pending',:currency,:subtotal,0,:total,:created,:updated)");
+            $o->execute([':number'=>$number,':uid'=>$user['id'],':currency'=>$currency,':subtotal'=>$total,':total'=>$total,':created'=>$now,':updated'=>$now]);$orderId=(int)$this->db->lastInsertId();
+            $i=$this->db->prepare('INSERT INTO order_items(order_id,product_id,product_name,billing_cycle,quantity,unit_price,line_total,created_at) VALUES(:oid,:pid,:name,:cycle,1,:price,:line,:created)');
+            foreach($items as $p)$i->execute([':oid'=>$orderId,':pid'=>$p['id'],':name'=>$p['name'],':cycle'=>$p['billing_cycle'],':price'=>$p['base_total'],':line'=>$p['base_total'],':created'=>$now]);
             $invoiceNumber='HPF'.gmdate('ymd').strtoupper(bin2hex(random_bytes(4)));
             $invoice=$this->db->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,status,currency,subtotal,tax_total,total,amount_paid,issued_at,due_at,created_at,updated_at) VALUES(:number,:order_id,:user_id,'unpaid',:currency,:subtotal,0,:total,0,:issued,:due,:created,:updated)");
-            $due=(new \DateTimeImmutable('now',new \DateTimeZone('UTC')))->modify('+7 days')->format('Y-m-d H:i:s');
-            $invoice->execute([':number'=>$invoiceNumber,':order_id'=>$orderId,':user_id'=>$user['id'],':currency'=>$p['currency'],':subtotal'=>$total,':total'=>$total,':issued'=>$now,':due'=>$due,':created'=>$now,':updated'=>$now]);
-            $invoiceId=(int)$this->db->lastInsertId();
+            $due=(new DateTimeImmutable('now',new DateTimeZone('UTC')))->modify('+7 days')->format('Y-m-d H:i:s');
+            $invoice->execute([':number'=>$invoiceNumber,':order_id'=>$orderId,':user_id'=>$user['id'],':currency'=>$currency,':subtotal'=>$total,':total'=>$total,':issued'=>$now,':due'=>$due,':created'=>$now,':updated'=>$now]);$invoiceId=(int)$this->db->lastInsertId();
             $line=$this->db->prepare('INSERT INTO invoice_items(invoice_id,description,quantity,unit_price,tax_rate,tax_amount,line_total,created_at) VALUES(:invoice,:description,1,:price,0,0,:total,:created)');
-            $line->execute([':invoice'=>$invoiceId,':description'=>$p['name'].' · '.$this->cycle($p['billing_cycle']),':price'=>$total,':total'=>$total,':created'=>$now]);
+            foreach($items as $p){$line->execute([':invoice'=>$invoiceId,':description'=>$p['name'].' · '.$this->cycle($p['billing_cycle']),':price'=>$p['base_total'],':total'=>$p['base_total'],':created'=>$now]);if($p['setup_fee_total']>0)$line->execute([':invoice'=>$invoiceId,':description'=>$p['name'].' · Kurulum ücreti',':price'=>$p['setup_fee_total'],':total'=>$p['setup_fee_total'],':created'=>$now]);}
             if($registrarPayload!==null){
+                $domainItem=null;foreach($items as $p)if($p['product_type']==='domain'){$domainItem=$p;break;}
                 $vault=new SecretVault($this->applicationKey);$encrypted=$vault->encrypt(json_encode($registrarPayload,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR));
                 $reg=$this->db->prepare("INSERT INTO domain_registrations(user_id,order_id,invoice_id,domain_name,years,registrar_payload_enc,idempotency_key,status,available_at,created_at,updated_at) VALUES(:user,:order_id,:invoice,:domain,:years,:payload,:key,'awaiting_payment',:available,:created,:updated)");
-                $reg->execute([':user'=>$user['id'],':order_id'=>$orderId,':invoice'=>$invoiceId,':domain'=>$domainName,':years'=>['annually'=>1,'biennially'=>2,'triennially'=>3,'onetime'=>1][$cycle],':payload'=>$encrypted,':key'=>hash('sha256','domain:'.$orderId.':'.$domainName),':available'=>$now,':created'=>$now,':updated'=>$now]);
+                $reg->execute([':user'=>$user['id'],':order_id'=>$orderId,':invoice'=>$invoiceId,':domain'=>$domainName,':years'=>['annually'=>1,'biennially'=>2,'triennially'=>3,'onetime'=>1][$domainItem['billing_cycle']],':payload'=>$encrypted,':key'=>hash('sha256','domain:'.$orderId.':'.$domainName),':available'=>$now,':created'=>$now,':updated'=>$now]);
             }
-            $this->db->commit();$this->redirect('/client/invoices');}catch(Throwable){if($this->db->inTransaction())$this->db->rollBack();http_response_code(500);echo 'Sipariş oluşturulamadı. Lütfen tekrar deneyin.';}
+            $this->db->commit();unset($_SESSION['hostpilot_cart']);$this->redirect('/client/invoices');
+        }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();error_log('[HostPilot] Cart order creation: '.$e->getMessage());http_response_code(500);echo 'Sipariş oluşturulamadı. Sepetiniz korunmuştur; lütfen tekrar deneyin.';}
     }
 
     public function clientOrders():void
