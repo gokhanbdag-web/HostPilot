@@ -112,8 +112,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->exec("CREATE TABLE IF NOT EXISTS users (
                 id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
                 name VARCHAR(80) NOT NULL,
-                first_name VARCHAR(80) NOT NULL,
-                last_name VARCHAR(80) NOT NULL,
+                first_name VARCHAR(80) NULL,
+                last_name VARCHAR(80) NULL,
                 email VARCHAR(190) NOT NULL,
                 username VARCHAR(80) NOT NULL,
                 password_hash VARCHAR(255) NOT NULL,
