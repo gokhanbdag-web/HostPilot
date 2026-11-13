@@ -12,12 +12,15 @@ final class AdminController
 
     public function login(): void
     {
-        if (Auth::check()) $this->redirect('/admin');
+        if (Auth::check() && in_array((Auth::user()['role'] ?? ''), ['super_admin','admin','staff'], true)) $this->redirect('/admin');
         $error = '';
         if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             if (!Auth::verifyCsrf($_POST['_token'] ?? null)) $error = 'Oturum doğrulaması başarısız.';
-            elseif (Auth::attempt($this->db, trim((string)($_POST['email'] ?? '')), (string)($_POST['password'] ?? ''))) $this->redirect('/admin');
-            else $error = 'E-posta veya parola hatalı ya da hesap etkin değil.';
+            elseif (Auth::attempt($this->db, trim((string)($_POST['email'] ?? '')), (string)($_POST['password'] ?? ''))) {
+                if (in_array((Auth::user()['role'] ?? ''), ['super_admin','admin','staff'], true)) $this->redirect('/admin');
+                Auth::logout();
+                $error = 'Bu giriş yönetici hesapları içindir.';
+            } else $error = 'E-posta veya parola hatalı ya da hesap etkin değil.';
         }
         $this->startPage('Yönetici girişi');
         echo '<section class="login"><div class="eyebrow">HOSTPILOT CONTROL CENTER</div><h1>Yönetim paneline giriş</h1><p>İşletmenizi tek merkezden yönetin.</p>';
