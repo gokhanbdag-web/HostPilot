@@ -46,6 +46,9 @@ jobs:
             php -l "$file"
           done
 
+      - name: Test SQL migration parser
+        run: php tests/migration_runner.php
+
       - name: Prevent Composer dependency
         shell: bash
         run: |
