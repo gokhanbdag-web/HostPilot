@@ -14,15 +14,15 @@ final class DemoSeeder
 {
     public static function seed(PDO $db): void
     {
-        $check = $db->prepare("SELECT setting_value FROM settings WHERE setting_group='demo' AND setting_key='seed_version' LIMIT 1");
-        $check->execute();
-        if ((string)$check->fetchColumn() === '1') {
-            return;
-        }
-
         $now = gmdate('Y-m-d H:i:s');
         $db->beginTransaction();
         try {
+            // Serialize first-request seeding so concurrent visitors cannot duplicate sample rows.
+            $claim=$db->prepare("INSERT INTO settings(setting_group,setting_key,setting_value,is_secret,updated_at) VALUES('demo','seed_version','pending',0,:updated) ON DUPLICATE KEY UPDATE setting_value=setting_value");
+            $claim->execute([':updated'=>$now]);
+            $check=$db->prepare("SELECT setting_value FROM settings WHERE setting_group='demo' AND setting_key='seed_version' LIMIT 1 FOR UPDATE");
+            $check->execute();
+            if((string)$check->fetchColumn()==='1'){$db->commit();return;}
             $groups = [
                 'paylasimli-hosting' => 'Paylaşımlı Hosting',
                 'bayi-hosting' => 'Bayi Hosting',
