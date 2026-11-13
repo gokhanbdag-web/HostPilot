@@ -15,7 +15,7 @@ final class CatalogController
         $demoCheck=$this->db->prepare("SELECT setting_value FROM settings WHERE setting_group='demo' AND setting_key='seed_version' LIMIT 1");$demoCheck->execute();$demoActive=(string)$demoCheck->fetchColumn()==='1';
         $q=$this->db->query("SELECT p.id,p.name,p.slug,p.description,p.product_type,MIN(pp.price) AS from_price,MIN(pp.currency) AS currency FROM products p LEFT JOIN product_pricing pp ON pp.product_id=p.id AND pp.is_active=1 WHERE p.status='active' GROUP BY p.id ORDER BY p.featured DESC,p.sort_order,p.name");
         $rows=$q->fetchAll();$this->start('Hosting ve domain paketleri');
-        echo '<main class="store"><header><a class="brand" href="'.$this->url('/').'">HOST<span>PILOT</span></a><nav><a href="'.$this->url('/knowledgebase').'">Yardım merkezi</a><a href="'.$this->url('/client').'">Müşteri paneli</a><a href="'.$this->url('/cart').'">Sepet ('.count($_SESSION['hostpilot_cart']??[]).')</a></nav></header><section class="storehero"><small>HOSTING • DOMAIN • ALTYAPI</small><h1>İşletmeniz için doğru çözüm.</h1><p>İhtiyacınıza uygun hizmeti seçin, siparişinizi güvenle oluşturun.</p></section>';
+        echo '<main class="store"><header><a class="brand" href="'.$this->url('/').'">HOST<span>PILOT</span></a><nav><a href="'.$this->url('/knowledgebase').'">Yardım merkezi</a><a href="'.$this->url('/client').'">Müşteri paneli</a><a href="'.$this->url('/cart').'">Sepet ('.count(is_array($_SESSION['hostpilot_cart']??null)?$_SESSION['hostpilot_cart']:[]).')</a></nav></header><section class="storehero"><small>HOSTING • DOMAIN • ALTYAPI</small><h1>İşletmeniz için doğru çözüm.</h1><p>İhtiyacınıza uygun hizmeti seçin, siparişinizi güvenle oluşturun.</p></section>';
         if($demoActive)echo '<div class="demo-banner" role="note" style="margin:18px 0;padding:13px 16px;border:1px solid #8b6b2c;background:#302716;color:#f6d78b;border-radius:10px"><strong>DEMO KATALOĞU</strong> · Örnek paketler ve fiyatlardır. Ödeme ve sunucu bağlantıları yapılandırılmadan gerçek sipariş/aktivasyon yapılmaz.</div>';
         echo '<section class="products">';
         if(!$rows)echo '<div class="empty">Satışa açık ürün bulunmuyor. Paketler yakında burada yayınlanacak.</div>';
@@ -29,7 +29,7 @@ final class CatalogController
         if(!$p){http_response_code(404);echo 'Ürün bulunamadı.';return;}
         $prices=$this->db->prepare('SELECT billing_cycle,price,currency,setup_fee FROM product_pricing WHERE product_id=:id AND is_active=1 ORDER BY FIELD(billing_cycle,\'monthly\',\'quarterly\',\'semiannually\',\'annually\',\'biennially\',\'triennially\')');$prices->execute([':id'=>$p['id']]);$rows=$prices->fetchAll();
         $this->start($p['name']);
-        echo '<main class="detail"><a class="brand" href="'.$this->url('/').'">HOST<span>PILOT</span></a><a class="back" href="'.$this->url('/').'">← Tüm paketler</a> <a class="back" href="'.$this->url('/cart').'">Sepet ('.count($_SESSION['hostpilot_cart']??[]).')</a><section class="productdetail"><small>'.$this->e($p['group_name']??'HİZMET PAKETİ').'</small><h1>'.$this->e($p['name']).'</h1><div class="description">'.nl2br($this->e((string)$p['description'])).'</div><h2>Faturalandırma dönemi seçin</h2>';
+        echo '<main class="detail"><a class="brand" href="'.$this->url('/').'">HOST<span>PILOT</span></a><a class="back" href="'.$this->url('/').'">← Tüm paketler</a> <a class="back" href="'.$this->url('/cart').'">Sepet ('.count(is_array($_SESSION['hostpilot_cart']??null)?$_SESSION['hostpilot_cart']:[]).')</a><section class="productdetail"><small>'.$this->e($p['group_name']??'HİZMET PAKETİ').'</small><h1>'.$this->e($p['name']).'</h1><div class="description">'.nl2br($this->e((string)$p['description'])).'</div><h2>Faturalandırma dönemi seçin</h2>';
         if(!$rows)echo '<p>Bu ürün için henüz aktif fiyat tanımlanmamış.</p>';
         else{
             echo '<form method="post" action="'.$this->url('/cart/add').'" class="price"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="product_id" value="'.(int)$p['id'].'">';
@@ -75,9 +75,10 @@ final class CatalogController
         foreach($cart as $key=>$entry){
             $q=$this->db->prepare("SELECT p.id,p.name,p.slug,p.product_type,pp.price,pp.setup_fee,pp.currency,pp.billing_cycle FROM products p JOIN product_pricing pp ON pp.product_id=p.id WHERE p.id=:id AND p.status='active' AND pp.billing_cycle=:cycle AND pp.is_active=1 LIMIT 1");
             $q->execute([':id'=>(int)($entry['product_id']??0),':cycle'=>(string)($entry['billing_cycle']??'')]);$p=$q->fetch();
-            if(!$p)continue;
+            if(!$p){unset($cart[$key]);continue;}
             $p['cart_key']=(string)$key;$p['line_total']=(float)$p['price']+(float)$p['setup_fee'];$rows[]=$p;$total+=$p['line_total'];$currency=(string)$p['currency'];
         }
+        $_SESSION['hostpilot_cart']=$cart;
         $this->start('Alışveriş sepeti');
         echo '<main class="detail"><a class="brand" href="'.$this->url('/').'">HOST<span>PILOT</span></a><section class="productdetail"><small>SİPARİŞ</small><h1>Alışveriş sepetiniz</h1>';
         if(!$rows)echo '<p>Sepetiniz şu anda boş. <a href="'.$this->url('/').'">Paketleri inceleyin.</a></p>';
