@@ -109,6 +109,7 @@ if ($requestPath === '/client/domains/renew' && $method === 'POST') { $domains->
 if ($requestPath === '/admin/domains/export' && $method === 'GET') { $domains->exportOrdersCsv(); exit; }
 if ($requestPath === '/admin/domains/orders' && $method === 'GET') { $domains->adminOrders(); exit; }
 if ($requestPath === '/admin/domains/expiry-sync/queue' && $method === 'POST') { $domains->queueExpirySync(); exit; }
+if ($requestPath === '/admin/domains/expiry-sync/bulk-queue' && $method === 'POST') { $domains->queueBulkExpirySync(); exit; }
 if ($requestPath === '/admin/domains/renewals' && $method === 'GET') { $domains->adminRenewals(); exit; }
 if ($requestPath === '/admin/domains/renewals/reconcile' && $method === 'POST') { $domains->reconcileRenewal(); exit; }
 if ($requestPath === '/admin/domains/reconcile' && $method === 'POST') { $domains->reconcileOrder(); exit; }
