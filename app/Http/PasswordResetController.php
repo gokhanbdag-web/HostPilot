@@ -19,6 +19,8 @@ final class PasswordResetController
      try{
       $q=$this->db->prepare("SELECT id,name,email FROM users WHERE email=:email AND status='active' AND role IN ('super_admin','admin') LIMIT 1");$q->execute([':email'=>$email]);$u=$q->fetch(PDO::FETCH_ASSOC);
       if($u&&$this->applicationKey!==''&&$this->baseUrl!==''){
+       $cooldown=$this->db->prepare('SELECT id FROM password_reset_tokens WHERE user_id=:id AND created_at>DATE_SUB(UTC_TIMESTAMP(),INTERVAL 60 SECOND) LIMIT 1');$cooldown->execute([':id'=>(int)$u['id']]);
+       if(!$cooldown->fetchColumn()){
        $this->db->prepare('UPDATE password_reset_tokens SET used_at=UTC_TIMESTAMP() WHERE user_id=:id AND used_at IS NULL')->execute([':id'=>(int)$u['id']]);
        $token=bin2hex(random_bytes(32));$hash=hash('sha256',$token);$now=gmdate('Y-m-d H:i:s');
        $this->db->prepare('INSERT INTO password_reset_tokens(user_id,token_hash,expires_at,created_at) VALUES(:id,:hash,:expires,:created)')
@@ -26,6 +28,7 @@ final class PasswordResetController
        $link=rtrim($this->baseUrl,'/').$this->basePath.'/admin/reset-password?token='.rawurlencode($token);
        $body="Merhaba ".$u['name'].",\n\nHostPilot yönetici parolanızı sıfırlamak için 30 dakika içinde bu tek kullanımlık bağlantıyı açın:\n\n".$link."\n\nBu isteği siz yapmadıysanız e-postayı dikkate almayın.";
        (new EmailService($this->db,$this->applicationKey))->queue((string)$u['email'],'HostPilot yönetici parola sıfırlama',$body,'admin-password-reset:'.$hash,'admin_password_reset');
+       }
       }
      }catch(Throwable $e){error_log('[HostPilot] Password reset request failed: '.$e->getMessage());}
     }
