@@ -14,7 +14,7 @@ final class ClientController
 
     public function login(): void
     {
-        if(Auth::check())$this->go('/client');$error='';
+        if(Auth::check() && (Auth::user()['role']??'')==='customer')$this->go('/client');$error='';
         if($_SERVER['REQUEST_METHOD']==='POST'){
             if(!Auth::verifyCsrf($_POST['_token']??null))$error='Güvenlik doğrulaması başarısız.';
             elseif(Auth::attempt($this->db,trim((string)($_POST['email']??'')),(string)($_POST['password']??''))){
