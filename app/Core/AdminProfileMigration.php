@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-namespace HostPilot\\Core;
+namespace HostPilot\Core;
 use PDO;
 final class AdminProfileMigration
 {
