@@ -115,7 +115,7 @@ final class CatalogController
             $q->execute([':id'=>(int)($entry['product_id']??0),':cycle'=>(string)($entry['billing_cycle']??'')]);$p=$q->fetch();
             if(!$p){http_response_code(422);echo 'Sepetinizdeki bir ürünün fiyatı veya satış durumu değişmiş. Lütfen sepetinizi güncelleyin.';return;}
             if($currency!==''&&$currency!==$p['currency']){http_response_code(422);echo 'Tek siparişte farklı para birimleri kullanılamaz.';return;}
-            $currency=(string)$p['currency'];$line=round((float)$p['price']+(float)$p['setup_fee'],2);$p['line_total']=$line;$items[]=$p;$total+=$line;
+            $currency=(string)$p['currency'];$baseAmount=round((float)$p['price'],2);$setupAmount=round((float)$p['setup_fee'],2);$p['base_total']=$baseAmount;$p['setup_fee_total']=$setupAmount;$p['line_total']=$baseAmount+$setupAmount;$items[]=$p;$total+=$p['line_total'];
             if($p['product_type']==='domain'){
                 if($domainData!==null){http_response_code(422);echo 'Tek siparişte yalnızca bir domain bulunabilir.';return;}
                 $domainData=$entry['domain']??null;
@@ -142,13 +142,13 @@ final class CatalogController
             $o=$this->db->prepare("INSERT INTO orders(order_number,user_id,status,currency,subtotal,tax_total,total,created_at,updated_at) VALUES(:number,:uid,'pending',:currency,:subtotal,0,:total,:created,:updated)");
             $o->execute([':number'=>$number,':uid'=>$user['id'],':currency'=>$currency,':subtotal'=>$total,':total'=>$total,':created'=>$now,':updated'=>$now]);$orderId=(int)$this->db->lastInsertId();
             $i=$this->db->prepare('INSERT INTO order_items(order_id,product_id,product_name,billing_cycle,quantity,unit_price,line_total,created_at) VALUES(:oid,:pid,:name,:cycle,1,:price,:line,:created)');
-            foreach($items as $p)$i->execute([':oid'=>$orderId,':pid'=>$p['id'],':name'=>$p['name'],':cycle'=>$p['billing_cycle'],':price'=>$p['line_total'],':line'=>$p['line_total'],':created'=>$now]);
+            foreach($items as $p)$i->execute([':oid'=>$orderId,':pid'=>$p['id'],':name'=>$p['name'],':cycle'=>$p['billing_cycle'],':price'=>$p['base_total'],':line'=>$p['base_total'],':created'=>$now]);
             $invoiceNumber='HPF'.gmdate('ymd').strtoupper(bin2hex(random_bytes(4)));
             $invoice=$this->db->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,status,currency,subtotal,tax_total,total,amount_paid,issued_at,due_at,created_at,updated_at) VALUES(:number,:order_id,:user_id,'unpaid',:currency,:subtotal,0,:total,0,:issued,:due,:created,:updated)");
             $due=(new DateTimeImmutable('now',new DateTimeZone('UTC')))->modify('+7 days')->format('Y-m-d H:i:s');
             $invoice->execute([':number'=>$invoiceNumber,':order_id'=>$orderId,':user_id'=>$user['id'],':currency'=>$currency,':subtotal'=>$total,':total'=>$total,':issued'=>$now,':due'=>$due,':created'=>$now,':updated'=>$now]);$invoiceId=(int)$this->db->lastInsertId();
             $line=$this->db->prepare('INSERT INTO invoice_items(invoice_id,description,quantity,unit_price,tax_rate,tax_amount,line_total,created_at) VALUES(:invoice,:description,1,:price,0,0,:total,:created)');
-            foreach($items as $p)$line->execute([':invoice'=>$invoiceId,':description'=>$p['name'].' · '.$this->cycle($p['billing_cycle']),':price'=>$p['line_total'],':total'=>$p['line_total'],':created'=>$now]);
+            foreach($items as $p){$line->execute([':invoice'=>$invoiceId,':description'=>$p['name'].' · '.$this->cycle($p['billing_cycle']),':price'=>$p['base_total'],':total'=>$p['base_total'],':created'=>$now]);if($p['setup_fee_total']>0)$line->execute([':invoice'=>$invoiceId,':description'=>$p['name'].' · Kurulum ücreti',':price'=>$p['setup_fee_total'],':total'=>$p['setup_fee_total'],':created'=>$now]);}
             if($registrarPayload!==null){
                 $domainItem=null;foreach($items as $p)if($p['product_type']==='domain'){$domainItem=$p;break;}
                 $vault=new SecretVault($this->applicationKey);$encrypted=$vault->encrypt(json_encode($registrarPayload,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR));
