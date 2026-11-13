@@ -91,6 +91,7 @@ if ($requestPath === '/admin/email-queue' && in_array($method, ['GET','POST'], t
 
 $controller = new \HostPilot\Http\AdminController($pdo, $basePath, (string)($config['app']['key'] ?? ''));
 if ($requestPath === '/admin/customers' && $method === 'GET') { $controller->customers(); exit; }
+if ($requestPath === '/admin/reports' && $method === 'GET') { $controller->reports(); exit; }
 if ($requestPath === '/admin/tickets' && $method === 'GET') { $controller->tickets(); exit; }
 if (preg_match('#^/admin/tickets/([0-9]+)$#', $requestPath, $adminTicketMatch) && in_array($method, ['GET','POST'], true)) { $controller->viewTicket((int)$adminTicketMatch[1]); exit; }
 
