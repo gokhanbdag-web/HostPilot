@@ -35,6 +35,8 @@ final class UpdateController
             if (str_contains($line, 'BAŞARILI:')) { $lastSuccess = $line; break; }
         }
 
+        $updateNotes = $this->readUpdateNotes();
+
         $this->page('Güncelleme Merkezi');
         echo '<div class="layout"><aside class="sidebar"><a class="brand" href="' . $this->url('/admin') . '">HOST<span>PILOT</span></a>';
         echo '<a class="nav-item" href="' . $this->url('/admin') . '">▦ Genel Bakış</a>';
@@ -47,6 +49,7 @@ final class UpdateController
         echo '<article class="metric"><span>Dağıtım günlüğü</span><strong style="font-size:22px">' . ($logReadable ? 'Erişilebilir' : 'Erişilemiyor') . '</strong><small>' . ($logReadable ? 'Sunucu dağıtım kaydı okunabildi' : 'Web kullanıcısının sunucu günlüğüne erişimi yok') . '</small></article>';
         echo '<article class="metric"><span>Son başarılı dağıtım</span><strong style="font-size:16px">' . ($lastSuccess ? $this->e(substr($lastSuccess, 0, 100)) : 'Kayıt yok') . '</strong><small>Dağıtım günlüğünden doğrulanır</small></article>';
         echo '</section>';
+        echo '<article class="panel roadmap"><div class="panel-head"><div><h3>Güncelleme notları</h3><p>Yeni sürüm notları sayfa yenilenmeden otomatik kontrol edilir.</p></div><small id="update-notes-time">Canlı kontrol başlatılıyor…</small></div><pre id="update-notes" style="white-space:pre-wrap;overflow-wrap:anywhere;color:#b8c5d8;font:12px/1.8 inherit;margin:12px 0 0">' . $this->e($updateNotes !== '' ? $updateNotes : 'Henüz güncelleme notu yayınlanmadı.') . '</pre></article>';
         echo '<article class="panel roadmap"><div class="panel-head"><div><h3>Canlı sistem sağlık kontrolü</h3><p>Bu sayfa her açıldığında sunucuda yeniden kontrol edilir</p></div><strong style="color:' . ($healthy ? '#7ce0b5' : '#ffb86b') . '">' . ($healthy ? 'SAĞLIKLI' : 'KONTROL GEREKLİ') . '</strong></div>';
         foreach ($checks as $check) echo '<div class="status"><span>' . $this->e($check['label']) . '</span><strong style="color:' . ($check['ok'] ? '#7ce0b5' : '#ffb86b') . '">' . $this->e($check['detail']) . '</strong></div>';
         echo '<div class="notice">Ayrıca dışarıdan çalışan GitHub Actions dağıtım kontrolü /health adresini tekrar deneyerek canlı yanıtı doğrular.</div></article>';
@@ -61,8 +64,57 @@ final class UpdateController
         }
         echo '</article>';
         echo '<article class="panel roadmap"><h3>Güvenli geri alma</h3><p>Geri alma düğmesi şimdilik kapalıdır. Mevcut yedek arşivleri PHP web isteğiyle doğrudan açmak; yol doğrulaması, arşiv bütünlüğü, kilitleme ve canlı kodu atomik değiştirme garantisi olmadan güvenli değildir. Bu sunucu tarafı korumalar doğrulanmadan geri alma işlemi başlatılmaz. Veritabanı ve müşteri dosyaları hiçbir kod geri almasında silinmez.</p></article>';
+        echo '<script>
+(() => {
+ const notesNode=document.getElementById("update-notes");
+ const timeNode=document.getElementById("update-notes-time");
+ const endpoint=' . json_encode($this->url('/admin/updates/status')) . ';
+ let lastNotes=notesNode?notesNode.textContent:"";
+ let busy=false;
+ async function refreshNotes(){
+  if(busy||document.visibilityState==="hidden")return;
+  busy=true;
+  try{
+   const response=await fetch(endpoint+"?t="+Date.now(),{credentials:"same-origin",cache:"no-store",headers:{"Accept":"application/json"}});
+   if(!response.ok)throw new Error("HTTP "+response.status);
+   const data=await response.json();
+   const notes=typeof data.notes==="string"&&data.notes.trim()!==""?data.notes:"Henüz güncelleme notu yayınlanmadı.";
+   if(notesNode&&notes!==lastNotes){notesNode.textContent=notes;lastNotes=notes;}
+   if(timeNode)timeNode.textContent="Son kontrol: "+new Date(data.checked_at).toLocaleTimeString("tr-TR")+" · 5 saniyede bir otomatik kontrol";
+  }catch(error){if(timeNode)timeNode.textContent="Canlı notlar alınamadı; yeniden denenecek.";}
+  finally{busy=false;}
+ }
+ refreshNotes();
+ window.setInterval(refreshNotes,5000);
+})();
+</script>';
         echo '</main></div>';
         $this->endPage();
+    }
+
+    public function status(): void
+    {
+        if (!Auth::check()) { http_response_code(401); echo 'Oturum gerekli.'; return; }
+        $user = Auth::user();
+        if (!in_array($user['role'] ?? '', ['super_admin', 'admin'], true)) { http_response_code(403); echo 'Yetkisiz erişim.'; return; }
+        $versionFile = defined('HOSTPILOT_ROOT') ? HOSTPILOT_ROOT . DIRECTORY_SEPARATOR . 'VERSION' : '';
+        $version = $versionFile !== '' && is_file($versionFile) ? trim((string)file_get_contents($versionFile)) : 'Bilinmiyor';
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        header('X-Content-Type-Options: nosniff');
+        echo json_encode(['version' => $version, 'notes' => $this->readUpdateNotes(), 'checked_at' => gmdate('c')], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    private function readUpdateNotes(): string
+    {
+        $root = defined('HOSTPILOT_ROOT') ? HOSTPILOT_ROOT : '';
+        if ($root === '') return '';
+        $path = $root . DIRECTORY_SEPARATOR . 'UPDATE_NOTES.md';
+        if (!is_file($path) || !is_readable($path)) return '';
+        $size = filesize($path);
+        if ($size === false || $size > 16384) return '';
+        $contents = file_get_contents($path);
+        return is_string($contents) ? trim($contents) : '';
     }
 
     private function runtimeChecks(): array
