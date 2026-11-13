@@ -40,7 +40,7 @@ final class CatalogController
     public function createOrder():void
     {
         if(!Auth::check()){$this->redirect('/client/login');}
-        $user=Auth::user();if(($user['role']??'')!=='customer'){http_response_code(403);echo 'Sipariş oluşturmak için müşteri hesabı gerekir.';return;}
+        $user=Auth::user();if(($user['role']??'')!=='customer'){$this->redirect('/client/login?reason=customer');}
         if(($_SERVER['REQUEST_METHOD']??'GET')!=='POST'||!Auth::verifyCsrf($_POST['_token']??null)){http_response_code(400);echo 'Geçersiz veya süresi dolmuş istek.';return;}
         $productId=(int)($_POST['product_id']??0);$cycle=(string)($_POST['billing_cycle']??'');
         $q=$this->db->prepare("SELECT p.id,p.name,p.product_type,pp.price,pp.currency,pp.billing_cycle FROM products p JOIN product_pricing pp ON pp.product_id=p.id WHERE p.id=:id AND p.status='active' AND pp.billing_cycle=:cycle AND pp.is_active=1 LIMIT 1");$q->execute([':id'=>$productId,':cycle'=>$cycle]);$p=$q->fetch();
