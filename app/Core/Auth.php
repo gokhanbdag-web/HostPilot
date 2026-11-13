@@ -7,10 +7,11 @@ use PDO;
 
 final class Auth
 {
-    public static function attempt(PDO $db, string $email, string $password): bool
+    public static function attempt(PDO $db, string $identifier, string $password): bool
     {
-        $stmt = $db->prepare("SELECT id, name, email, password_hash, role, status FROM users WHERE email = :email LIMIT 1");
-        $stmt->execute([':email' => strtolower(trim($email))]);
+        $identifier = strtolower(trim($identifier));
+        $stmt = $db->prepare("SELECT id, name, email, password_hash, role, status FROM users WHERE email = :email OR username = :username LIMIT 1");
+        $stmt->execute([':email' => $identifier, ':username' => $identifier]);
         $user = $stmt->fetch();
 
         if (!$user || ($user['status'] ?? '') !== 'active' || !password_verify($password, (string)$user['password_hash'])) {
