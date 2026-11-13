@@ -69,6 +69,7 @@ jobs:
 
 
   live-health-check:
+    if: github.event_name != 'pull_request'
     name: Live deployment health check
     runs-on: ubuntu-latest
     needs: php-and-deployment-safety
