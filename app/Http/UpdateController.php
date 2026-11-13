@@ -72,7 +72,9 @@ final class UpdateController
         $checks = [];
         $checks[] = ['label' => 'PHP sürümü', 'ok' => PHP_VERSION_ID >= 80200, 'detail' => PHP_VERSION];
         $checks[] = ['label' => 'Veritabanı sorgusu', 'ok' => true, 'detail' => 'Bağlantı ve SELECT 1 başarılı'];
-        try { $this->db->query('SELECT 1')->fetchColumn(); } catch (Throwable) { $checks[count($checks)-1]['ok'] = false; $checks[count($checks)-1]['detail'] = 'Sorgu başarısız'; }
+        try { $dbOk = (int)$this->db->query('SELECT 1')->fetchColumn() === 1;
+            $checks[count($checks)-1]['ok'] = $dbOk;
+            $checks[count($checks)-1]['detail'] = $dbOk ? 'SELECT 1 başarılı' : 'Sorgu beklenmeyen sonuç döndürdü'; } catch (Throwable) { $checks[count($checks)-1]['ok'] = false; $checks[count($checks)-1]['detail'] = 'Sorgu başarısız'; }
         $checks[] = ['label' => 'Kurulum kilidi', 'ok' => $storage !== '' && is_file($storage . DIRECTORY_SEPARATOR . 'installed.lock'), 'detail' => 'Kurulum kilidi mevcut'];
         $checks[] = ['label' => 'Özel yapılandırma', 'ok' => $storage !== '' && is_file($storage . DIRECTORY_SEPARATOR . 'config.php') && is_readable($storage . DIRECTORY_SEPARATOR . 'config.php'), 'detail' => 'storage/config.php mevcut ve okunabilir'];
         $checks[] = ['label' => 'Storage erişimi', 'ok' => $storage !== '' && is_dir($storage) && is_writable($storage), 'detail' => 'Storage dizini yazılabilir'];
