@@ -68,7 +68,7 @@ final class DemoSeeder
             $userIds=[];
             foreach($firstNames as $i=>$first){
                 $n=$i+1;$email=sprintf('demo.musteri%02d@example.invalid',$n);$username=sprintf('demo_musteri%02d',$n);
-                $created=gmdate('Y-m-d H:i:s',strtotime('-'.(45+($n*3)%300).' days'));
+                $created=gmdate('Y-m-d H:i:s',strtotime('-'.(($n*7)%30).' days'));
                 $userInsert->execute([':name'=>$first.' '.$lastNames[$i%count($lastNames)],':email'=>$email,':username'=>$username,':hash'=>password_hash(bin2hex(random_bytes(24)),PASSWORD_DEFAULT),':created'=>$created,':updated'=>$now]);
                 $q=$db->prepare('SELECT id FROM users WHERE email=:email');$q->execute([':email'=>$email]);$userIds[]=(int)$q->fetchColumn();
             }
