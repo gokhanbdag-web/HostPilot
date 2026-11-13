@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace HostPilot\\Core;
+namespace HostPilot\Core;
 
 use PDO;
 use Throwable;
