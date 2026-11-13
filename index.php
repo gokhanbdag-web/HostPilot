@@ -56,7 +56,7 @@ try {
 
 // Demo data is optional and non-blocking: a seeding issue must never take the storefront offline.
 try {
-    \\HostPilot\\Core\\DemoSeeder::seed($pdo);
+    \HostPilot\Core\DemoSeeder::seed($pdo);
 } catch (Throwable $exception) {
     error_log('[HostPilot] Demo seed skipped: ' . $exception->getMessage());
 }
