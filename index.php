@@ -54,6 +54,13 @@ try {
     exit('HostPilot veritabanına bağlanamıyor veya veritabanı güncellemesini tamamlayamıyor. Yapılandırmayı ve hata kayıtlarını kontrol edin.');
 }
 
+// Demo data is optional and non-blocking: a seeding issue must never take the storefront offline.
+try {
+    \\HostPilot\\Core\\DemoSeeder::seed($pdo);
+} catch (Throwable $exception) {
+    error_log('[HostPilot] Demo seed skipped: ' . $exception->getMessage());
+}
+
 $requestPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 if ($basePath !== '' && ($requestPath === $basePath || str_starts_with($requestPath, $basePath . '/'))) {
     $requestPath = substr($requestPath, strlen($basePath)) ?: '/';
