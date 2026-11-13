@@ -68,6 +68,25 @@ jobs:
           echo "No tracked runtime configuration or installation lock found."
 
 
+  migration-runner-tests:
+    name: SQL migration runner tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up PHP 8.3
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+      - name: Lint migration runner and tests
+        run: |
+          php -l app/Core/MigrationRunner.php
+          php -l tests/migration_runner.php
+      - name: Run migration parser tests
+        run: php tests/migration_runner.php
+
   live-health-check:
     if: github.event_name != 'pull_request'
     name: Live deployment health check
