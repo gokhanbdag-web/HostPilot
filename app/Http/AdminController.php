@@ -83,6 +83,28 @@ final class AdminController
         echo '</article></main></div>';$this->endPage();
     }
 
+    public function reports(): void
+    {
+        if (!Auth::check()) $this->redirect('/admin/login');
+        $user=Auth::user();
+        if (!in_array($user['role'], ['super_admin','admin','staff'], true)) { http_response_code(403); echo 'Yetkisiz erişim.'; return; }
+        $orders=$this->db->query("SELECT COUNT(*) AS total,COALESCE(SUM(total),0) AS amount FROM orders WHERE order_number LIKE 'DEMO-%'")->fetch();
+        $invoices=$this->db->query("SELECT status,COUNT(*) AS total,COALESCE(SUM(total),0) AS amount FROM invoices WHERE invoice_number LIKE 'DEMO-%' GROUP BY status")->fetchAll();
+        $services=$this->db->query("SELECT status,COUNT(*) AS total FROM services WHERE order_id IN (SELECT id FROM orders WHERE order_number LIKE 'DEMO-%') GROUP BY status")->fetchAll();
+        $products=$this->db->query("SELECT oi.product_name,SUM(oi.quantity) AS quantity,SUM(oi.line_total) AS amount FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.order_number LIKE 'DEMO-%' GROUP BY oi.product_id,oi.product_name ORDER BY amount DESC LIMIT 10")->fetchAll();
+        $this->startPage('Demo raporları');
+        echo '<div class="layout"><aside class="sidebar"><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a class="nav-item" href="'.$this->url('/admin').'">▦ Genel Bakış</a><a class="nav-item active" href="'.$this->url('/admin/reports').'">▥ Raporlar</a></aside><main class="main"><header class="topbar"><div><small>YÖNETİM / RAPORLAR</small><h1>Demo işletme raporları</h1></div><a class="logout" href="'.$this->url('/admin').'">Kontrol merkezi</a></header><div class="notice"><strong>ÖRNEK RAPOR:</strong> Yalnızca DEMO- ile başlayan siparişlerden hesaplanır. Ciro ve tahsilat gerçek finansal veri değildir.</div><section class="cards"><article class="metric"><span>Demo sipariş</span><strong>'.number_format((int)$orders['total'],0,',','.').'</strong><small>Örnek sipariş adedi</small></article><article class="metric"><span>Demo sipariş tutarı</span><strong>'.number_format((float)$orders['amount'],2,',','.').' ₺</strong><small>Gerçek satış değildir</small></article><article class="metric"><span>Demo fatura</span><strong>'.number_format(array_sum(array_map(static fn($r)=>(int)$r['total'],$invoices)),0,',','.').'</strong><small>Örnek fatura adedi</small></article><article class="metric"><span>Demo hizmet</span><strong>'.number_format(array_sum(array_map(static fn($r)=>(int)$r['total'],$services)),0,',','.').'</strong><small>Örnek hizmet kaydı</small></article></section><section class="columns"><article class="panel"><h3>Fatura dağılımı</h3>';
+        if(!$invoices)echo '<p>Demo fatura kaydı henüz yok.</p>';
+        foreach($invoices as $row)echo '<div class="status"><span>'.$this->e((string)$row['status']).'</span><strong>'.(int)$row['total'].' · '.number_format((float)$row['amount'],2,',','.').' ₺</strong></div>';
+        echo '</article><article class="panel"><h3>Hizmet durumları</h3>';
+        if(!$services)echo '<p>Demo hizmet kaydı henüz yok.</p>';
+        foreach($services as $row)echo '<div class="status"><span>'.$this->e((string)$row['status']).'</span><strong>'.(int)$row['total'].'</strong></div>';
+        echo '</article></section><article class="panel roadmap"><h3>En çok sipariş edilen ürünler</h3>';
+        if(!$products)echo '<p>Henüz ürün siparişi yok.</p>';
+        foreach($products as $row)echo '<div class="status"><span>'.$this->e((string)$row['product_name']).'</span><strong>'.(int)$row['quantity'].' adet · '.number_format((float)$row['amount'],2,',','.').' ₺</strong></div>';
+        echo '</article></main></div>';$this->endPage();
+    }
+
     public function tickets(): void
     {
         if (!Auth::check()) $this->redirect('/admin/login');
