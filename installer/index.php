@@ -54,7 +54,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $dbName = trim((string)($_POST['db_name'] ?? ''));
     $dbUser = trim((string)($_POST['db_user'] ?? ''));
     $dbPass = (string)($_POST['db_pass'] ?? '');
-    $adminName = trim((string)($_POST['admin_name'] ?? ''));
+    $adminFirstName = trim((string)($_POST['admin_first_name'] ?? ''));
+    $adminLastName = trim((string)($_POST['admin_last_name'] ?? ''));
+    $adminName = trim($adminFirstName . ' ' . $adminLastName);
     $adminUsername = trim((string)($_POST['admin_username'] ?? ''));
     $businessModel = (string)($_POST['business_model'] ?? '');
     $adminEmail = trim((string)($_POST['admin_email'] ?? ''));
@@ -68,8 +70,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!preg_match('/^[a-zA-Z0-9_]{1,64}$/', $dbName)) {
         $errors[] = 'Veritabanı adı yalnızca harf, rakam ve alt çizgi içerebilir.';
     }
-    if ($adminName === '' || strlen($adminName) > 80) {
-        $errors[] = 'Yönetici adı zorunludur ve 80 karakteri aşamaz.';
+    if ($adminFirstName === '' || strlen($adminFirstName) > 80 || $adminLastName === '' || strlen($adminLastName) > 80 || strlen($adminName) > 80) {
+        $errors[] = 'Yönetici adı ve soyadı zorunludur; her biri en fazla 80 karakter olabilir.';
     }
     if (!preg_match('/^[a-zA-Z0-9_.-]{3,80}$/', $adminUsername)) {
         $errors[] = 'Yönetici kullanıcı adı 3-80 karakter olmalı; harf, rakam, nokta, tire ve alt çizgi içermelidir.';
@@ -110,6 +112,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->exec("CREATE TABLE IF NOT EXISTS users (
                 id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
                 name VARCHAR(80) NOT NULL,
+                first_name VARCHAR(80) NULL,
+                last_name VARCHAR(80) NULL,
                 email VARCHAR(190) NOT NULL,
                 username VARCHAR(80) NOT NULL,
                 password_hash VARCHAR(255) NOT NULL,
@@ -340,10 +344,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->beginTransaction();
             $now = gmdate('Y-m-d H:i:s');
             $stmt = $pdo->prepare("INSERT INTO users
-                (name, email, username, password_hash, role, status, created_at, updated_at)
-                VALUES (:name, :email, :username, :password_hash, 'super_admin', 'active', :created_at, :updated_at)");
+                (name, first_name, last_name, email, username, password_hash, role, status, created_at, updated_at)
+                VALUES (:name, :first_name, :last_name, :email, :username, :password_hash, 'super_admin', 'active', :created_at, :updated_at)");
             $stmt->execute([
                 ':name' => $adminName,
+                ':first_name' => $adminFirstName,
+                ':last_name' => $adminLastName,
                 ':email' => $adminEmail,
                 ':username' => $adminUsername,
                 ':password_hash' => password_hash($adminPass, PASSWORD_DEFAULT),
@@ -433,7 +439,7 @@ button{border:0;border-radius:10px;padding:14px 20px;background:#1d4ed8;color:#f
 <header><span>HOSTPILOT</span><h1>Kurulum sihirbazı</h1><p>Veritabanı bağlantısını ve ilk yönetici hesabını oluşturun. Kurulum SSH veya Composer gerektirmez.</p></header>
 
 <?php if ($success): ?>
-<div class="panel"><div class="ok"><strong>Kurulum tamamlandı.</strong><br>HostPilot çekirdek tabloları, destek talebi altyapısı, bilgi bankası ve ilk yönetici kaydı oluşturuldu. Güvenlik için kurulum kilitlendi. Yönetim paneline giriş yapabilirsiniz.</div></div>
+<div class="panel"><div class="ok"><strong>Kurulum tamamlandı.</strong><br>HostPilot çekirdek tabloları, destek talebi altyapısı, bilgi bankası ve ilk yönetici kaydı oluşturuldu. Güvenlik için kurulum kilitlendi. Yönetim paneline geçebilirsiniz.</div><p style="margin-top:18px"><a href="<?= htmlspecialchars($basePath . '/admin/login', ENT_QUOTES, 'UTF-8') ?>" style="display:block;text-align:center;padding:14px;background:#1d4ed8;color:#fff;text-decoration:none;border-radius:10px;font-weight:750">Yönetici giriş ekranına git</a></p></div>
 <?php else: ?>
 <?php foreach ($errors as $error): ?><div class="error"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div><?php endforeach; ?>
 <form method="post" class="panel" autocomplete="off">
@@ -450,8 +456,9 @@ button{border:0;border-radius:10px;padding:14px 20px;background:#1d4ed8;color:#f
 <div class="field"><label for="db_pass">Veritabanı parolası</label><input id="db_pass" name="db_pass" type="password" autocomplete="new-password"></div>
 <h2 style="margin-top:26px">3. İlk yönetici hesabı</h2>
 <div class="grid">
-<div class="field"><label for="admin_name">Yönetici adı / kullanıcı adı</label><input id="admin_name" name="admin_name" required maxlength="80"></div>
-<div class="field"><label for="admin_username">Yönetici kullanıcı adı</label><input id="admin_username" name="admin_username" required minlength="3" maxlength="80" pattern="[A-Za-z0-9_.-]+"></div>
+<div class="field"><label for="admin_first_name">Ad</label><input id="admin_first_name" name="admin_first_name" required maxlength="80" autocomplete="given-name"></div>
+<div class="field"><label for="admin_last_name">Soyad</label><input id="admin_last_name" name="admin_last_name" required maxlength="80" autocomplete="family-name"></div>
+<div class="field"><label for="admin_username">Kullanıcı adı</label><input id="admin_username" name="admin_username" required minlength="3" maxlength="80" pattern="[A-Za-z0-9_.-]+" autocomplete="username"></div>
 <div class="field"><label for="admin_email">Yönetici e-posta adresi</label><input id="admin_email" name="admin_email" type="email" required></div>
 </div>
 <div class="field"><label for="admin_pass">Yönetici parolası (en az 12 karakter)</label><input id="admin_pass" name="admin_pass" type="password" minlength="12" autocomplete="new-password" required></div>

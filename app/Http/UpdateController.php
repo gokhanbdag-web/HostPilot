@@ -49,7 +49,7 @@ final class UpdateController
         echo '<article class="metric"><span>Dağıtım günlüğü</span><strong style="font-size:22px">' . ($logReadable ? 'Erişilebilir' : 'Erişilemiyor') . '</strong><small>' . ($logReadable ? 'Sunucu dağıtım kaydı okunabildi' : 'Web kullanıcısının sunucu günlüğüne erişimi yok') . '</small></article>';
         echo '<article class="metric"><span>Son başarılı dağıtım</span><strong style="font-size:16px">' . ($lastSuccess ? $this->e(substr($lastSuccess, 0, 100)) : 'Kayıt yok') . '</strong><small>Dağıtım günlüğünden doğrulanır</small></article>';
         echo '</section>';
-        echo '<article class="panel roadmap"><div class="panel-head"><div><h3>Güncelleme notları</h3><p>Yeni sürüm notları sayfa yenilenmeden otomatik kontrol edilir.</p></div><small id="update-notes-time">Canlı kontrol başlatılıyor…</small></div><pre id="update-notes" style="white-space:pre-wrap;overflow-wrap:anywhere;color:#b8c5d8;font:12px/1.8 inherit;margin:12px 0 0">' . $this->e($updateNotes !== '' ? $updateNotes : 'Henüz güncelleme notu yayınlanmadı.') . '</pre></article>';
+        echo '<article class="panel roadmap"><div class="panel-head"><div><h3>Güncelleme notları</h3><p>Yeni sürüm notları sayfa yenilenmeden otomatik kontrol edilir.</p></div><small id="update-notes-time">Canlı kontrol hazır</small></div><pre id="update-notes" style="white-space:pre-wrap;overflow-wrap:anywhere;color:#b8c5d8;font:12px/1.8 inherit;margin:12px 0 0">' . $this->e($updateNotes !== '' ? $updateNotes : 'Henüz güncelleme notu yayınlanmadı.') . '</pre></article>';
         echo '<article class="panel roadmap"><div class="panel-head"><div><h3>Canlı sistem sağlık kontrolü</h3><p>Bu sayfa her açıldığında sunucuda yeniden kontrol edilir</p></div><strong style="color:' . ($healthy ? '#7ce0b5' : '#ffb86b') . '">' . ($healthy ? 'SAĞLIKLI' : 'KONTROL GEREKLİ') . '</strong></div>';
         foreach ($checks as $check) echo '<div class="status"><span>' . $this->e($check['label']) . '</span><strong style="color:' . ($check['ok'] ? '#7ce0b5' : '#ffb86b') . '">' . $this->e($check['detail']) . '</strong></div>';
         echo '<div class="notice">Ayrıca dışarıdan çalışan GitHub Actions dağıtım kontrolü /health adresini tekrar deneyerek canlı yanıtı doğrular.</div></article>';
@@ -80,8 +80,8 @@ final class UpdateController
    const data=await response.json();
    const notes=typeof data.notes==="string"&&data.notes.trim()!==""?data.notes:"Henüz güncelleme notu yayınlanmadı.";
    if(notesNode&&notes!==lastNotes){notesNode.textContent=notes;lastNotes=notes;}
-   if(timeNode)timeNode.textContent="Son kontrol: "+new Date(data.checked_at).toLocaleTimeString("tr-TR")+" · 5 saniyede bir otomatik kontrol";
-  }catch(error){if(timeNode)timeNode.textContent="Canlı notlar alınamadı; yeniden denenecek.";}
+   if(timeNode)timeNode.textContent="Kontrol edildi: "+new Date(data.checked_at).toLocaleTimeString("tr-TR")+" · Otomatik yenileme açık";
+  }catch(error){if(timeNode)timeNode.textContent="Canlı notlar alınamadı; sonraki kontrolde tekrar denenecek.";}
   finally{busy=false;}
  }
  refreshNotes();
@@ -149,7 +149,7 @@ final class UpdateController
         foreach ($lines as $line) {
             $line = trim($line);
             if ($line === '') continue;
-            if (preg_match('/^(=== DEPLOY |BAŞARILI:|PHP dosyaları kontrol ediliyor|Canlı kod yedekleniyor|Yeni sürüm aktarılıyor|Canlı PHP kontrolü|Dosya sahipliği|fatal:|ERROR:|HATA:)/iu', $line)) {
+            if (preg_match('/^(=== DEPLOY |BAŞARILI:|PHP dosyaları kontrol edildi|Canlı kod yedeklendi|Yeni sürüm aktarıldı|Canlı PHP kontrolü|Dosya sahipliği|fatal:|ERROR:|HATA:)/iu', $line)) {
                 $summary[] = substr($line, 0, 240);
             }
         }
