@@ -1,0 +1,65 @@
+name: HostPilot quality checks
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hostpilot-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  php-and-deployment-safety:
+    name: PHP syntax and deployment safety
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up PHP 8.3
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: curl, openssl, pdo, pdo_mysql
+          coverage: none
+
+      - name: Verify PHP syntax
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mapfile -d '' files < <(git ls-files -z -- '*.php')
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No tracked PHP files were found."
+            exit 1
+          fi
+          for file in "${files[@]}"; do
+            php -l "$file"
+          done
+
+      - name: Prevent Composer dependency
+        shell: bash
+        run: |
+          if [ -f composer.json ] || [ -f composer.lock ]; then
+            echo "HostPilot must remain installable without Composer."
+            exit 1
+          fi
+
+      - name: Prevent runtime secrets in Git
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if git ls-files | grep -E '(^|/)(\.env|storage/config\.php|storage/installed\.lock)$'; then
+            echo "A private environment or installation file is tracked by Git."
+            exit 1
+          fi
+          echo "No tracked runtime configuration or installation lock found."
