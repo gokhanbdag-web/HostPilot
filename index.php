@@ -158,9 +158,26 @@ if ($requestPath === '/admin/invoices' && $method === 'GET') { $catalog->adminIn
 if ($requestPath === '/order/create' && $method === 'POST') { $catalog->createOrder(); exit; }
 if (preg_match('#^/product/([a-z0-9-]+)$#', $requestPath, $productMatch) && $method === 'GET') { $catalog->product($productMatch[1]); exit; }
 
-if ($requestPath === '/health') {
+if ($requestPath === '/health' && $method === 'GET') {
     header('Content-Type: application/json; charset=utf-8');
-    echo json_encode(['application' => 'HostPilot', 'status' => 'core_initialized', 'database' => 'connected'], JSON_UNESCAPED_SLASHES);
+    header('Cache-Control: no-store, max-age=0');
+    $healthChecks = [
+        'database' => false,
+        'installer_lock' => is_file(HOSTPILOT_STORAGE . DIRECTORY_SEPARATOR . 'installed.lock'),
+        'config_file' => is_file(HOSTPILOT_STORAGE . DIRECTORY_SEPARATOR . 'config.php') && is_readable(HOSTPILOT_STORAGE . DIRECTORY_SEPARATOR . 'config.php'),
+        'storage_writable' => is_dir(HOSTPILOT_STORAGE) && is_writable(HOSTPILOT_STORAGE),
+        'version_file' => is_file(HOSTPILOT_ROOT . DIRECTORY_SEPARATOR . 'VERSION'),
+        'php_supported' => PHP_VERSION_ID >= 80200,
+    ];
+    try { $healthChecks['database'] = (int)$pdo->query('SELECT 1')->fetchColumn() === 1; } catch (Throwable) { $healthChecks['database'] = false; }
+    $healthy = !in_array(false, $healthChecks, true);
+    http_response_code($healthy ? 200 : 503);
+    echo json_encode([
+        'application' => 'HostPilot',
+        'status' => $healthy ? 'healthy' : 'degraded',
+        'version' => is_file(HOSTPILOT_ROOT . DIRECTORY_SEPARATOR . 'VERSION') ? trim((string)file_get_contents(HOSTPILOT_ROOT . DIRECTORY_SEPARATOR . 'VERSION')) : null,
+        'checks' => $healthChecks,
+    ], JSON_UNESCAPED_SLASHES);
     exit;
 }
 
