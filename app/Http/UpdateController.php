@@ -1,9 +1,9 @@
 <?php
 declare(strict_types=1);
 
-namespace HostPilot\\Http;
+namespace HostPilot\Http;
 
-use HostPilot\\Core\\Auth;
+use HostPilot\Core\Auth;
 use PDO;
 use Throwable;
 
@@ -70,7 +70,7 @@ final class UpdateController
         $chunk = stream_get_contents($handle);
         fclose($handle);
         if (!is_string($chunk)) return [];
-        $lines = preg_split('/\\r?\\n/', $chunk) ?: [];
+        $lines = preg_split('/\r?\n/', $chunk) ?: [];
         $summary = [];
         foreach ($lines as $line) {
             $line = trim($line);
