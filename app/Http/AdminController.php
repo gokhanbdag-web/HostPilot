@@ -25,7 +25,7 @@ final class AdminController
         $this->startPage('Yönetici girişi');
         echo '<section class="login"><div class="eyebrow">HOSTPILOT CONTROL CENTER</div><h1>Yönetim paneline giriş</h1><p>İşletmenizi tek merkezden yönetin.</p>';
         if ($error !== '') echo '<div class="alert">' . $this->e($error) . '</div>';
-        echo '<form method="post"><input type="hidden" name="_token" value="' . $this->e(Auth::csrfToken()) . '"><label>E-posta<input type="email" name="email" autocomplete="username" required></label><label>Parola<input type="password" name="password" autocomplete="current-password" required></label><button>Giriş yap</button></form></section>';
+        echo '<form method="post"><input type="hidden" name="_token" value="' . $this->e(Auth::csrfToken()) . '"><label>E-posta veya kullanıcı adı<input type="text" name="email" autocomplete="username" required></label><label>Parola<input type="password" name="password" autocomplete="current-password" required></label><button>Giriş yap</button></form><p><a href="' . $this->url('/admin/forgot-password') . '">Parolamı unuttum</a></p></section>';
         $this->endPage();
     }
 

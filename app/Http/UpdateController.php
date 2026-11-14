@@ -9,7 +9,7 @@ use Throwable;
 
 final class UpdateController
 {
-    public function __construct(private readonly PDO $db, private readonly string $basePath = '') {}
+    public function __construct(private readonly PDO $db, private readonly string $basePath = '', private readonly string $baseUrl = '') {}
 
     public function index(): void
     {
@@ -35,6 +35,10 @@ final class UpdateController
             if (str_contains($line, 'BAŞARILI:')) { $lastSuccess = $line; break; }
         }
 
+        $updateNotes = $this->readUpdateNotes();
+        $deployment = $this->deploymentResult($logLines, $logReadable);
+        $httpHealth = $this->httpHealthCheck();
+
         $this->page('Güncelleme Merkezi');
         echo '<div class="layout"><aside class="sidebar"><a class="brand" href="' . $this->url('/admin') . '">HOST<span>PILOT</span></a>';
         echo '<a class="nav-item" href="' . $this->url('/admin') . '">▦ Genel Bakış</a>';
@@ -42,18 +46,25 @@ final class UpdateController
         echo '<a class="nav-item" href="' . $this->url('/admin/automation') . '">⚙ Otomasyon</a></aside><main class="main">';
         echo '<header class="topbar"><div><small>YÖNETİM / SİSTEM</small><h1>Güncelleme Merkezi</h1></div><a class="logout" href="' . $this->url('/admin') . '">Kontrol merkezi</a></header>';
         echo '<section class="cards">';
-        echo '<article class="metric"><span>Kurulu sürüm</span><strong id="update-version" style="font-size:22px">' . $this->e($version) . '</strong><small>Uygulama sürüm dosyası</small></article>';
-        echo '<article class="metric"><span>Veritabanı</span><strong id="update-db" style="font-size:22px">Bağlı</strong><small>Canlı bağlantı kontrolü</small></article>';
-        echo '<article class="metric"><span>Dağıtım günlüğü</span><strong id="update-log-status" style="font-size:22px">' . ($logReadable ? 'Erişilebilir' : 'Erişilemiyor') . '</strong><small id="update-log-detail">' . ($logReadable ? 'Sunucu dağıtım kaydı okunabildi' : 'Web kullanıcısının sunucu günlüğüne erişimi yok') . '</small></article>';
-        echo '<article class="metric"><span>Son başarılı dağıtım</span><strong id="update-last-success" style="font-size:16px">' . ($lastSuccess ? $this->e(substr($lastSuccess, 0, 100)) : 'Kayıt yok') . '</strong><small>Dağıtım günlüğünden doğrulanır</small></article>';
+        echo '<article class="metric"><span>Kurulu sürüm</span><strong style="font-size:22px">' . $this->e($version) . '</strong><small>Uygulama sürüm dosyası</small></article>';
+        echo '<article class="metric"><span>Veritabanı</span><strong style="font-size:22px">Bağlı</strong><small>Bu sayfa açıldığı için uygulama DB bağlantısı kuruldu</small></article>';
+        echo '<article class="metric"><span>Dağıtım günlüğü</span><strong style="font-size:22px">' . ($logReadable ? 'Erişilebilir' : 'Erişilemiyor') . '</strong><small>' . ($logReadable ? 'Sunucu dağıtım kaydı okunabildi' : 'Web kullanıcısının sunucu günlüğüne erişimi yok') . '</small></article>';
+        echo '<article class="metric"><span>Son başarılı dağıtım</span><strong style="font-size:16px">' . ($lastSuccess ? $this->e(substr($lastSuccess, 0, 100)) : 'Kayıt yok') . '</strong><small>Dağıtım günlüğünden doğrulanır</small></article>';
         echo '</section>';
+        echo '<article class="panel roadmap"><div class="panel-head"><div><h3>Son dağıtım sonucu</h3><p>Dağıtım günlüğü ve canlı HTTP sağlık yanıtına göre doğrulanır.</p></div><strong style="color:' . ($deployment['ok'] === true ? '#7ce0b5' : ($deployment['ok'] === false ? '#ffb86b' : '#aab7cc')) . '">' . $this->e($deployment['label']) . '</strong></div>';
+        echo '<div class="status"><span>Dağıtım durumu</span><strong>' . $this->e($deployment['detail']) . '</strong></div>';
+        echo '<div class="status"><span>Tarih ve saat</span><strong>' . $this->e($deployment['timestamp']) . '</strong></div>';
+        echo '<div class="status"><span>HTTP sağlık kontrolü</span><strong style="color:' . ($httpHealth['ok'] ? '#7ce0b5' : '#ffb86b') . '">' . $this->e($httpHealth['label']) . '</strong></div>';
+        echo '<div class="status"><span>HTTP yanıtı</span><strong>' . $this->e($httpHealth['detail']) . '</strong></div>';
+        echo '<div class="status"><span>Kontrol zamanı</span><strong>' . $this->e($httpHealth['checked_at']) . '</strong></div>';
+        if ($deployment['record'] !== '') echo '<div class="notice">Dağıtım kaydı: ' . $this->e($deployment['record']) . '</div>';
+        echo '</article>';
+        echo '<article class="panel roadmap"><div class="panel-head"><div><h3>Güncelleme notları</h3><p>Yeni sürüm notları sayfa yenilenmeden otomatik kontrol edilir.</p></div><small id="update-notes-time">Canlı kontrol hazır</small></div><pre id="update-notes" style="white-space:pre-wrap;overflow-wrap:anywhere;color:#b8c5d8;font:12px/1.8 inherit;margin:12px 0 0">' . $this->e($updateNotes !== '' ? $updateNotes : 'Henüz güncelleme notu yayınlanmadı.') . '</pre></article>';
         echo '<article class="panel roadmap"><div class="panel-head"><div><h3>Canlı sistem sağlık kontrolü</h3><p>Bu sayfa her açıldığında sunucuda yeniden kontrol edilir</p></div><strong style="color:' . ($healthy ? '#7ce0b5' : '#ffb86b') . '">' . ($healthy ? 'SAĞLIKLI' : 'KONTROL GEREKLİ') . '</strong></div>';
-        echo '<div id="update-checks">';
         foreach ($checks as $check) echo '<div class="status"><span>' . $this->e($check['label']) . '</span><strong style="color:' . ($check['ok'] ? '#7ce0b5' : '#ffb86b') . '">' . $this->e($check['detail']) . '</strong></div>';
-        echo '</div>';
         echo '<div class="notice">Ayrıca dışarıdan çalışan GitHub Actions dağıtım kontrolü /health adresini tekrar deneyerek canlı yanıtı doğrular.</div></article>';
         echo '<article class="panel roadmap"><h3>Otomatik güncelleme akışı</h3><div class="status"><span>1. GitHub main dalına gönderim</span><strong>Kaynak kod</strong></div><div class="status"><span>2. GitHub Actions PHP ve güvenlik kontrolleri</span><strong>CI kontrolü</strong></div><div class="status"><span>3. Sunucu webhook dağıtımı</span><strong>Mevcut otomasyon</strong></div><div class="status"><span>4. Dağıtım sonrası sağlık kontrolü</span><strong>Otomatik doğrulama</strong></div></article>';
-        echo '<article class="panel roadmap"><div class="panel-head"><div><h3>Dağıtım geçmişi</h3><p>Sunucudaki dağıtım günlüğünden güvenli özet</p></div><button class="logout" type="button" id="update-refresh">Şimdi yenile</button></div><small id="update-refreshed" style="color:#8191aa">Canlı güncelleme hazırlanıyor…</small><div id="update-history">';
+        echo '<article class="panel roadmap"><div class="panel-head"><div><h3>Dağıtım geçmişi</h3><p>Sunucudaki dağıtım günlüğünden güvenli özet</p></div><a class="logout" href="' . $this->url('/admin/updates') . '">Yenile</a></div>';
         if (!$logReadable) {
             echo '<div class="notice">Dağıtım günlüğü PHP web kullanıcısı tarafından okunamıyor. Günlük dosyası dışarı açılmadı; sunucu izinlerini değiştirmeden önce güvenli, salt-okunur bir raporlama kanalı kurulmalı.</div>';
         } elseif (!$logLines) {
@@ -61,23 +72,30 @@ final class UpdateController
         } else {
             foreach ($logLines as $line) echo '<div class="status"><span style="overflow-wrap:anywhere">' . $this->e($line) . '</span></div>';
         }
-        echo '</div></article>';
+        echo '</article>';
         echo '<article class="panel roadmap"><h3>Güvenli geri alma</h3><p>Geri alma düğmesi şimdilik kapalıdır. Mevcut yedek arşivleri PHP web isteğiyle doğrudan açmak; yol doğrulaması, arşiv bütünlüğü, kilitleme ve canlı kodu atomik değiştirme garantisi olmadan güvenli değildir. Bu sunucu tarafı korumalar doğrulanmadan geri alma işlemi başlatılmaz. Veritabanı ve müşteri dosyaları hiçbir kod geri almasında silinmez.</p></article>';
         echo '<script>
 (() => {
- const endpoint = ' . json_encode($this->url('/admin/updates/status')) . ';
- const checks=document.getElementById("update-checks"), history=document.getElementById("update-history");
- const setText=(id,value)=>{const n=document.getElementById(id);if(n)n.textContent=value??"—";};
- const refresh=async()=>{try{
-  const response=await fetch(endpoint+"?t="+Date.now(),{credentials:"same-origin",cache:"no-store",headers:{"Accept":"application/json"}});
-  if(!response.ok)throw new Error("HTTP "+response.status);const data=await response.json();
-  setText("update-version",data.version);const db=(data.checks||[]).find(x=>x.label==="Veritabanı sorgusu");setText("update-db",db&&db.ok?"Bağlı":"Kontrol gerekli");
-  setText("update-log-status",data.log_readable?"Erişilebilir":"Erişilemiyor");setText("update-log-detail",data.log_readable?"Sunucu dağıtım kaydı okunabildi":"Web kullanıcısının sunucu günlüğüne erişimi yok");setText("update-last-success",data.last_success||"Kayıt yok");
-  if(checks){checks.replaceChildren();(data.checks||[]).forEach(x=>{const r=document.createElement("div");r.className="status";const l=document.createElement("span");l.textContent=x.label;const d=document.createElement("strong");d.textContent=x.detail;d.style.color=x.ok?"#7ce0b5":"#ffb86b";r.append(l,d);checks.append(r);});}
-  if(history){history.replaceChildren();if(!data.log_readable){const p=document.createElement("div");p.className="notice";p.textContent="Dağıtım günlüğü PHP web kullanıcısı tarafından okunamıyor. Sunucu izinleri değiştirilmedi.";history.append(p);}else if(!(data.log_lines||[]).length){const p=document.createElement("p");p.textContent="Henüz görüntülenecek dağıtım kaydı yok.";history.append(p);}else data.log_lines.forEach(x=>{const r=document.createElement("div");r.className="status";r.style.overflowWrap="anywhere";r.textContent=x;history.append(r);});}
-  setText("update-refreshed","Son kontrol: "+new Date(data.checked_at).toLocaleTimeString("tr-TR")+" · 5 saniyede bir otomatik yenilenir");
- }catch(e){setText("update-refreshed","Canlı güncelleme alınamadı. Bağlantı yeniden denenecek.");}};
- const button=document.getElementById("update-refresh");if(button)button.addEventListener("click",refresh);refresh();window.setInterval(()=>{if(!document.hidden)refresh();},5000);
+ const notesNode=document.getElementById("update-notes");
+ const timeNode=document.getElementById("update-notes-time");
+ const endpoint=' . json_encode($this->url('/admin/updates/status')) . ';
+ let lastNotes=notesNode?notesNode.textContent:"";
+ let busy=false;
+ async function refreshNotes(){
+  if(busy||document.visibilityState==="hidden")return;
+  busy=true;
+  try{
+   const response=await fetch(endpoint+"?t="+Date.now(),{credentials:"same-origin",cache:"no-store",headers:{"Accept":"application/json"}});
+   if(!response.ok)throw new Error("HTTP "+response.status);
+   const data=await response.json();
+   const notes=typeof data.notes==="string"&&data.notes.trim()!==""?data.notes:"Henüz güncelleme notu yayınlanmadı.";
+   if(notesNode&&notes!==lastNotes){notesNode.textContent=notes;lastNotes=notes;}
+   if(timeNode)timeNode.textContent="Kontrol edildi: "+new Date(data.checked_at).toLocaleTimeString("tr-TR")+" · Otomatik yenileme açık";
+  }catch(error){if(timeNode)timeNode.textContent="Canlı notlar alınamadı; sonraki kontrolde tekrar denenecek.";}
+  finally{busy=false;}
+ }
+ refreshNotes();
+ window.setInterval(refreshNotes,5000);
 })();
 </script>';
         echo '</main></div>';
@@ -91,15 +109,100 @@ final class UpdateController
         if (!in_array($user['role'] ?? '', ['super_admin', 'admin'], true)) { http_response_code(403); echo 'Yetkisiz erişim.'; return; }
         $versionFile = defined('HOSTPILOT_ROOT') ? HOSTPILOT_ROOT . DIRECTORY_SEPARATOR . 'VERSION' : '';
         $version = $versionFile !== '' && is_file($versionFile) ? trim((string)file_get_contents($versionFile)) : 'Bilinmiyor';
-        $checks = $this->runtimeChecks();
-        $logFile = '/opt/hostpilot-deploy/deploy.log';
-        $logReadable = is_file($logFile) && is_readable($logFile);
-        $logLines = $logReadable ? $this->deploymentSummary($logFile) : [];
-        $lastSuccess = null;
-        foreach (array_reverse($logLines) as $line) { if (str_contains($line, 'BAŞARILI:')) { $lastSuccess = $line; break; } }
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-        echo json_encode(['version'=>$version,'checks'=>$checks,'log_readable'=>$logReadable,'log_lines'=>$logLines,'last_success'=>$lastSuccess ? substr($lastSuccess,0,100) : null,'checked_at'=>gmdate('c')], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        header('X-Content-Type-Options: nosniff');
+        echo json_encode(['version' => $version, 'notes' => $this->readUpdateNotes(), 'checked_at' => gmdate('c')], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    private function deploymentResult(array $lines, bool $logReadable): array
+    {
+        if (!$logReadable) return ['ok' => null, 'label' => 'DOĞRULANAMADI', 'detail' => 'Dağıtım günlüğü okunamıyor', 'timestamp' => 'Kayıt erişilebilir değil', 'record' => ''];
+        $lastStart = -1;
+        $lastSuccess = -1;
+        $lastFailure = -1;
+        $lastStartRecord = '';
+        foreach ($lines as $index => $line) {
+            if (preg_match('/^=== DEPLOY /iu', $line)) { $lastStart = $index; $lastStartRecord = $line; }
+            if (str_contains($line, 'BAŞARILI:')) $lastSuccess = $index;
+            if (preg_match('/^(?:ERROR:|HATA:|fatal:)/iu', $line)) $lastFailure = $index;
+        }
+        if ($lastSuccess >= 0 && $lastSuccess > $lastStart && $lastSuccess > $lastFailure) {
+            $record = $lines[$lastSuccess];
+            $timestamp = 'Günlükte ayrıca tarih bulunmuyor';
+            if (preg_match('/\b(20\d{2}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:Z)?)\b/u', $record, $match)) {
+                $timestamp = $match[1];
+            } elseif (preg_match('/\[(20\d{2}-\d{2}-\d{2}[^\]]+)\]/u', $record, $match)) {
+                $timestamp = $match[1];
+            } elseif (preg_match('/\b(20\d{2}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:Z)?)\b/u', $lastStartRecord, $match)) {
+                $timestamp = $match[1];
+            }
+            return ['ok' => true, 'label' => 'DAĞITIM BAŞARILI', 'detail' => 'Başarılı', 'timestamp' => $timestamp, 'record' => substr($record, 0, 220)];
+        }
+        if ($lastFailure >= 0 && $lastFailure > $lastStart) {
+            return ['ok' => false, 'label' => 'DAĞITIM BAŞARISIZ', 'detail' => 'Son dağıtım hatayla sonuçlandı', 'timestamp' => 'Hata kaydı mevcut; tarih günlükte', 'record' => substr($lines[$lastFailure], 0, 220)];
+        }
+        return ['ok' => null, 'label' => 'KAYIT BULUNAMADI', 'detail' => 'Son dağıtım sonucu doğrulanamadı', 'timestamp' => 'Dağıtım tarihi doğrulanamadı', 'record' => ''];
+    }
+
+    private function httpHealthCheck(): array
+    {
+        $checkedAt = date('d.m.Y H:i:s');
+        if ($this->baseUrl === '' || !function_exists('curl_init')) {
+            return ['ok' => false, 'label' => 'DOĞRULANAMADI', 'detail' => 'HTTP sağlık kontrolü yapılamadı', 'checked_at' => $checkedAt];
+        }
+        $url = rtrim($this->baseUrl, '/') . '/health';
+        $curl = curl_init($url);
+        if ($curl === false) {
+            return ['ok' => false, 'label' => 'BAŞARISIZ', 'detail' => 'HTTP/1.1 yanıtı alınamadı', 'checked_at' => $checkedAt];
+        }
+        curl_setopt_array($curl, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => false,
+            CURLOPT_CONNECTTIMEOUT => 3,
+            CURLOPT_TIMEOUT => 8,
+            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_HTTPHEADER => ['Accept: application/json', 'Cache-Control: no-cache'],
+        ]);
+        $body = curl_exec($curl);
+        $code = (int)curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        $error = curl_error($curl);
+        curl_close($curl);
+        $payload = is_string($body) ? json_decode($body, true) : null;
+        $healthy = $code === 200 && is_array($payload) && ($payload['status'] ?? '') === 'healthy';
+        $reason = $code > 0 ? 'HTTP/1.1 ' . $code . ' ' . $this->httpReason($code) : 'HTTP bağlantısı kurulamadı';
+        if ($error !== '' && $code === 0) $reason .= ' · ' . $error;
+        return [
+            'ok' => $healthy,
+            'label' => $healthy ? 'BAŞARILI' : 'BAŞARISIZ',
+            'detail' => $reason . ($healthy ? ' · Uygulama sağlıklı' : ' · Uygulama sağlık yanıtı doğrulanamadı'),
+            'checked_at' => $checkedAt,
+        ];
+    }
+
+    private function httpReason(int $code): string
+    {
+        return match ($code) {
+            200 => 'OK', 201 => 'Created', 204 => 'No Content', 301 => 'Moved Permanently',
+            302 => 'Found', 400 => 'Bad Request', 401 => 'Unauthorized', 403 => 'Forbidden',
+            404 => 'Not Found', 429 => 'Too Many Requests', 500 => 'Internal Server Error',
+            502 => 'Bad Gateway', 503 => 'Service Unavailable', 504 => 'Gateway Timeout',
+            default => 'HTTP Response',
+        };
+    }
+
+    private function readUpdateNotes(): string
+    {
+        $root = defined('HOSTPILOT_ROOT') ? HOSTPILOT_ROOT : '';
+        if ($root === '') return '';
+        $path = $root . DIRECTORY_SEPARATOR . 'UPDATE_NOTES.md';
+        if (!is_file($path) || !is_readable($path)) return '';
+        $size = filesize($path);
+        if ($size === false || $size > 16384) return '';
+        $contents = file_get_contents($path);
+        return is_string($contents) ? trim($contents) : '';
     }
 
     private function runtimeChecks(): array
@@ -134,7 +237,7 @@ final class UpdateController
         foreach ($lines as $line) {
             $line = trim($line);
             if ($line === '') continue;
-            if (preg_match('/^(=== DEPLOY |BAŞARILI:|PHP dosyaları kontrol ediliyor|Canlı kod yedekleniyor|Yeni sürüm aktarılıyor|Canlı PHP kontrolü|Dosya sahipliği|fatal:|ERROR:|HATA:)/iu', $line)) {
+            if (preg_match('/^(=== DEPLOY |BAŞARILI:|PHP dosyaları kontrol edildi|Canlı kod yedeklendi|Yeni sürüm aktarıldı|Canlı PHP kontrolü|Dosya sahipliği|fatal:|ERROR:|HATA:)/iu', $line)) {
                 $summary[] = substr($line, 0, 240);
             }
         }

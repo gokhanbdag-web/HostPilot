@@ -48,6 +48,8 @@ try {
     $database = new \HostPilot\Core\Database($config['database']);
     $pdo = $database->connection();
     \HostPilot\Core\Schema::migrate($pdo);
+    \HostPilot\Core\PasswordResetMigration::migrate($pdo);
+    \HostPilot\Core\AdminProfileMigration::migrate($pdo);
 } catch (Throwable $exception) {
     error_log('[HostPilot] Database bootstrap or migration failed: ' . $exception->getMessage());
     http_response_code(503);
@@ -71,6 +73,9 @@ if ($requestPath === '//') $requestPath = '/';
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
 $client = new \HostPilot\Http\ClientController($pdo, $basePath, (string)($config['app']['key'] ?? ''));
+$passwordReset = new \HostPilot\Http\PasswordResetController($pdo, $basePath, (string)($config['app']['base_url'] ?? ''), (string)($config['app']['key'] ?? ''));
+if ($requestPath === '/admin/forgot-password' && in_array($method, ['GET','POST'], true)) { $passwordReset->request(); exit; }
+if ($requestPath === '/admin/reset-password' && in_array($method, ['GET','POST'], true)) { $passwordReset->reset(); exit; }
 if ($requestPath === '/client/login' && in_array($method, ['GET', 'POST'], true)) { $client->login(); exit; }
 if ($requestPath === '/client/register' && in_array($method, ['GET', 'POST'], true)) { $client->register(); exit; }
 if ($requestPath === '/client/logout' && $method === 'POST') { $client->logout(); exit; }
@@ -89,8 +94,8 @@ if ($requestPath === '/knowledgebase' && $method === 'GET') { $client->knowledge
 if ($requestPath === '/admin/settings' && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\EmailSettingsController($pdo, $basePath, (string)($config['app']['key'] ?? '')))->index(); exit; }
 if ($requestPath === '/admin/email-queue' && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\EmailQueueController($pdo, $basePath))->index(); exit; }
 
-if ($requestPath === '/admin/updates/status' && $method === 'GET') { (new \HostPilot\Http\UpdateController($pdo, $basePath))->status(); exit; }
-if ($requestPath === '/admin/updates' && $method === 'GET') { (new \HostPilot\Http\UpdateController($pdo, $basePath))->index(); exit; }
+if ($requestPath === '/admin/updates' && $method === 'GET') { (new \HostPilot\Http\UpdateController($pdo, $basePath, (string)($config['app']['base_url'] ?? '')))->index(); exit; }
+if ($requestPath === '/admin/updates/status' && $method === 'GET') { (new \HostPilot\Http\UpdateController($pdo, $basePath, (string)($config['app']['base_url'] ?? '')))->status(); exit; }
 $controller = new \HostPilot\Http\AdminController($pdo, $basePath, (string)($config['app']['key'] ?? ''));
 if ($requestPath === '/admin/customers' && $method === 'GET') { $controller->customers(); exit; }
 if ($requestPath === '/admin/reports' && $method === 'GET') { $controller->reports(); exit; }
