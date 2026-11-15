@@ -118,3 +118,14 @@ Reference: https://owasp.org/www-project-application-security-verification-stand
 - Support tickets are visible to staff only when their department is assigned; direct ticket URLs are checked server-side as well.
 - Existing staff receive the previous safe baseline permissions and the four existing support departments on migration. New staff without explicit permissions are denied by default.
 - The staff permission management page and save endpoint are restricted to administrator roles and protected by CSRF validation.
+
+
+## 14. Session revocation and password-reset hardening (Stage 2)
+
+- Each user has a monotonically increasing auth version; authenticated sessions carry the version observed at login.
+- The front controller validates the version against the database on every request. A mismatch or missing account revokes the session; a database validation failure fails closed.
+- Successful administrator password reset increments the version and invalidates every existing session for that account.
+- Administrators can use Admin → Oturum Güvenliği to revoke all other sessions while keeping the current session active.
+- Password-reset requests are throttled to five per IP per 15-minute window, with file locking, hashed IP keys, and fail-closed behavior when protected storage is unavailable. The existing per-account resend cooldown and generic response remain.
+- Reset pages send Referrer-Policy: no-referrer and Cache-Control: no-store; reset tokens remain single-use, hashed at rest, and expire after 30 minutes.
+- Session revocation is version-based rather than enumerating PHP session files, so it works with ordinary shared hosting and does not require SSH or a custom session handler.

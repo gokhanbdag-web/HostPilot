@@ -56,6 +56,8 @@ try {
     exit('HostPilot veritabanına bağlanamıyor. Yapılandırmayı ve veritabanı erişim bilgilerini kontrol edin.');
 }
 
+\HostPilot\Core\Auth::validateSessionVersion($pdo);
+
 $requestPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 if ($basePath !== '' && ($requestPath === $basePath || str_starts_with($requestPath, $basePath . '/'))) {
     $requestPath = substr($requestPath, strlen($basePath)) ?: '/';
@@ -89,6 +91,8 @@ if (\HostPilot\Core\Authorization::isAdminPath($requestPath)
         exit;
     }
 }
+
+if ($requestPath === '/admin/security/sessions' && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\SessionSecurityController($pdo, $basePath))->index(); exit; }
 
 if ($requestPath === '/admin/database-upgrade' && in_array($method, ['GET', 'POST'], true)) {
     (new \HostPilot\Http\DatabaseUpgradeController(

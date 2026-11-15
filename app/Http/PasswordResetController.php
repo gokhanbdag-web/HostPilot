@@ -13,6 +13,7 @@ final class PasswordResetController
   $msg='';
   if(($_SERVER['REQUEST_METHOD']??'GET')==='POST'){
    if(!Auth::verifyCsrf($_POST['_token']??null))$msg='Oturum doğrulaması başarısız. Sayfayı yenileyin.';
+   elseif(Auth::consumePasswordResetAttempt())$msg='Adres kayıtlı ve etkin bir yönetici hesabına aitse sıfırlama bağlantısı e-posta kuyruğuna eklendi. E-posta teslimini kontrol edin.';
    else{
     $email=strtolower(trim((string)($_POST['email']??'')));
     if(filter_var($email,FILTER_VALIDATE_EMAIL)){
@@ -53,7 +54,7 @@ final class PasswordResetController
      $q->execute([':hash'=>hash('sha256',$token)]);$row=$q->fetch(PDO::FETCH_ASSOC);
      if(!$row){$this->db->rollBack();$error='Bağlantı geçersiz veya süresi dolmuş.';}
      else{
-      $this->db->prepare('UPDATE users SET password_hash=:hash WHERE id=:id')->execute([':hash'=>password_hash($pass,PASSWORD_DEFAULT),':id'=>(int)$row['user_id']]);
+      $this->db->prepare('UPDATE users SET password_hash=:hash,auth_version=auth_version+1 WHERE id=:id')->execute([':hash'=>password_hash($pass,PASSWORD_DEFAULT),':id'=>(int)$row['user_id']]);
       $this->db->prepare('UPDATE password_reset_tokens SET used_at=UTC_TIMESTAMP() WHERE user_id=:id AND used_at IS NULL')->execute([':id'=>(int)$row['user_id']]);
       $this->db->commit();$success=true;
      }
@@ -68,7 +69,7 @@ final class PasswordResetController
  }
  private function page(string $title,string $content):void
  {
-  header('Content-Type: text/html; charset=utf-8');header('Cache-Control: no-store, max-age=0');
+  header('Content-Type: text/html; charset=utf-8');header('Cache-Control: no-store, max-age=0');header('Referrer-Policy: no-referrer');
   echo '<!doctype html><html lang="tr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'.$this->e($title).' · HostPilot</title><style>body{margin:0;background:#0b1220;color:#e8eef8;font:16px system-ui;display:grid;place-items:center;min-height:100vh}.card{width:min(92vw,460px);background:#111d31;border:1px solid #263750;border-radius:18px;padding:30px;box-sizing:border-box}h1{font-size:25px}p{color:#aebbd0;line-height:1.6}label{display:block;margin:16px 0}input{display:block;box-sizing:border-box;width:100%;margin-top:7px;padding:13px;border-radius:9px;border:1px solid #344761;background:#091426;color:white}button{width:100%;padding:13px;border:0;border-radius:9px;background:#4b8cff;color:white;font-weight:700}.notice{padding:12px;border-radius:9px;background:#1b304a;margin:16px 0}a{color:#83b4ff}</style><main class="card"><div style="color:#83b4ff;font-weight:800;letter-spacing:.15em">HOSTPILOT CONTROL CENTER</div><h1>'.$this->e($title).'</h1>'.$content.'</main></html>';
  }
  private function url(string $path):string{return $this->basePath.$path;}

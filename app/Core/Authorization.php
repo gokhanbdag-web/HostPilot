@@ -41,6 +41,7 @@ final class Authorization
         $method = strtoupper($method);
 
         if (in_array($path, ['/admin', '/admin/'], true) && $method === 'GET') return 'dashboard.view';
+        if ($path === '/admin/security/sessions' && in_array($method, ['GET', 'POST'], true)) return 'security.sessions.manage';
         if ($path === '/admin/staff' && $method === 'GET') return 'staff.permissions.manage';
         if ($path === '/admin/staff/save' && $method === 'POST') return 'staff.permissions.manage';
         if ($path === '/admin/customers' && $method === 'GET') return 'customers.view';
