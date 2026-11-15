@@ -52,6 +52,7 @@ final class MigrationRunner
     /** @return list<string> */
     public static function pending(PDO $db, string $directory): array
     {
+        self::prepareConnection($db);
         self::assertTrackingTable($db);
         $appliedStatement = $db->query('SELECT migration FROM migrations');
         $applied = $appliedStatement->fetchAll(PDO::FETCH_COLUMN);
@@ -73,10 +74,8 @@ final class MigrationRunner
     public static function runPending(PDO $db, string $directory, bool $confirmed = false): array
     {
         if (!$confirmed) throw new RuntimeException('Explicit administrator confirmation is required.');
+        self::prepareConnection($db);
         self::assertTrackingTable($db);
-        if ($db->getAttribute(PDO::ATTR_DRIVER_NAME) !== 'mysql') {
-            throw new RuntimeException('SQL migrations currently require MySQL or MariaDB.');
-        }
 
         $databaseStatement = $db->query('SELECT DATABASE()');
         $database = (string)$databaseStatement->fetchColumn();
@@ -179,6 +178,16 @@ final class MigrationRunner
         if ($blockComment || $quote !== null) throw new RuntimeException('Unterminated SQL comment or quoted value in migration.');
         if (trim($buffer) !== '') $statements[] = trim($buffer);
         return $statements;
+    }
+
+    private static function prepareConnection(PDO $db): void
+    {
+        if ($db->getAttribute(PDO::ATTR_DRIVER_NAME) !== 'mysql') {
+            throw new RuntimeException('SQL migrations currently require MySQL or MariaDB.');
+        }
+        // MariaDB/PDO configurations may default to unbuffered results. The runner
+        // must issue DDL after metadata queries on the same connection.
+        $db->setAttribute(PDO::MYSQL_ATTR_USE_BUFFERED_QUERY, true);
     }
 
     private static function assertTrackingTable(PDO $db): void
