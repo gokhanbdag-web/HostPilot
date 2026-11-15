@@ -87,6 +87,23 @@ jobs:
         run: |
           php -l tests/migration_integration.php
           php tests/migration_integration.php
+      - name: Smoke-test browser installer on disposable database
+        env:
+          HOSTPILOT_DB_HOST: 127.0.0.1
+          HOSTPILOT_DB_PORT: 3306
+          HOSTPILOT_DB_USER: root
+          HOSTPILOT_DB_PASSWORD: root
+          HOSTPILOT_INSTALL_DB_NAME: hostpilot_installer_ci
+        run: |
+          php -l tests/installer_http_smoke.php
+          php -S 127.0.0.1:8080 -t . > /tmp/hostpilot-installer-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 20); do
+            if curl --silent --fail http://127.0.0.1:8080/ > /dev/null; then break; fi
+            sleep 1
+          done
+          php tests/installer_http_smoke.php
 
   live-health-check:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
