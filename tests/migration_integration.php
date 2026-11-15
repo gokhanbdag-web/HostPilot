@@ -67,8 +67,8 @@ foreach ($requiredTables as $table) {
     $check->execute([':table_name' => $table]);
     if ((int)$check->fetchColumn() !== 1) throw new RuntimeException('Expected table was not created: ' . $table);
 }
-if ((int)$pdo->query(\"SELECT COUNT(*) FROM staff_permissions sp JOIN users u ON u.id=sp.user_id WHERE u.username='grace-staff'\")->fetchColumn() !== 8) throw new RuntimeException('Existing staff permission defaults were not seeded.');
-if ((int)$pdo->query(\"SELECT COUNT(*) FROM staff_departments sd JOIN users u ON u.id=sd.user_id WHERE u.username='grace-staff'\")->fetchColumn() !== 4) throw new RuntimeException('Existing staff department defaults were not seeded.');
+if ((int)$pdo->query("SELECT COUNT(*) FROM staff_permissions sp JOIN users u ON u.id=sp.user_id WHERE u.username='grace-staff'")->fetchColumn() !== 8) throw new RuntimeException('Existing staff permission defaults were not seeded.');
+if ((int)$pdo->query("SELECT COUNT(*) FROM staff_departments sd JOIN users u ON u.id=sd.user_id WHERE u.username='grace-staff'")->fetchColumn() !== 4) throw new RuntimeException('Existing staff department defaults were not seeded.');
 echo 'MySQL/MariaDB migration integration passed: 21 migrations, staff defaults, partial-DDL retry, confirmation guard, tracking and idempotent second run.' . PHP_EOL;
 
 // Compare the SQL migration path with the retained legacy PHP migration path
