@@ -42,8 +42,22 @@ if (empty($_SESSION['hostpilot_install_csrf'])) {
 
 $errors = [];
 $success = false;
+$preflight = [
+    ['PHP 8.2+', PHP_VERSION_ID >= 80200, PHP_VERSION],
+    ['PDO', extension_loaded('pdo'), extension_loaded('pdo') ? 'Etkin' : 'Eksik'],
+    ['PDO MySQL', extension_loaded('pdo_mysql'), extension_loaded('pdo_mysql') ? 'Etkin' : 'Eksik'],
+    ['OpenSSL', extension_loaded('openssl'), extension_loaded('openssl') ? 'Etkin' : 'Eksik'],
+    ['zlib (yedek sıkıştırma)', extension_loaded('zlib'), extension_loaded('zlib') ? 'Etkin' : 'Eksik'],
+    ['Storage yazma izni', is_dir($storage) ? is_writable($storage) : is_writable(dirname($storage)), is_dir($storage) ? (is_writable($storage) ? 'Yazılabilir' : 'Yazılamıyor') : (is_writable(dirname($storage)) ? 'Dizin oluşturulabilir' : 'Üst dizin yazılamıyor')],
+    ['cURL (dış servis entegrasyonları)', extension_loaded('curl'), extension_loaded('curl') ? 'Etkin' : 'Eksik — entegrasyonlar kullanılamaz'],
+];
+$preflightReady = true;
+foreach (array_slice($preflight, 0, 6) as $check) {
+    if (!$check[1]) $preflightReady = false;
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!$preflightReady) $errors[] = 'Sunucu ön gereksinimleri tamamlanmadan kurulum başlatılamaz. Eksik PHP bileşenlerini hosting sağlayıcınızdan etkinleştirin.';
     $token = (string)($_POST['_token'] ?? '');
     if (!hash_equals((string)$_SESSION['hostpilot_install_csrf'], $token)) {
         $errors[] = 'Güvenlik doğrulaması başarısız. Sayfayı yenileyip tekrar deneyin.';
@@ -107,6 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                 PDO::ATTR_EMULATE_PREPARES => false,
+                PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true,
             ]);
 
             $pdo->exec("CREATE TABLE IF NOT EXISTS users (
@@ -289,6 +304,14 @@ button{border:0;border-radius:10px;padding:14px 20px;background:#1d4ed8;color:#f
 <body>
 <div class="wrap">
 <header><span>HOSTPILOT</span><h1>Kurulum sihirbazı</h1><p>Veritabanı bağlantısını ve ilk yönetici hesabını oluşturun. Kurulum SSH veya Composer gerektirmez.</p></header>
+
+<?php if (!$success): ?>
+<section class="panel"><h2>Sunucu ön kontrolü</h2><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+<?php foreach ($preflight as [$label, $ok, $detail]): ?>
+<div style="padding:10px;border-radius:9px;background:<?= $ok ? '#ecfdf5' : '#fff1f2' ?>;color:<?= $ok ? '#065f46' : '#9f1239' ?>;font-size:12px"><strong><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?></strong><br><?= htmlspecialchars($detail, ENT_QUOTES, 'UTF-8') ?> <?= $ok ? '✓' : '!' ?></div>
+<?php endforeach; ?>
+</div><p class="hint">cURL dış servis bağlantıları için önerilir. PHP 8.2+, PDO MySQL, OpenSSL, zlib ve storage yazma izni kurulum için zorunludur.</p></section>
+<?php endif; ?>
 
 <?php if ($success): ?>
 <div class="panel"><div class="ok"><strong>Kurulum tamamlandı.</strong><br>HostPilot çekirdek tabloları, destek talebi altyapısı, bilgi bankası ve ilk yönetici kaydı oluşturuldu. Güvenlik için kurulum kilitlendi. Yönetim paneline geçebilirsiniz.</div><p style="margin-top:18px"><a href="<?= htmlspecialchars($basePath . '/admin/login', ENT_QUOTES, 'UTF-8') ?>" style="display:block;text-align:center;padding:14px;background:#1d4ed8;color:#fff;text-decoration:none;border-radius:10px;font-weight:750">Yönetici giriş ekranına git</a></p></div>
