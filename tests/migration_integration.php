@@ -22,7 +22,7 @@ $pdo->exec("CREATE TABLE users (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(80) NOT NULL, first_name VARCHAR(80) NULL, last_name VARCHAR(80) NULL,
     email VARCHAR(190) NOT NULL, username VARCHAR(80) NOT NULL, password_hash VARCHAR(255) NOT NULL,
-    role VARCHAR(32) NOT NULL DEFAULT 'customer', status VARCHAR(24) NOT NULL DEFAULT 'active',
+    role VARCHAR(32) NOT NULL DEFAULT 'customer', status VARCHAR(24) NOT NULL DEFAULT 'active', email_verified_at DATETIME NULL,
     created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL,
     UNIQUE KEY uq_users_email (email), UNIQUE KEY uq_users_username (username)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
@@ -69,6 +69,23 @@ foreach ($requiredTables as $table) {
 }
 if ((int)$pdo->query("SELECT COUNT(*) FROM staff_permissions sp JOIN users u ON u.id=sp.user_id WHERE u.username='grace-staff'")->fetchColumn() !== 8) throw new RuntimeException('Existing staff permission defaults were not seeded.');
 if ((int)$pdo->query("SELECT COUNT(*) FROM staff_departments sd JOIN users u ON u.id=sd.user_id WHERE u.username='grace-staff'")->fetchColumn() !== 4) throw new RuntimeException('Existing staff department defaults were not seeded.');
+
+$pdo->exec("INSERT INTO users(name,email,username,password_hash,role,status,created_at,updated_at) VALUES('Verification Test','verify@example.test','verify-test','test-hash','customer','pending_verification',UTC_TIMESTAMP(),UTC_TIMESTAMP())");
+$verificationUserId=(int)$pdo->lastInsertId();
+$verificationToken=bin2hex(random_bytes(32));
+$verificationHash=hash('sha256',$verificationToken);
+$pdo->prepare('INSERT INTO email_verification_tokens(user_id,token_hash,expires_at,created_at) VALUES(:user,:hash,DATE_ADD(UTC_TIMESTAMP(),INTERVAL 1 DAY),UTC_TIMESTAMP())')->execute([':user'=>$verificationUserId,':hash'=>$verificationHash]);
+$verify=$pdo->prepare("SELECT user_id FROM email_verification_tokens WHERE token_hash=:hash AND used_at IS NULL AND expires_at>UTC_TIMESTAMP()");
+$verify->execute([':hash'=>$verificationHash]);
+if ((int)$verify->fetchColumn() !== $verificationUserId) throw new RuntimeException('A fresh hashed email verification token was not accepted.');
+$pdo->prepare("UPDATE users SET status='active',email_verified_at=UTC_TIMESTAMP() WHERE id=:id AND status='pending_verification'")->execute([':id'=>$verificationUserId]);
+$pdo->prepare('UPDATE email_verification_tokens SET used_at=UTC_TIMESTAMP() WHERE user_id=:id AND used_at IS NULL')->execute([':id'=>$verificationUserId]);
+$verify->execute([':hash'=>$verificationHash]);
+if ($verify->fetchColumn() !== false) throw new RuntimeException('A consumed email verification token remained reusable.');
+$verified=$pdo->prepare("SELECT status,email_verified_at FROM users WHERE id=:id");
+$verified->execute([':id'=>$verificationUserId]);
+$verifiedRow=$verified->fetch(PDO::FETCH_ASSOC);
+if (($verifiedRow['status']??'')!=='active'||empty($verifiedRow['email_verified_at'])) throw new RuntimeException('Email verification did not activate the pending customer.');
 echo 'MySQL/MariaDB migration integration passed: 22 migrations, staff defaults, partial-DDL retry, confirmation guard, tracking and idempotent second run.' . PHP_EOL;
 
 // Compare the SQL migration path with the retained legacy PHP migration path
