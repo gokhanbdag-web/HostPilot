@@ -341,6 +341,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 CONSTRAINT fk_payment_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+            // Fresh installs use the same ordered SQL migration files as controlled upgrades.
+            require_once $root . '/app/Core/MigrationRunner.php';
+            \\HostPilot\\Core\\MigrationRunner::runPending($pdo, $root . '/database/migrations', true);
+
             $pdo->beginTransaction();
             $now = gmdate('Y-m-d H:i:s');
             $stmt = $pdo->prepare("INSERT INTO users
