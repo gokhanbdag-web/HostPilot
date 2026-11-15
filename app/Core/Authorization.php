@@ -5,18 +5,6 @@ namespace HostPilot\Core;
 
 final class Authorization
 {
-    private const STAFF_PERMISSIONS = [
-        'dashboard.view',
-        'customers.view',
-        'reports.view',
-        'support.view',
-        'support.reply',
-        'catalog.manage',
-        'orders.view',
-        'invoices.view',
-        'admin.logout',
-    ];
-
     public static function isAdminPath(string $path): bool
     {
         return $path === '/admin' || str_starts_with($path, '/admin/');
@@ -27,7 +15,7 @@ final class Authorization
         return in_array($path, ['/admin/login', '/admin/forgot-password', '/admin/reset-password'], true);
     }
 
-    public static function allowsAdminRequest(string $path, string $method, ?array $user): bool
+    public static function allowsAdminRequest(string $path, string $method, ?array $user, ?\\PDO $db = null): bool
     {
         if (!self::isAdminPath($path)) return true;
         if (self::isPublicRoute($path)) return true;
@@ -37,7 +25,15 @@ final class Authorization
         if ($permission === null) return false;
         $role = (string)$user['role'];
         if (in_array($role, ['super_admin', 'admin'], true)) return true;
-        return $role === 'staff' && in_array($permission, self::STAFF_PERMISSIONS, true);
+        if ($role !== 'staff' || $db === null) return false;
+        try {
+            $statement = $db->prepare('SELECT 1 FROM staff_permissions WHERE user_id = :user_id AND permission = :permission LIMIT 1');
+            $statement->execute([':user_id' => (int)$user['id'], ':permission' => $permission]);
+            return (bool)$statement->fetchColumn();
+        } catch (\\Throwable $exception) {
+            error_log('[HostPilot] Staff permission lookup failed: ' . $exception->getMessage());
+            return false;
+        }
     }
 
     public static function permissionFor(string $path, string $method): ?string
@@ -45,6 +41,8 @@ final class Authorization
         $method = strtoupper($method);
 
         if (in_array($path, ['/admin', '/admin/'], true) && $method === 'GET') return 'dashboard.view';
+        if ($path === '/admin/staff' && $method === 'GET') return 'staff.permissions.manage';
+        if ($path === '/admin/staff/save' && $method === 'POST') return 'staff.permissions.manage';
         if ($path === '/admin/customers' && $method === 'GET') return 'customers.view';
         if ($path === '/admin/reports' && $method === 'GET') return 'reports.view';
         if ($path === '/admin/tickets' && $method === 'GET') return 'support.view';

@@ -82,7 +82,7 @@ if (\HostPilot\Core\Authorization::isAdminPath($requestPath)
         header('Location: ' . $basePath . '/admin/login');
         exit;
     }
-    if (!\HostPilot\Core\Authorization::allowsAdminRequest($requestPath, $method, $adminUser)) {
+    if (!\HostPilot\Core\Authorization::allowsAdminRequest($requestPath, $method, $adminUser, $pdo)) {
         http_response_code(403);
         header('Content-Type: text/plain; charset=utf-8');
         echo 'Bu yönetim işlemi için yetkiniz yok.';

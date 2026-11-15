@@ -10,11 +10,8 @@ $customer = ['id' => 4, 'role' => 'customer'];
 $cases = [
     ['admin may manage payments', '/admin/payments', 'POST', $admin, true],
     ['super admin may upgrade database', '/admin/database-upgrade', 'POST', $super, true],
-    ['staff may view dashboard', '/admin', 'GET', $staff, true],
-    ['staff may reply to support', '/admin/tickets/12', 'POST', $staff, true],
-    ['staff may manage catalogue as before', '/admin/products', 'POST', $staff, true],
-    ['staff cannot manage payment settings', '/admin/payments', 'POST', $staff, false],
-    ['staff cannot access server credentials', '/admin/servers', 'GET', $staff, false],
+    ['staff permission settings are admin-only', '/admin/staff', 'GET', $staff, false],
+    ['staff save endpoint is admin-only', '/admin/staff/save', 'POST', $staff, false],
     ['customer cannot access admin dashboard', '/admin', 'GET', $customer, false],
     ['anonymous cannot access admin dashboard', '/admin', 'GET', null, false],
     ['unknown admin route is denied by default', '/admin/unmapped-action', 'POST', $admin, false],

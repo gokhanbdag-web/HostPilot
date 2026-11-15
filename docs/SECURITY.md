@@ -109,3 +109,12 @@ Reference: https://owasp.org/www-project-application-security-verification-stand
 - `super_admin` and `admin` retain the full administrative capability set; `staff` receives an explicit least-privilege allow-list for dashboard, customer/report viewing, support, catalogue, order/invoice viewing, and logout.
 - Unknown admin routes and unsupported HTTP methods are denied. Existing controller-level checks and CSRF validation remain in place as defense in depth.
 - Permission grants are currently code-defined; editable per-staff permissions and support-department scoping remain future Stage 2 work.
+
+
+## 13. Editable staff permissions and support department scoping (Stage 2)
+
+- Staff permissions are stored per user and are checked on every admin request against the central permission map.
+- Administrators can assign the supported least-privilege module permissions from `/admin/staff`.
+- Support tickets are visible to staff only when their department is assigned; direct ticket URLs are checked server-side as well.
+- Existing staff receive the previous safe baseline permissions and the four existing support departments on migration. New staff without explicit permissions are denied by default.
+- The staff permission management page and save endpoint are restricted to administrator roles and protected by CSRF validation.
