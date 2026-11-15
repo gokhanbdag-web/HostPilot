@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require dirname(__DIR__) . '/app/Core/MigrationRunner.php';
+require dirname(__DIR__) . '/app/Core/DatabaseBackup.php';
 use HostPilot\Core\MigrationRunner;
 
 $host = getenv('HOSTPILOT_DB_HOST') ?: '127.0.0.1';
@@ -161,3 +162,32 @@ if (MigrationRunner::runPending($legacy, $directory, true) !== []) {
     throw new RuntimeException('SQL runner attempted to reapply migrations on an already-upgraded legacy database.');
 }
 echo 'Fresh SQL schema matches the legacy PHP schema; existing-upgrade detection and admin-name data backfill passed.' . PHP_EOL;
+
+// Verify a complete compressed backup can be restored into a fresh database.
+$backupStorage = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'hostpilot-backup-ci-' . bin2hex(random_bytes(4));
+if (!mkdir($backupStorage, 0700, true)) throw new RuntimeException('Unable to create temporary backup test directory.');
+$backup = \HostPilot\Core\DatabaseBackup::create($pdo, $backupStorage);
+$compressedBackup = file_get_contents($backup['path']);
+$backupSql = is_string($compressedBackup) ? gzdecode($compressedBackup) : false;
+if (!is_string($backupSql) || $backup['size'] < 32 || !hash_equals($backup['sha256'], (string)hash_file('sha256', $backup['path']))) {
+    throw new RuntimeException('Compressed database backup failed integrity verification.');
+}
+$restoreDatabase = 'hostpilot_restore_ci';
+$pdo->exec('CREATE DATABASE ' . $restoreDatabase . ' CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
+$restore = new PDO(
+    sprintf('mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4', $host, $port, $restoreDatabase),
+    $user,
+    $password,
+    [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC, PDO::ATTR_EMULATE_PREPARES => false, PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true]
+);
+foreach (MigrationRunner::splitStatements($backupSql) as $statement) $restore->exec($statement);
+if ($schemaSignature($restore) !== $sqlSignature) throw new RuntimeException('Restored backup schema does not match the source database.');
+$restoredUser = $restore->query("SELECT first_name,last_name FROM users WHERE username='ada-admin'")->fetch(PDO::FETCH_ASSOC);
+if (($restoredUser['first_name'] ?? null) !== 'Ada' || ($restoredUser['last_name'] ?? null) !== 'Lovelace') {
+    throw new RuntimeException('Restored backup did not preserve customer/admin data.');
+}
+@unlink($backup['path']);
+@unlink($backupStorage . DIRECTORY_SEPARATOR . 'backups' . DIRECTORY_SEPARATOR . '.htaccess');
+@rmdir($backupStorage . DIRECTORY_SEPARATOR . 'backups');
+@rmdir($backupStorage);
+echo 'Compressed database backup integrity and restore rehearsal passed.' . PHP_EOL;
