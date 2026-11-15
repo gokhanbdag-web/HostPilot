@@ -40,12 +40,12 @@ The identifiers below are the exact values currently stored in the `migrations.m
 
 ## Additional migrations outside Schema.php
 
-The audit found two more PHP migrations which are not part of the 17 entries above and must not be overlooked during the eventual single-source cutover:
+Two additional PHP migrations were identified and converted as separate, later SQL files:
 
-- `20261113_0016_admin_password_resets` in `app/Core/PasswordResetMigration.php`.
-- `20261113_0017_admin_first_last_name` in `app/Core/AdminProfileMigration.php`.
+- `20261113_0016_admin_password_resets` creates `password_reset_tokens`, retaining its unique token hash, lookup indexes, and cascading user foreign key.
+- `20261113_0017_admin_first_last_name` conditionally adds `users.first_name` and `users.last_name`, then preserves the original name backfill UPDATE predicate and expressions.
 
-Their conversion and compatibility checks remain outstanding.
+The PHP classes remain unchanged for compatibility. Their SQL files are included in ordered discovery after the 17 `Schema.php` migrations.
 
 ## Current status
 

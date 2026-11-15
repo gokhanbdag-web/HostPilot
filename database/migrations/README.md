@@ -18,11 +18,11 @@ The 17 historical migrations from `app/Core/Schema.php` now have corresponding S
 
 The legacy `Schema::migrate()` path remains active for compatibility. The new SQL files are staged for review and are **not yet wired into the installer, front controller, or production upgrade flow**. Do not remove or bypass the legacy PHP migrations until clean-install and representative-upgrade equivalence tests have passed.
 
-Two additional migrations remain outside the 17-entry `Schema.php` list:
-- `20261113_0016_admin_password_resets` in `app/Core/PasswordResetMigration.php`
-- `20261113_0017_admin_first_last_name` in `app/Core/AdminProfileMigration.php`
+Two additional PHP migrations outside the 17-entry `Schema.php` list have also been converted:
+- `20261113_0016_admin_password_resets` creates the password reset token table.
+- `20261113_0017_admin_first_last_name` adds the profile name columns conditionally and preserves the legacy user-name backfill.
 
-These must also be converted and reconciled before the installer and upgrade flow are switched to a single SQL migration source.
+All 19 currently identified PHP migration keys now have corresponding ordered SQL files. The PHP migration classes remain in place for compatibility; no installer or runtime cutover has occurred.
 
 ## Safety rules
 
@@ -37,7 +37,7 @@ These must also be converted and reconciled before the installer and upgrade flo
 
 HostPilot\\Core\\MigrationRunner provides ordered discovery, pending-version lookup, SQL statement splitting, advisory locking, and an explicit runPending(..., true) execution method. It is intentionally not wired into the public front controller yet.
 
-The parser test also verifies that the 17 converted legacy SQL files are discovered in their historical order and can be split into statements. This is not a substitute for executing them against real MySQL/MariaDB databases.
+The parser test also verifies that all 19 converted SQL files are discovered in their historical order and can be split into statements. This is not a substitute for executing them against real MySQL/MariaDB databases.
 
 ## Remaining work before activation
 
