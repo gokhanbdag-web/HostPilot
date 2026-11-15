@@ -39,7 +39,9 @@ final class AdminController
         $growth=$this->customerGrowth();
         $this->startPage('Genel Bakış');
         echo '<div class="layout"><aside class="sidebar"><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><div class="nav-label">YÖNETİM</div>';
-        $items=[['Genel Bakış','/admin','▦'],['Müşteriler','/admin/customers','♙'],['Ürün & Paketler','/admin/products','▤'],['Siparişler','/admin/orders','⇄'],['Faturalar','/admin/invoices','▧'],['Ödeme Yöntemleri','/admin/payments','₺'],['Ödeme İşlemleri','/admin/payment-transactions','↗'],['Sunucular','/admin/servers','▣'],['Hizmetler','/admin/services','▤'],['Domainler','/admin/domains','◎'],['Destek Talepleri','/admin/tickets','✉'],['Raporlar','/admin/reports','▥'],['Entegrasyonlar','/admin/integrations','⌘'],['Tema & Sayfa Editörü','/admin/themes','✧'],['Ayarlar','/admin/settings','⚙'],['Güncelleme Merkezi','/admin/updates','↻'],['Veritabanı Güncellemeleri','/admin/database-upgrade','⇧']];
+        $items=[['Genel Bakış','/admin','▦'],['Müşteriler','/admin/customers','♙'],['Ürün & Paketler','/admin/products','▤'],['Siparişler','/admin/orders','⇄'],['Faturalar','/admin/invoices','▧'],['Ödeme Yöntemleri','/admin/payments','₺'],['Ödeme İşlemleri','/admin/payment-transactions','↗'],['Sunucular','/admin/servers','▣'],['Hizmetler','/admin/services','▤'],['Domainler','/admin/domains','◎'],['Destek Talepleri','/admin/tickets','✉'],['Raporlar','/admin/reports','▥'],['Entegrasyonlar','/admin/integrations','⌘'],['Tema & Sayfa Editörü','/admin/themes','✧'],['Ayarlar','/admin/settings','⚙'],['Güncelleme Merkezi','/admin/updates','↻'],['Veritabanı Güncellemeleri','/admin/database-upgrade','⇧']
+        ];
+        if (in_array(($user['role'] ?? ''), ['admin','super_admin'], true)) $items[]=['Personel Yetkileri','/admin/staff','♙'];
         if(($user['role']??'')==='staff') $items=array_values(array_filter($items,static fn($item)=>$item[1]!=='/admin/payments'&&$item[1]!=='/admin/payment-transactions'&&$item[1]!=='/admin/servers'&&$item[1]!=='/admin/services'&&$item[1]!=='/admin/updates'&&$item[1]!=='/admin/database-upgrade'));
         foreach($items as $item) echo '<a class="nav-item'.($item[1]==='/admin'?' active':'').'" href="'.$this->url($item[1]).'"><span>'.$item[2].'</span>'.$this->e($item[0]).'</a>';
         echo '</aside><main class="main"><header class="topbar"><div><small>YÖNETİM / GENEL BAKIŞ</small><h1>Kontrol merkezi</h1></div><div class="user">'.$this->e((string)$user['name']).'<form method="post" action="'.$this->url('/admin/logout').'"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><button class="logout">Çıkış</button></form></div></header>';
@@ -113,7 +115,18 @@ final class AdminController
         if (!Auth::check()) $this->redirect('/admin/login');
         $user=Auth::user();
         if (!in_array($user['role'], ['super_admin','admin','staff'], true)) { http_response_code(403); echo 'Yetkisiz erişim.'; return; }
-        $rows=$this->db->query("SELECT t.id,t.ticket_number,t.subject,t.department,t.priority,t.status,t.updated_at,u.name,u.email FROM tickets t JOIN users u ON u.id=t.user_id ORDER BY FIELD(t.status,'open','customer_reply','in_progress','staff_reply','closed'),t.updated_at DESC")->fetchAll();
+        if (($user['role'] ?? '') === 'staff') {
+            $departments = $this->staffDepartments((int)$user['id']);
+            if (!$departments) $rows = [];
+            else {
+                $placeholders = implode(',', array_fill(0, count($departments), '?'));
+                $statement = $this->db->prepare("SELECT t.id,t.ticket_number,t.subject,t.department,t.priority,t.status,t.updated_at,u.name,u.email FROM tickets t JOIN users u ON u.id=t.user_id WHERE t.department IN ($placeholders) ORDER BY FIELD(t.status,'open','customer_reply','in_progress','staff_reply','closed'),t.updated_at DESC");
+                $statement->execute($departments);
+                $rows = $statement->fetchAll();
+            }
+        } else {
+            $rows=$this->db->query("SELECT t.id,t.ticket_number,t.subject,t.department,t.priority,t.status,t.updated_at,u.name,u.email FROM tickets t JOIN users u ON u.id=t.user_id ORDER BY FIELD(t.status,'open','customer_reply','in_progress','staff_reply','closed'),t.updated_at DESC")->fetchAll();
+        }
         $this->startPage('Destek talepleri');
         echo '<div class="layout"><aside class="sidebar"><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a class="nav-item" href="'.$this->url('/admin').'">▦ Genel Bakış</a><a class="nav-item active" href="'.$this->url('/admin/tickets').'">✉ Destek Talepleri</a></aside><main class="main"><header class="topbar"><div><small>YÖNETİM / DESTEK</small><h1>Destek talepleri</h1></div><a class="logout" href="'.$this->url('/admin').'">Kontrol merkezi</a></header><article class="panel"><h3>Gelen talepler</h3>';
         if(!$rows) echo '<p>Henüz destek talebi yok.</p>';
@@ -130,6 +143,7 @@ final class AdminController
         $q=$this->db->prepare('SELECT t.*,u.name,u.email FROM tickets t JOIN users u ON u.id=t.user_id WHERE t.id=:id');
         $q->execute([':id'=>$id]); $ticket=$q->fetch();
         if(!$ticket){http_response_code(404);echo 'Talep bulunamadı.';return;}
+        if (($user['role'] ?? '') === 'staff' && !in_array((string)$ticket['department'], $this->staffDepartments((int)$user['id']), true)) { http_response_code(404); echo 'Destek talebi bulunamadı.'; return; }
         $error='';
         if(($_SERVER['REQUEST_METHOD']??'GET')==='POST'){
             if(!Auth::verifyCsrf($_POST['_token']??null))$error='Güvenlik doğrulaması başarısız.';
@@ -159,6 +173,18 @@ final class AdminController
         if($error!=='')echo '<div class="alert">'.$this->e($error).'</div>';
         echo '<form method="post"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><label>Yanıtınız<textarea name="message" rows="6" style="width:100%;padding:12px;background:#0b1425;color:#fff;border:1px solid #34445e;border-radius:8px"></textarea></label><button>Yanıt gönder</button></form><form method="post" style="margin-top:12px"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><button name="action" value="'.($ticket['status']==='closed'?'reopen':'close').'">'.($ticket['status']==='closed'?'Talebi yeniden aç':'Talebi kapat').'</button></form></article></main></div>';
         $this->endPage();
+    }
+
+    private function staffDepartments(int $userId): array
+    {
+        try {
+            $statement = $this->db->prepare('SELECT department FROM staff_departments WHERE user_id = :user_id ORDER BY department');
+            $statement->execute([':user_id' => $userId]);
+            return array_map('strval', $statement->fetchAll(PDO::FETCH_COLUMN));
+        } catch (Throwable $exception) {
+            error_log('[HostPilot] Staff department lookup failed: ' . $exception->getMessage());
+            return [];
+        }
     }
 
     private function countTable(string $table): ?int

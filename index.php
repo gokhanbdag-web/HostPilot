@@ -34,6 +34,9 @@ $basePath = rtrim((string)($config['app']['base_path'] ?? ''), '/');
 $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
     || (($_SERVER['SERVER_PORT'] ?? null) === '443');
 if (session_status() !== PHP_SESSION_ACTIVE) {
+    ini_set('session.use_strict_mode', '1');
+    ini_set('session.use_only_cookies', '1');
+    ini_set('session.gc_maxlifetime', '43200');
     session_set_cookie_params([
         'lifetime' => 0,
         'path' => ($basePath !== '' ? $basePath : '/') . (str_ends_with($basePath, '/') ? '' : ''),
@@ -72,6 +75,21 @@ if (is_file($maintenanceFile) && !in_array($requestPath, $maintenanceAllowedPath
     exit;
 }
 
+if (\HostPilot\Core\Authorization::isAdminPath($requestPath)
+    && !\HostPilot\Core\Authorization::isPublicRoute($requestPath)) {
+    $adminUser = \HostPilot\Core\Auth::user();
+    if ($adminUser === null) {
+        header('Location: ' . $basePath . '/admin/login');
+        exit;
+    }
+    if (!\HostPilot\Core\Authorization::allowsAdminRequest($requestPath, $method, $adminUser, $pdo)) {
+        http_response_code(403);
+        header('Content-Type: text/plain; charset=utf-8');
+        echo 'Bu yönetim işlemi için yetkiniz yok.';
+        exit;
+    }
+}
+
 if ($requestPath === '/admin/database-upgrade' && in_array($method, ['GET', 'POST'], true)) {
     (new \HostPilot\Http\DatabaseUpgradeController(
         $pdo,
@@ -97,6 +115,8 @@ if ($requestPath === '/admin/forgot-password' && in_array($method, ['GET','POST'
 if ($requestPath === '/admin/reset-password' && in_array($method, ['GET','POST'], true)) { $passwordReset->reset(); exit; }
 if ($requestPath === '/client/login' && in_array($method, ['GET', 'POST'], true)) { $client->login(); exit; }
 if ($requestPath === '/client/register' && in_array($method, ['GET', 'POST'], true)) { $client->register(); exit; }
+if ($requestPath === '/client/verify-email' && in_array($method, ['GET','POST'], true)) { $client->verifyEmail(); exit; }
+if ($requestPath === '/client/resend-verification' && in_array($method, ['GET','POST'], true)) { $client->resendVerification(); exit; }
 if ($requestPath === '/client/logout' && $method === 'POST') { $client->logout(); exit; }
 if ($requestPath === '/client' || $requestPath === '/client/') { $client->dashboard(); exit; }
 if ($requestPath === '/client/services' && $method === 'GET') { $client->services(); exit; }
@@ -116,6 +136,8 @@ if ($requestPath === '/admin/email-queue' && in_array($method, ['GET','POST'], t
 if ($requestPath === '/admin/updates' && $method === 'GET') { (new \HostPilot\Http\UpdateController($pdo, $basePath, (string)($config['app']['base_url'] ?? '')))->index(); exit; }
 if ($requestPath === '/admin/updates/status' && $method === 'GET') { (new \HostPilot\Http\UpdateController($pdo, $basePath, (string)($config['app']['base_url'] ?? '')))->status(); exit; }
 $controller = new \HostPilot\Http\AdminController($pdo, $basePath, (string)($config['app']['key'] ?? ''));
+if ($requestPath === '/admin/staff' && $method === 'GET') { (new \HostPilot\Http\StaffAccessController($pdo, $basePath))->index(); exit; }
+if ($requestPath === '/admin/staff/save' && $method === 'POST') { (new \HostPilot\Http\StaffAccessController($pdo, $basePath))->save(); exit; }
 if ($requestPath === '/admin/customers' && $method === 'GET') { $controller->customers(); exit; }
 if ($requestPath === '/admin/reports' && $method === 'GET') { $controller->reports(); exit; }
 if ($requestPath === '/admin/tickets' && $method === 'GET') { $controller->tickets(); exit; }

@@ -31,6 +31,12 @@ jobs:
           for file in "${files[@]}"; do php -l "$file"; done
       - name: Test SQL migration parser
         run: php tests/migration_runner.php
+      - name: Test authentication session policy
+        run: php tests/auth_session_security.php
+      - name: Test login rate limiting
+        run: php tests/auth_rate_limit.php
+      - name: Test centralized admin authorization
+        run: php tests/authorization.php
       - name: Prevent Composer dependency
         run: |
           if [ -f composer.json ] || [ -f composer.lock ]; then echo "HostPilot must remain installable without Composer."; exit 1; fi

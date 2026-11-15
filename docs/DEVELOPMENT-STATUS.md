@@ -57,3 +57,11 @@ The legacy PHP migration classes remain as a comparison baseline; the public fro
 - Complete billing/accounting compliance, full CMS/page builder, analytics, API/webhook framework, monitoring and release acceptance.
 
 A feature is not marked production-ready solely because its PHP files pass syntax checks or because its workflow foundation exists. It must pass its relevant integration, failure-path and operational tests.
+
+
+### Stage 2 — customer email verification (PR #7)
+
+- New customer registrations are created as `pending_verification` and cannot sign in until their email address is verified.
+- Verification links use random 256-bit tokens; only SHA-256 hashes are stored, links expire after 24 hours, and tokens are single-use. Resend requests use a 60-second per-account cooldown and a non-enumerating response.
+- Verification mail is queued through the existing SMTP outbox. Existing customer/admin accounts are not retroactively disabled.
+- The new token table is delivered through migration `20261115_0003_customer_email_verification.sql`; production schema remains unchanged until an administrator applies the migration.

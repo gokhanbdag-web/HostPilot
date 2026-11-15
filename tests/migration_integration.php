@@ -35,9 +35,11 @@ $pdo->exec("CREATE TABLE migrations (
 $pdo->prepare("INSERT INTO users (name,first_name,last_name,email,username,password_hash,role,status,created_at,updated_at) VALUES ('Ada Lovelace',NULL,NULL,:email,:username,'test-hash','admin','active',UTC_TIMESTAMP(),UTC_TIMESTAMP())")
     ->execute([':email' => 'ada@example.test', ':username' => 'ada-admin']);
 
+$pdo->exec("INSERT INTO users (name,email,username,password_hash,role,status,created_at,updated_at) VALUES ('Grace Hopper','grace@example.test','grace-staff','test-hash','staff','active',UTC_TIMESTAMP(),UTC_TIMESTAMP())");
+
 $directory = dirname(__DIR__) . '/database/migrations';
 $files = MigrationRunner::discover($directory);
-if (count($files) !== 20) throw new RuntimeException('Expected 20 SQL migrations; discovered ' . count($files) . '.');
+if (count($files) !== 22) throw new RuntimeException('Expected 21 SQL migrations; discovered ' . count($files) . '.');
 
 // Simulate interruption after the first DDL statement; the migration must safely retry.
 $firstSql = file_get_contents($files[0]['path']);
@@ -53,19 +55,39 @@ try {
     if (!str_contains($exception->getMessage(), 'Explicit administrator confirmation')) throw $exception;
 }
 $applied = MigrationRunner::runPending($pdo, $directory, true);
-if (count($applied) !== 20) throw new RuntimeException('Expected 20 applied migrations; got ' . count($applied) . '.');
+if (count($applied) !== 22) throw new RuntimeException('Expected 21 applied migrations; got ' . count($applied) . '.');
 $appliedCount = (int)$pdo->query('SELECT COUNT(*) FROM migrations')->fetchColumn();
-if ($appliedCount !== 20) throw new RuntimeException('Expected exactly 20 migration tracking rows.');
+if ($appliedCount !== 22) throw new RuntimeException('Expected exactly 21 migration tracking rows.');
 if (MigrationRunner::pending($pdo, $directory) !== []) throw new RuntimeException('Pending migrations remain after successful run.');
 if (MigrationRunner::runPending($pdo, $directory, true) !== []) throw new RuntimeException('Second run was not a no-op.');
 
-$requiredTables = ['product_groups','products','product_pricing','orders','order_items','services','invoices','invoice_items','payment_transactions','servers','provisioning_jobs','service_package_changes','email_outbox','domain_registrations','domain_renewals','password_reset_tokens'];
+if ((int)$pdo->query("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='email_verified_at'")->fetchColumn() !== 1) throw new RuntimeException('Email verification migration did not add email_verified_at to a legacy users table.');
+$requiredTables = ['product_groups','products','product_pricing','orders','order_items','services','invoices','invoice_items','payment_transactions','servers','provisioning_jobs','service_package_changes','email_outbox','domain_registrations','domain_renewals','password_reset_tokens','staff_permissions','staff_departments','email_verification_tokens'];
 $check = $pdo->prepare('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table_name');
 foreach ($requiredTables as $table) {
     $check->execute([':table_name' => $table]);
     if ((int)$check->fetchColumn() !== 1) throw new RuntimeException('Expected table was not created: ' . $table);
 }
-echo 'MySQL/MariaDB migration integration passed: 20 migrations, partial-DDL retry, confirmation guard, tracking and idempotent second run.' . PHP_EOL;
+if ((int)$pdo->query("SELECT COUNT(*) FROM staff_permissions sp JOIN users u ON u.id=sp.user_id WHERE u.username='grace-staff'")->fetchColumn() !== 8) throw new RuntimeException('Existing staff permission defaults were not seeded.');
+if ((int)$pdo->query("SELECT COUNT(*) FROM staff_departments sd JOIN users u ON u.id=sd.user_id WHERE u.username='grace-staff'")->fetchColumn() !== 4) throw new RuntimeException('Existing staff department defaults were not seeded.');
+
+$pdo->exec("INSERT INTO users(name,email,username,password_hash,role,status,created_at,updated_at) VALUES('Verification Test','verify@example.test','verify-test','test-hash','customer','pending_verification',UTC_TIMESTAMP(),UTC_TIMESTAMP())");
+$verificationUserId=(int)$pdo->lastInsertId();
+$verificationToken=bin2hex(random_bytes(32));
+$verificationHash=hash('sha256',$verificationToken);
+$pdo->prepare('INSERT INTO email_verification_tokens(user_id,token_hash,expires_at,created_at) VALUES(:user,:hash,DATE_ADD(UTC_TIMESTAMP(),INTERVAL 1 DAY),UTC_TIMESTAMP())')->execute([':user'=>$verificationUserId,':hash'=>$verificationHash]);
+$verify=$pdo->prepare("SELECT user_id FROM email_verification_tokens WHERE token_hash=:hash AND used_at IS NULL AND expires_at>UTC_TIMESTAMP()");
+$verify->execute([':hash'=>$verificationHash]);
+if ((int)$verify->fetchColumn() !== $verificationUserId) throw new RuntimeException('A fresh hashed email verification token was not accepted.');
+$pdo->prepare("UPDATE users SET status='active',email_verified_at=UTC_TIMESTAMP() WHERE id=:id AND status='pending_verification'")->execute([':id'=>$verificationUserId]);
+$pdo->prepare('UPDATE email_verification_tokens SET used_at=UTC_TIMESTAMP() WHERE user_id=:id AND used_at IS NULL')->execute([':id'=>$verificationUserId]);
+$verify->execute([':hash'=>$verificationHash]);
+if ($verify->fetchColumn() !== false) throw new RuntimeException('A consumed email verification token remained reusable.');
+$verified=$pdo->prepare("SELECT status,email_verified_at FROM users WHERE id=:id");
+$verified->execute([':id'=>$verificationUserId]);
+$verifiedRow=$verified->fetch(PDO::FETCH_ASSOC);
+if (($verifiedRow['status']??'')!=='active'||empty($verifiedRow['email_verified_at'])) throw new RuntimeException('Email verification did not activate the pending customer.');
+echo 'MySQL/MariaDB migration integration passed: 22 migrations, staff defaults, partial-DDL retry, confirmation guard, tracking and idempotent second run.' . PHP_EOL;
 
 // Compare the SQL migration path with the retained legacy PHP migration path
 // on an independent clean schema. This remains an ephemeral CI-only database.
@@ -106,7 +128,7 @@ require_once dirname(__DIR__) . '/app/Core/AdminProfileMigration.php';
 \HostPilot\Core\AdminProfileMigration::migrate($legacy);
 
 $schemaSignature = static function (PDO $connection): array {
-    $tables = $connection->query("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE' AND TABLE_NAME NOT IN ('users','migrations') ORDER BY TABLE_NAME")->fetchAll(PDO::FETCH_COLUMN);
+    $tables = $connection->query("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE' AND TABLE_NAME NOT IN ('users','migrations','staff_permissions','staff_departments','email_verification_tokens') ORDER BY TABLE_NAME")->fetchAll(PDO::FETCH_COLUMN);
     $signature = [];
     foreach ($tables as $table) {
         $columns = $connection->prepare("SELECT COLUMN_NAME,COLUMN_TYPE,IS_NULLABLE,COLUMN_DEFAULT,EXTRA,COLUMN_KEY,ORDINAL_POSITION FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=:table_name ORDER BY ORDINAL_POSITION");
@@ -155,13 +177,18 @@ foreach ([$pdo, $legacy] as $connection) {
         throw new RuntimeException('Admin profile migration did not preserve the legacy name backfill.');
     }
 }
+$legacyPending = MigrationRunner::pending($legacy, $directory);
+if ($legacyPending !== ['20261115_0002_staff_permissions_departments', '20261115_0003_customer_email_verification']) {
+    throw new RuntimeException('SQL runner did not isolate the new staff permission migration on a legacy-upgraded database: ' . json_encode($legacyPending));
+}
+$legacyApplied = MigrationRunner::runPending($legacy, $directory, true);
+if ($legacyApplied !== ['20261115_0002_staff_permissions_departments', '20261115_0003_customer_email_verification']) {
+    throw new RuntimeException('SQL runner did not apply only the pending Stage 2 security migrations to a legacy-upgraded database.');
+}
 if (MigrationRunner::pending($legacy, $directory) !== []) {
-    throw new RuntimeException('SQL runner did not recognize all migration keys from a legacy-upgraded database.');
+    throw new RuntimeException('Pending migrations remain after legacy database upgrade.');
 }
-if (MigrationRunner::runPending($legacy, $directory, true) !== []) {
-    throw new RuntimeException('SQL runner attempted to reapply migrations on an already-upgraded legacy database.');
-}
-echo 'Fresh SQL schema matches the legacy PHP schema; existing-upgrade detection and admin-name data backfill passed.' . PHP_EOL;
+echo 'Fresh SQL schema matches the legacy PHP schema; the pending Stage 2 security migrations upgrade legacy installs without replaying old migrations, and admin-name data backfill passed.' . PHP_EOL;
 
 // Verify a complete compressed backup can be restored into a fresh database.
 $backupStorage = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'hostpilot-backup-ci-' . bin2hex(random_bytes(4));

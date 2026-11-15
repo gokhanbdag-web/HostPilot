@@ -92,3 +92,29 @@ Reference: https://owasp.org/www-project-application-security-verification-stand
 - Provide backup/restore and application-key recovery guidance.
 - Keep admin notifications for failed jobs, suspicious logins, and repeated webhook verification failures.
 - Security testing is required before production release; this baseline is not a certification.
+
+
+## 11. Implemented authentication/session baseline (Stage 2)
+
+- Login attempts are throttled atomically by a hashed client-IP bucket (30 attempts per 15-minute window). The raw IP and login identifier are not written to rate-limit files.
+- Rate-limit state is stored under the protected storage directory with file locking for shared-host concurrency. If the directory cannot be written, login fails closed.
+- Authenticated sessions expire after 30 minutes of inactivity or 12 hours absolute lifetime. Existing sessions receive timestamps on their first request after rollout.
+- Session IDs are regenerated after successful login; the CSRF token is rotated. Logout clears session data and expires the session cookie.
+- These controls are an initial security slice, not a substitute for centralized RBAC, MFA, audit trails, or full session revocation.
+
+
+## 12. Central admin route authorization (Stage 2)
+
+- Admin requests pass through a centralized, deny-by-default permission map before controller dispatch.
+- `super_admin` and `admin` retain the full administrative capability set; `staff` receives an explicit least-privilege allow-list for dashboard, customer/report viewing, support, catalogue, order/invoice viewing, and logout.
+- Unknown admin routes and unsupported HTTP methods are denied. Existing controller-level checks and CSRF validation remain in place as defense in depth.
+- Permission grants are currently code-defined; editable per-staff permissions and support-department scoping remain future Stage 2 work.
+
+
+## 13. Editable staff permissions and support department scoping (Stage 2)
+
+- Staff permissions are stored per user and are checked on every admin request against the central permission map.
+- Administrators can assign the supported least-privilege module permissions from `/admin/staff`.
+- Support tickets are visible to staff only when their department is assigned; direct ticket URLs are checked server-side as well.
+- Existing staff receive the previous safe baseline permissions and the four existing support departments on migration. New staff without explicit permissions are denied by default.
+- The staff permission management page and save endpoint are restricted to administrator roles and protected by CSRF validation.
