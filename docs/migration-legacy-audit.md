@@ -1,10 +1,10 @@
 # Legacy schema migration conversion audit
 
-The SQL migration directory contains the 17 identifiers historically run by app/Core/Schema.php, plus the two standalone migrations for password reset tokens and admin first/last names, and one forward repair migration for the invoice/service foreign key. The original PHP migration implementations remain in place and are still the active application path.
+The shared SQL migration directory now contains 20 ordered migration files: the 17 identifiers historically run by app/Core/Schema.php, two standalone PHP migrations, and one forward repair migration for a legacy invoice/service foreign-key omission.
 
 ## Identifier mapping
 
-The SQL filenames preserve the exact migration keys already stored in customer databases:
+The filenames preserve the exact identifiers already stored in customer databases:
 
 1. 20261111_0001_catalog_orders_services
 2. 20261111_0002_invoices_payments
@@ -30,22 +30,25 @@ The SQL filenames preserve the exact migration keys already stored in customer d
 ## Conversion-sensitive operations
 
 - Migration 3 conditionally adds server and provisioning columns to services, then adds its foreign key only if absent.
-- Migration 5 conditionally adds invoice/service lifecycle columns and indexes. The legacy PHP implementation's FK existence statement was never executed; migration 20 repairs the missing invoice/service foreign key on already-upgraded databases.
+- Migration 5 conditionally adds invoice/service lifecycle columns and indexes. The legacy PHP implementation's FK existence statement was not executed; migration 20 repairs the missing invoice/service foreign key on already-upgraded databases.
 - Migrations 6, 7, 9, 12, 13, 15, 16 and 17 contain guarded column/index/constraint operations.
-- Migration 15 adds the registrar action tracking columns before its data update. The update is scoped to legacy rows still in pending_remote with no action_eaq_id.
+- Migration 15 adds registrar action tracking columns before its data update. The update is scoped to legacy rows still in pending_remote with no action_eaq_id.
 - The password reset migration creates a token table with unique token hashes and user relationship.
 - The admin profile migration conditionally adds first/last name fields and performs the legacy name backfill.
+- Conditional no-op branches use DO 0 rather than SELECT 1 so PDO does not leave an unconsumed result set while subsequent DDL is executed.
 
 ## Verification status
 
 - [x] All 20 migration identifiers have matching SQL files.
 - [x] Parser/discovery test asserts all 20 identifiers in order.
-- [x] SQL splitter checks semicolons in comments and quoted values.
-- [x] Runner refuses execution without explicit confirmation and uses a MySQL advisory lock.
-- [x] Dedicated MySQL 8.0 and MariaDB 10.11 integration tests added to CI, including partial-DDL retry and repeated-run checks.
-- [ ] CI integration runs must pass on both database engines.
-- [ ] Compare complete resulting schemas from the legacy PHP path and SQL path on fresh-install and representative-upgrade fixtures.
-- [ ] Verify backup and restore, maintenance mode, authenticated admin confirmation, and failure recovery.
-- [ ] Only then activate the SQL runner in the installer and controlled admin upgrade flow.
+- [x] MySQL 8.0 and MariaDB 10.11 integration tests execute the SQL migration set.
+- [x] Partial-DDL retry, explicit confirmation, tracking and idempotent repeated-run checks.
+- [x] Fresh SQL schema compared with legacy PHP schema for tables, columns, indexes and foreign keys.
+- [x] Legacy admin-name data backfill compared.
+- [x] Already-upgraded legacy database recognized with no pending migrations.
+- [x] Compressed database backup integrity and restore rehearsal in isolated CI database.
+- [x] Browser installer uses the shared SQL migration directory.
+- [x] Authenticated admin upgrade page, CSRF confirmation, pre-upgrade backup, maintenance mode and failure retry/clear safeguards implemented.
+- [ ] Final review and production deployment approval.
 
-MySQL DDL can implicitly commit. A failed migration can leave earlier statements applied. Production execution must require authenticated admin authorization, CSRF protection, a verified backup, maintenance/locking safeguards, an audit trail, and a rehearsed recovery procedure. CI uses only ephemeral service databases and never contacts the live HostPilot database.
+No production database migration is run by CI. The public front controller does not automatically execute pending schema changes.
