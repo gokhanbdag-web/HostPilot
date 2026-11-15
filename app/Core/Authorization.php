@@ -33,11 +33,10 @@ final class Authorization
         if (self::isPublicRoute($path)) return true;
         if ($user === null || !isset($user['role'])) return false;
 
-        $role = (string)$user['role'];
-        if (in_array($role, ['super_admin', 'admin'], true)) return true;
-
         $permission = self::permissionFor($path, strtoupper($method));
         if ($permission === null) return false;
+        $role = (string)$user['role'];
+        if (in_array($role, ['super_admin', 'admin'], true)) return true;
         return $role === 'staff' && in_array($permission, self::STAFF_PERMISSIONS, true);
     }
 
