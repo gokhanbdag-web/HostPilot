@@ -160,17 +160,17 @@ foreach ([$pdo, $legacy] as $connection) {
     }
 }
 $legacyPending = MigrationRunner::pending($legacy, $directory);
-if ($legacyPending !== ['20261115_0002_staff_permissions_departments']) {
+if ($legacyPending !== ['20261115_0002_staff_permissions_departments', '20261115_0003_customer_email_verification']) {
     throw new RuntimeException('SQL runner did not isolate the new staff permission migration on a legacy-upgraded database: ' . json_encode($legacyPending));
 }
 $legacyApplied = MigrationRunner::runPending($legacy, $directory, true);
-if ($legacyApplied !== ['20261115_0002_staff_permissions_departments']) {
-    throw new RuntimeException('SQL runner did not apply only the new staff permission migration to a legacy-upgraded database.');
+if ($legacyApplied !== ['20261115_0002_staff_permissions_departments', '20261115_0003_customer_email_verification']) {
+    throw new RuntimeException('SQL runner did not apply only the pending Stage 2 security migrations to a legacy-upgraded database.');
 }
 if (MigrationRunner::pending($legacy, $directory) !== []) {
     throw new RuntimeException('Pending migrations remain after legacy database upgrade.');
 }
-echo 'Fresh SQL schema matches the legacy PHP schema; the new staff permission migration upgrades legacy installs without replaying old migrations, and admin-name data backfill passed.' . PHP_EOL;
+echo 'Fresh SQL schema matches the legacy PHP schema; the pending Stage 2 security migrations upgrade legacy installs without replaying old migrations, and admin-name data backfill passed.' . PHP_EOL;
 
 // Verify a complete compressed backup can be restored into a fresh database.
 $backupStorage = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'hostpilot-backup-ci-' . bin2hex(random_bytes(4));
