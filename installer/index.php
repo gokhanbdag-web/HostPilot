@@ -343,7 +343,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // Fresh installs use the same ordered SQL migration files as controlled upgrades.
             require_once $root . '/app/Core/MigrationRunner.php';
-            \\HostPilot\\Core\\MigrationRunner::runPending($pdo, $root . '/database/migrations', true);
+            \HostPilot\Core\MigrationRunner::runPending($pdo, $root . '/database/migrations', true);
 
             $pdo->beginTransaction();
             $now = gmdate('Y-m-d H:i:s');
