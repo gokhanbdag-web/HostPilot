@@ -15,7 +15,7 @@ final class Authorization
         return in_array($path, ['/admin/login', '/admin/forgot-password', '/admin/reset-password'], true);
     }
 
-    public static function allowsAdminRequest(string $path, string $method, ?array $user, ?\\PDO $db = null): bool
+    public static function allowsAdminRequest(string $path, string $method, ?array $user, ?\PDO $db = null): bool
     {
         if (!self::isAdminPath($path)) return true;
         if (self::isPublicRoute($path)) return true;
@@ -30,7 +30,7 @@ final class Authorization
             $statement = $db->prepare('SELECT 1 FROM staff_permissions WHERE user_id = :user_id AND permission = :permission LIMIT 1');
             $statement->execute([':user_id' => (int)$user['id'], ':permission' => $permission]);
             return (bool)$statement->fetchColumn();
-        } catch (\\Throwable $exception) {
+        } catch (\Throwable $exception) {
             error_log('[HostPilot] Staff permission lookup failed: ' . $exception->getMessage());
             return false;
         }
