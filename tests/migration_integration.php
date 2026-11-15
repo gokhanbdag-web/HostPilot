@@ -2,8 +2,6 @@
 declare(strict_types=1);
 require dirname(__DIR__) . '/app/Core/MigrationRunner.php';
 use HostPilot\Core\MigrationRunner;
-use PDO;
-use RuntimeException;
 
 $host = getenv('HOSTPILOT_DB_HOST') ?: '127.0.0.1';
 $port = (int)(getenv('HOSTPILOT_DB_PORT') ?: 3306);
