@@ -35,6 +35,8 @@ jobs:
         run: php tests/auth_session_security.php
       - name: Test login rate limiting
         run: php tests/auth_rate_limit.php
+      - name: Test security audit event policy
+        run: php tests/security_audit.php
       - name: Test centralized admin authorization
         run: php tests/authorization.php
       - name: Prevent Composer dependency

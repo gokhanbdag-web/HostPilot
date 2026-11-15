@@ -24,6 +24,7 @@ final class Auth
         $user = $stmt->fetch();
 
         if (!$user || ($user['status'] ?? '') !== 'active' || !password_verify($password, (string)$user['password_hash'])) {
+            SecurityAudit::record($db, 'auth.login_failed');
             return false;
         }
 
@@ -42,6 +43,7 @@ final class Auth
 
         $update = $db->prepare('UPDATE users SET last_login_at = UTC_TIMESTAMP() WHERE id = :id');
         $update->execute([':id' => (int)$user['id']]);
+        SecurityAudit::record($db, 'auth.login_succeeded', (int)$user['id'], ['role' => (string)$user['role']]);
         return true;
     }
 
@@ -121,6 +123,7 @@ final class Auth
         $_SESSION['hostpilot_user']['auth_version'] = (int)$version->fetchColumn();
         session_regenerate_id(true);
         unset($_SESSION['hostpilot_csrf']);
+        SecurityAudit::record($db, 'auth.sessions_revoked', (int)$user['id']);
         return true;
     }
 
