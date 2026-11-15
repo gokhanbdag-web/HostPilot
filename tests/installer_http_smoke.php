@@ -6,6 +6,7 @@ $port = (int)(getenv('HOSTPILOT_DB_PORT') ?: 3306);
 $user = getenv('HOSTPILOT_DB_USER') ?: '';
 $password = getenv('HOSTPILOT_DB_PASSWORD') ?: '';
 $databaseName = getenv('HOSTPILOT_INSTALL_DB_NAME') ?: '';
+require_once dirname(__DIR__) . '/app/Core/MigrationRunner.php';
 if ($databaseName !== 'hostpilot_installer_ci' || $user === '') {
     throw new RuntimeException('Refusing installer smoke test outside hostpilot_installer_ci.');
 }
@@ -63,7 +64,7 @@ function csrfFromHtml(string $html): string
 
 function installBrowserApp(PDO $admin, string $host, int $port, string $user, string $password, string $databaseName, string $url, string $username, string $email, string $expectedBasePath): array
 {
-    $admin->exec('CREATE DATABASE ' . $databaseName . ' CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
+    $admin->exec('CREATE DATABASE IF NOT EXISTS ' . $databaseName . ' CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
     [$page, $headers] = httpRequest($url);
     if (statusCode($headers) !== 200) throw new RuntimeException('Installer GET failed: HTTP ' . statusCode($headers));
     $cookie = cookieFromHeaders($headers);
@@ -172,6 +173,48 @@ if (count(glob($storage . '/backups/*.sql.gz') ?: []) < 1) throw new RuntimeExce
 if (statusCode($currentHeaders) !== 200 || !str_contains($currentPage, 'Veritabanı güncel')) throw new RuntimeException('Upgrade page did not report a current database after success.');
 cleanupInstallFiles($storage);
 echo 'Authenticated admin upgrade passed: CSRF confirmation, pre-upgrade backup, maintenance mode and migration recovery.' . PHP_EOL;
+
+// Invalid database credentials must fail closed without leaving an install lock or config.
+[$badPage, $badHeaders] = httpRequest($base);
+$badCookie = cookieFromHeaders($badHeaders);
+[$badResult, $badResponseHeaders] = httpRequest($base, 'POST', $badCookie, [
+    '_token' => csrfFromHtml($badPage),
+    'business_model' => 'single',
+    'db_host' => $host,
+    'db_port' => (string)$port,
+    'db_name' => 'hostpilot_missing_db_ci',
+    'db_user' => $user,
+    'db_pass' => $password,
+    'admin_first_name' => 'CI',
+    'admin_last_name' => 'Failure',
+    'admin_username' => 'ci-failure',
+    'admin_email' => 'ci-failure@example.test',
+    'admin_pass' => 'Test-Installer-Password-2026!',
+]);
+if (statusCode($badResponseHeaders) !== 200 || !str_contains($badResult, 'Kurulum tamamlanamadı.')) {
+    throw new RuntimeException('Invalid database connection did not produce a safe installer error.');
+}
+if (is_file($lockFile) || is_file($configFile)) throw new RuntimeException('Failed installer attempt left an active config or installation lock.');
+echo 'Invalid database connection failure path passed: no config or install lock left behind.' . PHP_EOL;
+
+// Simulate a partially-created schema, then verify the browser installer can retry idempotently.
+$partialDatabase = 'hostpilot_installer_partial_ci';
+$admin->exec('CREATE DATABASE IF NOT EXISTS ' . $partialDatabase . ' CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
+$partial = new PDO(sprintf('mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4', $host, $port, $partialDatabase), $user, $password, [
+    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+    PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true,
+]);
+$firstMigration = file_get_contents(dirname(__DIR__) . '/database/migrations/20261111_0001_catalog_orders_services.sql');
+if (!is_string($firstMigration)) throw new RuntimeException('Unable to read first migration for partial-install fixture.');
+$firstStatements = \HostPilot\Core\MigrationRunner::splitStatements($firstMigration);
+$partial->exec($firstStatements[0]);
+cleanupInstallFiles($storage);
+[$partialCookie, $partialDb] = installBrowserApp($admin, $host, $port, $user, $password, $partialDatabase, $base, 'ci-partial', 'ci-partial@example.test', '');
+if ((int)$partialDb->query('SELECT COUNT(*) FROM migrations')->fetchColumn() !== 20) {
+    throw new RuntimeException('Installer did not recover from a partially-created schema.');
+}
+cleanupInstallFiles($storage);
+echo 'Partial-install retry passed: installer completed all 20 migrations after an interrupted first DDL.' . PHP_EOL;
 
 // Verify root/subdirectory-aware browser installation independently.
 $subdirectory = $root . '/ci-subdir';
