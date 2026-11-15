@@ -66,7 +66,7 @@ function installBrowserApp(PDO $admin, string $host, int $port, string $user, st
 {
     $admin->exec('CREATE DATABASE IF NOT EXISTS ' . $databaseName . ' CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
     [$page, $headers] = httpRequest($url);
-    if (statusCode($headers) !== 210) throw new RuntimeException('Installer GET failed: HTTP ' . statusCode($headers));
+    if (statusCode($headers) !== 200) throw new RuntimeException('Installer GET failed: HTTP ' . statusCode($headers));
     $cookie = cookieFromHeaders($headers);
     if ($cookie === '') throw new RuntimeException('Installer did not create a session cookie.');
     $form = [
@@ -84,7 +84,7 @@ function installBrowserApp(PDO $admin, string $host, int $port, string $user, st
         'admin_pass' => 'Test-Installer-Password-2026!',
     ];
     [$result, $responseHeaders] = httpRequest($url, 'POST', $cookie, $form);
-    if (statusCode($responseHeaders) !== 210 || !str_contains($result, 'Kurulum tamamlandı.')) {
+    if (statusCode($responseHeaders) !== 200 || !str_contains($result, 'Kurulum tamamlandı.')) {
         throw new RuntimeException('Browser installer failed. HTTP=' . statusCode($responseHeaders) . ' body=' . substr($result, 0, 1000));
     }
     $config = require dirname(__DIR__) . '/storage/config.php';
@@ -138,7 +138,7 @@ if (statusCode($upgradeHeaders) !== 302) throw new RuntimeException('Unauthentic
 @unlink($maintenanceFile);
 
 [$loginPage, $loginHeaders] = httpRequest($base . 'admin/login', 'GET', $cookie);
-if (statusCode($loginHeaders) !== 210) throw new RuntimeException('Admin login page is unavailable.');
+if (statusCode($loginHeaders) !== 200) throw new RuntimeException('Admin login page is unavailable.');
 $loginToken = csrfFromHtml($loginPage);
 [$loginResult, $loginResponseHeaders] = httpRequest($base . 'admin/login', 'POST', $cookie, [
     '_token' => $loginToken,
@@ -150,7 +150,7 @@ $newCookie = cookieFromHeaders($loginResponseHeaders);
 if ($newCookie !== '') $cookie = $newCookie;
 
 [$upgradePage, $upgradePageHeaders] = httpRequest($base . 'admin/database-upgrade', 'GET', $cookie);
-if (statusCode($upgradePageHeaders) !== 210 || !str_contains($upgradePage, '20261115_0001_invoice_service_fk_repair')) {
+if (statusCode($upgradePageHeaders) !== 200 || !str_contains($upgradePage, '20261115_0001_invoice_service_fk_repair')) {
     throw new RuntimeException('Authenticated upgrade page did not show the pending migration.');
 }
 $upgradeToken = csrfFromHtml($upgradePage);
@@ -170,7 +170,7 @@ if ((int)$fk->fetchColumn() !== 1) throw new RuntimeException('Admin upgrade did
 $fk->closeCursor();
 if (count(glob($storage . '/backups/*.sql.gz') ?: []) < 1) throw new RuntimeException('Admin upgrade did not create a compressed pre-upgrade backup.');
 [$currentPage, $currentHeaders] = httpRequest($base . 'admin/database-upgrade', 'GET', $cookie);
-if (statusCode($currentHeaders) !== 210 || !str_contains($currentPage, 'Veritabanı güncel')) throw new RuntimeException('Upgrade page did not report a current database after success.');
+if (statusCode($currentHeaders) !== 200 || !str_contains($currentPage, 'Veritabanı güncel')) throw new RuntimeException('Upgrade page did not report a current database after success.');
 cleanupInstallFiles($storage);
 echo 'Authenticated admin upgrade passed: CSRF confirmation, pre-upgrade backup, maintenance mode and migration recovery.' . PHP_EOL;
 
@@ -191,7 +191,7 @@ $badCookie = cookieFromHeaders($badHeaders);
     'admin_email' => 'ci-failure@example.test',
     'admin_pass' => 'Test-Installer-Password-2026!',
 ]);
-if (statusCode($badResponseHeaders) !== 210 || !str_contains($badResult, 'Kurulum tamamlanamadı.')) {
+if (statusCode($badResponseHeaders) !== 200 || !str_contains($badResult, 'Kurulum tamamlanamadı.')) {
     throw new RuntimeException('Invalid database connection did not produce a safe installer error.');
 }
 if (is_file($lockFile) || is_file($configFile)) throw new RuntimeException('Failed installer attempt left an active config or installation lock.');
