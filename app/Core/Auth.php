@@ -11,13 +11,14 @@ final class Auth
     private const ABSOLUTE_TIMEOUT = 43200;
     private const RATE_WINDOW = 900;
     private const IP_LIMIT = 30;
+    private const PASSWORD_RESET_IP_LIMIT = 5;
 
     public static function attempt(PDO $db, string $identifier, string $password): bool
     {
         $identifier = strtolower(trim($identifier));
         if ($identifier === '' || strlen($identifier) > 254 || self::consumeAttempt()) return false;
 
-        $stmt = $db->prepare("SELECT id, name, email, password_hash, role, status FROM users WHERE email = :email OR username = :username LIMIT 1");
+        $stmt = $db->prepare("SELECT id, name, email, password_hash, role, status, auth_version FROM users WHERE email = :email OR username = :username LIMIT 1");
         $stmt->execute([':email' => $identifier, ':username' => $identifier]);
         $user = $stmt->fetch();
 
@@ -31,6 +32,7 @@ final class Auth
             'name' => (string)$user['name'],
             'email' => (string)$user['email'],
             'role' => (string)$user['role'],
+            'auth_version' => (int)$user['auth_version'],
         ];
         $_SESSION['hostpilot_auth_created_at'] = time();
         $_SESSION['hostpilot_auth_last_activity'] = time();
@@ -59,6 +61,59 @@ final class Auth
         $_SESSION['hostpilot_auth_created_at'] = $created;
         $_SESSION['hostpilot_auth_last_activity'] = $now;
         return $user;
+    }
+
+    /**
+     * Reject sessions whose account security version changed (password reset or explicit revocation).
+     * Called once by the front controller after the database is available.
+     */
+    public static function validateSessionVersion(PDO $db): bool
+    {
+        $user = $_SESSION['hostpilot_user'] ?? null;
+        if (!is_array($user) || !isset($user['id'])) return true;
+        try {
+            $statement = $db->prepare('SELECT auth_version FROM users WHERE id = :id LIMIT 1');
+            $statement->execute([':id' => (int)$user['id']]);
+            $version = $statement->fetchColumn();
+            if ($version === false) {
+                self::expireSession();
+                return false;
+            }
+            $current = (int)$version;
+            if (!array_key_exists('auth_version', $user)) {
+                $_SESSION['hostpilot_user']['auth_version'] = $current;
+                return true;
+            }
+            if ((int)$user['auth_version'] !== $current) {
+                self::expireSession();
+                return false;
+            }
+            return true;
+        } catch (\Throwable $exception) {
+            error_log('[HostPilot] Session version validation failed: ' . $exception->getMessage());
+            self::expireSession();
+            return false;
+        }
+    }
+
+    public static function revokeOtherSessions(PDO $db): bool
+    {
+        $user = self::user();
+        if ($user === null) return false;
+        $statement = $db->prepare('UPDATE users SET auth_version = auth_version + 1 WHERE id = :id');
+        $statement->execute([':id' => (int)$user['id']]);
+        if ($statement->rowCount() !== 1) return false;
+        $version = $db->prepare('SELECT auth_version FROM users WHERE id = :id');
+        $version->execute([':id' => (int)$user['id']]);
+        $_SESSION['hostpilot_user']['auth_version'] = (int)$version->fetchColumn();
+        session_regenerate_id(true);
+        unset($_SESSION['hostpilot_csrf']);
+        return true;
+    }
+
+    public static function consumePasswordResetAttempt(): bool
+    {
+        return self::consumeRateLimit('password-reset', self::PASSWORD_RESET_IP_LIMIT);
     }
 
     public static function check(): bool
@@ -120,16 +175,16 @@ final class Auth
         return is_writable($directory) ? $directory : null;
     }
 
-    private static function rateLimitKey(string $ip): string
+    private static function rateLimitKey(string $ip, string $purpose = 'login'): string
     {
-        return hash('sha256', 'login-ip' . "\0" . $ip);
+        return hash('sha256', 'hostpilot-auth-' . $purpose . "\0" . $ip);
     }
 
-    private static function openRateLimitBucket(): ?array
+    private static function openRateLimitBucket(string $purpose = 'login'): ?array
     {
         $directory = self::rateLimitDirectory();
         if ($directory === null) return null;
-        $path = $directory . DIRECTORY_SEPARATOR . self::rateLimitKey((string)($_SERVER['REMOTE_ADDR'] ?? 'unknown')) . '.json';
+        $path = $directory . DIRECTORY_SEPARATOR . self::rateLimitKey((string)($_SERVER['REMOTE_ADDR'] ?? 'unknown'), $purpose) . '.json';
         $handle = @fopen($path, 'c+');
         if ($handle === false) return null;
         @chmod($path, 0600);
@@ -167,12 +222,17 @@ final class Auth
 
     private static function consumeAttempt(): bool
     {
-        $bucket = self::openRateLimitBucket();
+        return self::consumeRateLimit('login', self::IP_LIMIT);
+    }
+
+    private static function consumeRateLimit(string $purpose, int $limit): bool
+    {
+        $bucket = self::openRateLimitBucket($purpose);
         if ($bucket === null) {
             error_log('[HostPilot] Authentication rate limiter storage is unavailable; login denied.');
             return true;
         }
-        if ((int)$bucket['data']['attempts'] >= self::IP_LIMIT) {
+        if ((int)$bucket['data']['attempts'] >= $limit) {
             self::closeRateLimitBucket($bucket);
             return true;
         }
