@@ -15,16 +15,14 @@ final class Auth
     public static function attempt(PDO $db, string $identifier, string $password): bool
     {
         $identifier = strtolower(trim($identifier));
-        if ($identifier === '' || strlen($identifier) > 254 || self::isRateLimited($identifier)) {
-            return false;
-        }
+        if ($identifier === '' || strlen($identifier) > 254 || self::isRateLimited()) return false;
 
         $stmt = $db->prepare("SELECT id, name, email, password_hash, role, status FROM users WHERE email = :email OR username = :username LIMIT 1");
         $stmt->execute([':email' => $identifier, ':username' => $identifier]);
         $user = $stmt->fetch();
 
         if (!$user || ($user['status'] ?? '') !== 'active' || !password_verify($password, (string)$user['password_hash'])) {
-            self::recordFailure($identifier);
+            self::recordFailure();
             return false;
         }
 
@@ -53,7 +51,7 @@ final class Auth
         // Existing sessions are upgraded in place instead of being invalidated at rollout.
         $created = (int)($_SESSION['hostpilot_auth_created_at'] ?? $now);
         $last = (int)($_SESSION['hostpilot_auth_last_activity'] ?? $now);
-        if ($created <= 0 || $last <= 0 || ($now - $last) > self::IDLE_TIMEOUT || ($now - $created) > self::ABSOLUTE_TIMEOUT) {
+        if (self::sessionExpired($created, $last, $now)) {
             self::expireSession();
             return null;
         }
@@ -88,9 +86,7 @@ final class Auth
 
     public static function csrfToken(): string
     {
-        if (empty($_SESSION['hostpilot_csrf'])) {
-            $_SESSION['hostpilot_csrf'] = bin2hex(random_bytes(32));
-        }
+        if (empty($_SESSION['hostpilot_csrf'])) $_SESSION['hostpilot_csrf'] = bin2hex(random_bytes(32));
         return (string)$_SESSION['hostpilot_csrf'];
     }
 
@@ -124,40 +120,38 @@ final class Auth
         return is_writable($directory) ? $directory : null;
     }
 
-    private static function rateLimitKey(string $kind, string $value): string
+    private static function rateLimitKey(string $ip): string
     {
-        return hash('sha256', $kind . "\0" . $value);
+        return hash('sha256', 'login-ip' . "\0" . $ip);
     }
 
-    private static function readBucket(string $key): ?array
+    private static function openRateLimitBucket(): ?array
     {
         $directory = self::rateLimitDirectory();
         if ($directory === null) return null;
-        $path = $directory . DIRECTORY_SEPARATOR . $key . '.json';
+        $path = $directory . DIRECTORY_SEPARATOR . self::rateLimitKey((string)($_SERVER['REMOTE_ADDR'] ?? 'unknown')) . '.json';
         $handle = @fopen($path, 'c+');
         if ($handle === false) return null;
         @chmod($path, 0600);
-        try {
-            if (!flock($handle, LOCK_EX)) { fclose($handle); return null; }
-            rewind($handle);
-            $raw = stream_get_contents($handle);
-            $data = is_string($raw) ? json_decode($raw, true) : null;
-            $now = time();
-            if (!is_array($data) || (int)($data['window_started'] ?? 0) < ($now - self::RATE_WINDOW)) {
-                $data = ['window_started' => $now, 'attempts' => 0, 'locked_until' => 0];
-            }
-            return ['handle' => $handle, 'data' => $data];
-        } catch (\Throwable $e) {
-            error_log('[HostPilot] Authentication rate limiter failed: ' . $e->getMessage());
+        if (!flock($handle, LOCK_EX)) {
+            fclose($handle);
             return null;
         }
+        rewind($handle);
+        $raw = stream_get_contents($handle);
+        $data = is_string($raw) ? json_decode($raw, true) : null;
+        $now = time();
+        if (!is_array($data) || (int)($data['window_started'] ?? 0) < ($now - self::RATE_WINDOW)) {
+            $data = ['window_started' => $now, 'attempts' => 0, 'locked_until' => 0];
+        }
+        return ['handle' => $handle, 'data' => $data];
     }
 
-    private static function writeBucket(array $bucket): bool
+    private static function saveRateLimitBucket(array $bucket): bool
     {
-        $handle = $bucket['handle'];
         $json = json_encode($bucket['data'], JSON_UNESCAPED_SLASHES);
         if (!is_string($json)) return false;
+        $handle = $bucket['handle'];
         rewind($handle);
         if (!ftruncate($handle, 0)) return false;
         $written = fwrite($handle, $json);
@@ -165,50 +159,35 @@ final class Auth
         return $written === strlen($json);
     }
 
-    private static function closeBucket(array $bucket): void
+    private static function closeRateLimitBucket(array $bucket): void
     {
-        $handle = $bucket['handle'];
-        flock($handle, LOCK_UN);
-        fclose($handle);
+        flock($bucket['handle'], LOCK_UN);
+        fclose($bucket['handle']);
     }
 
-    private static function isRateLimited(string $identifier): bool
+    private static function isRateLimited(): bool
     {
-        $ip = (string)($_SERVER['REMOTE_ADDR'] ?? 'unknown');
-        $credential = self::readBucket(self::rateLimitKey('credential', $identifier . "\0" . $ip));
-        $ipBucket = self::readBucket(self::rateLimitKey('ip', $ip));
-        if ($credential === null || $ipBucket === null) {
-            if ($credential !== null) self::closeBucket($credential);
-            if ($ipBucket !== null) self::closeBucket($ipBucket);
+        $bucket = self::openRateLimitBucket();
+        if ($bucket === null) {
             error_log('[HostPilot] Authentication rate limiter storage is unavailable; login denied.');
             return true;
         }
-        $limited = (int)$credential['data']['locked_until'] > time()
-            || (int)$credential['data']['attempts'] >= self::CREDENTIAL_LIMIT
-            || (int)$ipBucket['data']['locked_until'] > time()
-            || (int)$ipBucket['data']['attempts'] >= self::IP_LIMIT;
-        self::closeBucket($credential);
-        self::closeBucket($ipBucket);
+        $limited = (int)$bucket['data']['locked_until'] > time()
+            || (int)$bucket['data']['attempts'] >= self::IP_LIMIT;
+        self::closeRateLimitBucket($bucket);
         return $limited;
     }
 
-    private static function recordFailure(string $identifier): void
+    private static function recordFailure(): void
     {
-        $ip = (string)($_SERVER['REMOTE_ADDR'] ?? 'unknown');
-        foreach ([
-            [self::rateLimitKey('credential', $identifier . "\0" . $ip), self::CREDENTIAL_LIMIT],
-            [self::rateLimitKey('ip', $ip), self::IP_LIMIT],
-        ] as [$key, $limit]) {
-            $bucket = self::readBucket($key);
-            if ($bucket === null) {
-                error_log('[HostPilot] Unable to persist authentication failure counter.');
-                continue;
-            }
-            $bucket['data']['attempts'] = (int)$bucket['data']['attempts'] + 1;
-            if ($bucket['data']['attempts'] >= $limit) $bucket['data']['locked_until'] = time() + self::RATE_WINDOW;
-            self::writeBucket($bucket);
-            self::closeBucket($bucket);
+        $bucket = self::openRateLimitBucket();
+        if ($bucket === null) {
+            error_log('[HostPilot] Unable to persist authentication failure counter.');
+            return;
         }
+        $bucket['data']['attempts'] = (int)$bucket['data']['attempts'] + 1;
+        if ($bucket['data']['attempts'] >= self::IP_LIMIT) $bucket['data']['locked_until'] = time() + self::RATE_WINDOW;
+        if (!self::saveRateLimitBucket($bucket)) error_log('[HostPilot] Unable to save authentication failure counter.');
+        self::closeRateLimitBucket($bucket);
     }
-
 }
