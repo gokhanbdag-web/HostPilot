@@ -4,45 +4,36 @@ New schema changes belong in this directory as UTF-8 SQL files.
 
 ## Naming and ordering
 
-Use a unique, monotonically increasing filename:
+Use a unique, monotonically increasing filename in YYYYMMDD_NNNN_short_description.sql format. Files are applied in lexicographic filename order. The filename without .sql is the migration key stored in the existing migrations table. Never rename or edit a migration after it has been applied to a customer database; create a new forward migration instead.
 
-**YYYYMMDD_NNNN_short_description.sql**
+## Current inventory
 
-Example: **20261114_0001_add_customer_locale.sql**.
+The 17 historical migrations from app/Core/Schema.php and two standalone PHP migrations have corresponding SQL files: 19 migration files total. The filenames preserve the exact identifiers already stored in customer databases.
 
-Files are applied in lexicographic filename order. The filename without .sql is the migration key stored in the existing migrations table. Never rename or edit a migration after it has been applied to a customer database; create a new forward migration instead.
+The legacy Schema::migrate(), PasswordResetMigration::migrate(), and AdminProfileMigration::migrate() paths remain active for compatibility. The SQL runner is deliberately not wired into the public front controller or production update flow yet. This avoids changing customer databases before real MySQL/MariaDB integration and schema-parity checks pass.
 
-## Legacy conversion status
+## Runner behavior
 
-The 17 historical migrations from `app/Core/Schema.php` now have corresponding SQL files in this directory. Their filenames preserve the exact identifiers already stored in customer databases, so the runner can skip already-applied versions.
+HostPilot\Core\MigrationRunner provides ordered discovery, pending-version lookup, SQL statement splitting, MySQL advisory locking, and explicit runPending(..., true) execution. It records a migration only after every statement in its file succeeds.
 
-The legacy `Schema::migrate()` path remains active for compatibility. The new SQL files are staged for review and are **not yet wired into the installer, front controller, or production upgrade flow**. Do not remove or bypass the legacy PHP migrations until clean-install and representative-upgrade equivalence tests have passed.
+MySQL DDL may implicitly commit. A partially executed migration therefore cannot be assumed to roll back. Every migration must be safe to retry after partial DDL. The runner refuses execution unless its caller supplies explicit confirmation; that boolean is a guardrail, not an authorization system. Production callers must independently enforce authenticated administrator permissions, CSRF protection, a verified backup, maintenance mode, and audit logging.
 
-Two additional PHP migrations outside the 17-entry `Schema.php` list have also been converted:
-- `20261113_0016_admin_password_resets` creates the password reset token table.
-- `20261113_0017_admin_first_last_name` adds the profile name columns conditionally and preserves the legacy user-name backfill.
+## Test coverage
 
-All 19 currently identified PHP migration keys now have corresponding ordered SQL files. The PHP migration classes remain in place for compatibility; no installer or runtime cutover has occurred.
+- Parser/discovery tests verify statement splitting and the exact ordered list of all 19 migration keys.
+- tests/migration_integration.php executes the complete SQL migration set against a dedicated disposable database. It checks a partial-DDL retry, the confirmation guard, tracking records, expected tables, and a second run as a no-op.
+- GitHub Actions runs the integration test on both MySQL 8.0 and MariaDB 10.11 using isolated service containers. The test refuses to run unless the database name is exactly hostpilot_ci.
+- These tests validate SQL execution and retry safety; they do not yet prove structural equivalence with every legacy PHP migration path.
 
-## Safety rules
+## Production activation gate
 
-- Prefer additive, backward-compatible changes.
-- Use idempotent DDL (CREATE TABLE IF NOT EXISTS, guarded/index-aware operations where needed). MySQL DDL may implicitly commit, so a failed file can be retried only if its statements are safe to repeat.
-- Conditional legacy column, index, and constraint additions use information_schema checks and prepared DDL statements; validate this strategy against the minimum supported MySQL and MariaDB versions.
-- The historical domain-renewal tracking migration includes a data UPDATE. Its columns are added first and the UPDATE is intentionally scoped to rows still in the legacy `pending_remote` state.
-- Do not put destructive data changes, credential changes, or irreversible operations in a routine migration.
-- Test against supported MySQL/MariaDB versions and a copy of representative data.
-- Production upgrades must require an authenticated administrator, explicit confirmation, a verified database backup, and a maintenance/lock strategy.
-- Never run migrations from ordinary storefront requests.
+Do not connect the SQL runner to normal storefront requests. Before production activation:
 
-HostPilot\\Core\\MigrationRunner provides ordered discovery, pending-version lookup, SQL statement splitting, advisory locking, and an explicit runPending(..., true) execution method. It is intentionally not wired into the public front controller yet.
+1. Compare every SQL file with its original PHP DDL and data changes.
+2. Test a fresh install and representative legacy-upgrade snapshots, then compare resulting table/column/index/foreign-key definitions.
+3. Verify database and file backup creation and perform a restore rehearsal.
+4. Implement a browser-based, authenticated admin upgrade screen with CSRF, explicit confirmation, maintenance/lock mode, progress and failure logs.
+5. Verify partial-failure recovery and retry against both supported database engines.
+6. Only then switch new installs and controlled upgrades to the shared SQL migration directory.
 
-The parser test also verifies that all 19 converted SQL files are discovered in their historical order and can be split into statements. This is not a substitute for executing them against real MySQL/MariaDB databases.
-
-## Remaining work before activation
-
-1. Convert the two standalone PHP migrations listed above.
-2. Compare every SQL file against the original PHP DDL and data changes.
-3. Add clean-install, already-upgraded, partially-applied/retry, and repeated-run tests on supported MySQL/MariaDB versions.
-4. Verify backup and restore, maintenance mode, authenticated admin confirmation, and failure recovery.
-5. Only then switch new installs and controlled upgrades to the shared SQL migration directory.
+No production database migration is run by the CI workflow.
