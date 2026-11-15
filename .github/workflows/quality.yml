@@ -33,6 +33,8 @@ jobs:
         run: php tests/migration_runner.php
       - name: Test authentication session policy
         run: php tests/auth_session_security.php
+      - name: Test centralized admin authorization
+        run: php tests/authorization.php
       - name: Prevent Composer dependency
         run: |
           if [ -f composer.json ] || [ -f composer.lock ]; then echo "HostPilot must remain installable without Composer."; exit 1; fi

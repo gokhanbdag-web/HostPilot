@@ -101,3 +101,11 @@ Reference: https://owasp.org/www-project-application-security-verification-stand
 - Authenticated sessions expire after 30 minutes of inactivity or 12 hours absolute lifetime. Existing sessions receive timestamps on their first request after rollout.
 - Session IDs are regenerated after successful login; the CSRF token is rotated. Logout clears session data and expires the session cookie.
 - These controls are an initial security slice, not a substitute for centralized RBAC, MFA, audit trails, or full session revocation.
+
+
+## 12. Central admin route authorization (Stage 2)
+
+- Admin requests pass through a centralized, deny-by-default permission map before controller dispatch.
+- `super_admin` and `admin` retain the full administrative capability set; `staff` receives an explicit least-privilege allow-list for dashboard, customer/report viewing, support, catalogue, order/invoice viewing, and logout.
+- Unknown admin routes and unsupported HTTP methods are denied. Existing controller-level checks and CSRF validation remain in place as defense in depth.
+- Permission grants are currently code-defined; editable per-staff permissions and support-department scoping remain future Stage 2 work.

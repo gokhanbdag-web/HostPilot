@@ -75,6 +75,21 @@ if (is_file($maintenanceFile) && !in_array($requestPath, $maintenanceAllowedPath
     exit;
 }
 
+if (\HostPilot\Core\Authorization::isAdminPath($requestPath)
+    && !\HostPilot\Core\Authorization::isPublicRoute($requestPath)) {
+    $adminUser = \HostPilot\Core\Auth::user();
+    if ($adminUser === null) {
+        header('Location: ' . $basePath . '/admin/login');
+        exit;
+    }
+    if (!\HostPilot\Core\Authorization::allowsAdminRequest($requestPath, $method, $adminUser)) {
+        http_response_code(403);
+        header('Content-Type: text/plain; charset=utf-8');
+        echo 'Bu yönetim işlemi için yetkiniz yok.';
+        exit;
+    }
+}
+
 if ($requestPath === '/admin/database-upgrade' && in_array($method, ['GET', 'POST'], true)) {
     (new \HostPilot\Http\DatabaseUpgradeController(
         $pdo,
