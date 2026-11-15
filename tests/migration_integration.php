@@ -31,6 +31,9 @@ $pdo->exec("CREATE TABLE migrations (
     UNIQUE KEY uq_migrations_name (migration)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+$pdo->prepare("INSERT INTO users (name,first_name,last_name,email,username,password_hash,role,status,created_at,updated_at) VALUES ('Ada Lovelace',NULL,NULL,:email,:username,'test-hash','admin','active',UTC_TIMESTAMP(),UTC_TIMESTAMP())")
+    ->execute([':email' => 'ada@example.test', ':username' => 'ada-admin']);
+
 $directory = dirname(__DIR__) . '/database/migrations';
 $files = MigrationRunner::discover($directory);
 if (count($files) !== 20) throw new RuntimeException('Expected 20 SQL migrations; discovered ' . count($files) . '.');
@@ -61,7 +64,7 @@ foreach ($requiredTables as $table) {
     $check->execute([':table_name' => $table]);
     if ((int)$check->fetchColumn() !== 1) throw new RuntimeException('Expected table was not created: ' . $table);
 }
-echo 'MySQL/MariaDB migration integration passed: 19 migrations, partial-DDL retry, confirmation guard, tracking and idempotent second run.' . PHP_EOL;
+echo 'MySQL/MariaDB migration integration passed: 20 migrations, partial-DDL retry, confirmation guard, tracking and idempotent second run.' . PHP_EOL;
 
 // Compare the SQL migration path with the retained legacy PHP migration path
 // on an independent clean schema. This remains an ephemeral CI-only database.
@@ -93,8 +96,6 @@ $legacy->exec("CREATE TABLE migrations (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 $seedUser = $legacy->prepare("INSERT INTO users (name,first_name,last_name,email,username,password_hash,role,status,created_at,updated_at) VALUES ('Ada Lovelace',NULL,NULL,:email,:username,'test-hash','admin','active',UTC_TIMESTAMP(),UTC_TIMESTAMP())");
 $seedUser->execute([':email' => 'ada@example.test', ':username' => 'ada-admin']);
-$pdo->prepare("INSERT INTO users (name,first_name,last_name,email,username,password_hash,role,status,created_at,updated_at) VALUES ('Ada Lovelace',NULL,NULL,:email,:username,'test-hash','admin','active',UTC_TIMESTAMP(),UTC_TIMESTAMP())")
-    ->execute([':email' => 'ada@example.test', ':username' => 'ada-admin']);
 
 require_once dirname(__DIR__) . '/app/Core/Schema.php';
 require_once dirname(__DIR__) . '/app/Core/PasswordResetMigration.php';
