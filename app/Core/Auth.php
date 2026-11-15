@@ -15,14 +15,13 @@ final class Auth
     public static function attempt(PDO $db, string $identifier, string $password): bool
     {
         $identifier = strtolower(trim($identifier));
-        if ($identifier === '' || strlen($identifier) > 254 || self::isRateLimited()) return false;
+        if ($identifier === '' || strlen($identifier) > 254 || self::consumeAttempt()) return false;
 
         $stmt = $db->prepare("SELECT id, name, email, password_hash, role, status FROM users WHERE email = :email OR username = :username LIMIT 1");
         $stmt->execute([':email' => $identifier, ':username' => $identifier]);
         $user = $stmt->fetch();
 
         if (!$user || ($user['status'] ?? '') !== 'active' || !password_verify($password, (string)$user['password_hash'])) {
-            self::recordFailure();
             return false;
         }
 
@@ -36,6 +35,7 @@ final class Auth
         $_SESSION['hostpilot_auth_created_at'] = time();
         $_SESSION['hostpilot_auth_last_activity'] = time();
         unset($_SESSION['hostpilot_csrf']);
+        self::clearRateLimitBucket();
 
         $update = $db->prepare('UPDATE users SET last_login_at = UTC_TIMESTAMP() WHERE id = :id');
         $update->execute([':id' => (int)$user['id']]);
@@ -142,7 +142,7 @@ final class Auth
         $data = is_string($raw) ? json_decode($raw, true) : null;
         $now = time();
         if (!is_array($data) || (int)($data['window_started'] ?? 0) < ($now - self::RATE_WINDOW)) {
-            $data = ['window_started' => $now, 'attempts' => 0, 'locked_until' => 0];
+            $data = ['window_started' => $now, 'attempts' => 0];
         }
         return ['handle' => $handle, 'data' => $data];
     }
@@ -165,29 +165,30 @@ final class Auth
         fclose($bucket['handle']);
     }
 
-    private static function isRateLimited(): bool
+    private static function consumeAttempt(): bool
     {
         $bucket = self::openRateLimitBucket();
         if ($bucket === null) {
             error_log('[HostPilot] Authentication rate limiter storage is unavailable; login denied.');
             return true;
         }
-        $limited = (int)$bucket['data']['locked_until'] > time()
-            || (int)$bucket['data']['attempts'] >= self::IP_LIMIT;
-        self::closeRateLimitBucket($bucket);
-        return $limited;
-    }
-
-    private static function recordFailure(): void
-    {
-        $bucket = self::openRateLimitBucket();
-        if ($bucket === null) {
-            error_log('[HostPilot] Unable to persist authentication failure counter.');
-            return;
+        if ((int)$bucket['data']['attempts'] >= self::IP_LIMIT) {
+            self::closeRateLimitBucket($bucket);
+            return true;
         }
         $bucket['data']['attempts'] = (int)$bucket['data']['attempts'] + 1;
-        if ($bucket['data']['attempts'] >= self::IP_LIMIT) $bucket['data']['locked_until'] = time() + self::RATE_WINDOW;
-        if (!self::saveRateLimitBucket($bucket)) error_log('[HostPilot] Unable to save authentication failure counter.');
+        $saved = self::saveRateLimitBucket($bucket);
+        self::closeRateLimitBucket($bucket);
+        if (!$saved) error_log('[HostPilot] Authentication rate limit counter could not be saved; login denied.');
+        return !$saved;
+    }
+
+    private static function clearRateLimitBucket(): void
+    {
+        $bucket = self::openRateLimitBucket();
+        if ($bucket === null) return;
+        $bucket['data'] = ['window_started' => time(), 'attempts' => 0];
+        if (!self::saveRateLimitBucket($bucket)) error_log('[HostPilot] Authentication rate limit counter could not be reset.');
         self::closeRateLimitBucket($bucket);
     }
 }
