@@ -1,9 +1,6 @@
 <?php
 declare(strict_types=1);
 
-use PDO;
-use RuntimeException;
-
 $host = getenv('HOSTPILOT_DB_HOST') ?: '127.0.0.1';
 $port = (int)(getenv('HOSTPILOT_DB_PORT') ?: 3306);
 $user = getenv('HOSTPILOT_DB_USER') ?: '';
