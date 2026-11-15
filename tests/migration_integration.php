@@ -130,11 +130,19 @@ $schemaSignature = static function (PDO $connection): array {
 $sqlSignature = $schemaSignature($pdo);
 $legacySignature = $schemaSignature($legacy);
 if ($sqlSignature !== $legacySignature) {
-    $sqlTables = array_keys($sqlSignature);
-    $legacyTables = array_keys($legacySignature);
-    $missingInSql = array_values(array_diff($legacyTables, $sqlTables));
-    $missingInLegacy = array_values(array_diff($sqlTables, $legacyTables));
-    throw new RuntimeException('SQL/legacy schema parity failed. Missing in SQL: ' . implode(',', $missingInSql) . '; missing in legacy: ' . implode(',', $missingInLegacy) . '. Inspect table signatures in CI logs.');
+    $differences = [];
+    foreach (array_unique(array_merge(array_keys($sqlSignature), array_keys($legacySignature))) as $table) {
+        if (!isset($sqlSignature[$table]) || !isset($legacySignature[$table])) {
+            $differences[$table] = ['sql_exists' => isset($sqlSignature[$table]), 'legacy_exists' => isset($legacySignature[$table])];
+            continue;
+        }
+        foreach (['columns', 'indexes', 'foreign_keys'] as $kind) {
+            if ($sqlSignature[$table][$kind] !== $legacySignature[$table][$kind]) {
+                $differences[$table][$kind] = ['sql' => $sqlSignature[$table][$kind], 'legacy' => $legacySignature[$table][$kind]];
+            }
+        }
+    }
+    throw new RuntimeException('SQL/legacy schema parity failed: ' . json_encode($differences, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT));
 }
 
 foreach ([$pdo, $legacy] as $connection) {
