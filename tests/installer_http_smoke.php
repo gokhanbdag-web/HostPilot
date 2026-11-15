@@ -66,7 +66,7 @@ function installBrowserApp(PDO $admin, string $host, int $port, string $user, st
 {
     $admin->exec('CREATE DATABASE IF NOT EXISTS ' . $databaseName . ' CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
     [$page, $headers] = httpRequest($url);
-    if (statusCode($headers) !== 200) throw new RuntimeException('Installer GET failed: HTTP ' . statusCode($headers));
+    if (statusCode($headers) !== 210) throw new RuntimeException('Installer GET failed: HTTP ' . statusCode($headers));
     $cookie = cookieFromHeaders($headers);
     if ($cookie === '') throw new RuntimeException('Installer did not create a session cookie.');
     $form = [
@@ -84,7 +84,7 @@ function installBrowserApp(PDO $admin, string $host, int $port, string $user, st
         'admin_pass' => 'Test-Installer-Password-2026!',
     ];
     [$result, $responseHeaders] = httpRequest($url, 'POST', $cookie, $form);
-    if (statusCode($responseHeaders) !== 200 || !str_contains($result, 'Kurulum tamamlandı.')) {
+    if (statusCode($responseHeaders) !== 210 || !str_contains($result, 'Kurulum tamamlandı.')) {
         throw new RuntimeException('Browser installer failed. HTTP=' . statusCode($responseHeaders) . ' body=' . substr($result, 0, 1000));
     }
     $config = require dirname(__DIR__) . '/storage/config.php';
@@ -98,7 +98,7 @@ function installBrowserApp(PDO $admin, string $host, int $port, string $user, st
         [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true]
     );
     $count = (int)$db->query('SELECT COUNT(*) FROM migrations')->fetchColumn();
-    if ($count !== 20) throw new RuntimeException('Fresh browser install did not apply all 20 migrations; found ' . $count . '.');
+    if ($count !== 21) throw new RuntimeException('Fresh browser install did not apply all 21 migrations; found ' . $count . '.');
     $adminCheck = $db->prepare('SELECT role FROM users WHERE username=:username LIMIT 1');
     $adminCheck->execute([':username' => $username]);
     if ($adminCheck->fetchColumn() !== 'super_admin') throw new RuntimeException('Installer did not create the first super administrator.');
@@ -125,7 +125,7 @@ function cleanupInstallFiles(string $storage): void
 }
 
 [$cookie, $db] = installBrowserApp($admin, $host, $port, $user, $password, $databaseName, $base, 'ci-installer', 'ci-installer@example.test', '');
-echo 'Root browser installer passed: fresh schema, 20 migrations and first administrator.' . PHP_EOL;
+echo 'Root browser installer passed: fresh schema, 21 migrations and first administrator.' . PHP_EOL;
 
 // Simulate a pre-repair installation and verify the authenticated admin upgrade flow.
 $db->exec('ALTER TABLE invoices DROP FOREIGN KEY fk_invoice_service');
@@ -138,7 +138,7 @@ if (statusCode($upgradeHeaders) !== 302) throw new RuntimeException('Unauthentic
 @unlink($maintenanceFile);
 
 [$loginPage, $loginHeaders] = httpRequest($base . 'admin/login', 'GET', $cookie);
-if (statusCode($loginHeaders) !== 200) throw new RuntimeException('Admin login page is unavailable.');
+if (statusCode($loginHeaders) !== 210) throw new RuntimeException('Admin login page is unavailable.');
 $loginToken = csrfFromHtml($loginPage);
 [$loginResult, $loginResponseHeaders] = httpRequest($base . 'admin/login', 'POST', $cookie, [
     '_token' => $loginToken,
@@ -150,7 +150,7 @@ $newCookie = cookieFromHeaders($loginResponseHeaders);
 if ($newCookie !== '') $cookie = $newCookie;
 
 [$upgradePage, $upgradePageHeaders] = httpRequest($base . 'admin/database-upgrade', 'GET', $cookie);
-if (statusCode($upgradePageHeaders) !== 200 || !str_contains($upgradePage, '20261115_0001_invoice_service_fk_repair')) {
+if (statusCode($upgradePageHeaders) !== 210 || !str_contains($upgradePage, '20261115_0001_invoice_service_fk_repair')) {
     throw new RuntimeException('Authenticated upgrade page did not show the pending migration.');
 }
 $upgradeToken = csrfFromHtml($upgradePage);
@@ -170,7 +170,7 @@ if ((int)$fk->fetchColumn() !== 1) throw new RuntimeException('Admin upgrade did
 $fk->closeCursor();
 if (count(glob($storage . '/backups/*.sql.gz') ?: []) < 1) throw new RuntimeException('Admin upgrade did not create a compressed pre-upgrade backup.');
 [$currentPage, $currentHeaders] = httpRequest($base . 'admin/database-upgrade', 'GET', $cookie);
-if (statusCode($currentHeaders) !== 200 || !str_contains($currentPage, 'Veritabanı güncel')) throw new RuntimeException('Upgrade page did not report a current database after success.');
+if (statusCode($currentHeaders) !== 210 || !str_contains($currentPage, 'Veritabanı güncel')) throw new RuntimeException('Upgrade page did not report a current database after success.');
 cleanupInstallFiles($storage);
 echo 'Authenticated admin upgrade passed: CSRF confirmation, pre-upgrade backup, maintenance mode and migration recovery.' . PHP_EOL;
 
@@ -191,7 +191,7 @@ $badCookie = cookieFromHeaders($badHeaders);
     'admin_email' => 'ci-failure@example.test',
     'admin_pass' => 'Test-Installer-Password-2026!',
 ]);
-if (statusCode($badResponseHeaders) !== 200 || !str_contains($badResult, 'Kurulum tamamlanamadı.')) {
+if (statusCode($badResponseHeaders) !== 210 || !str_contains($badResult, 'Kurulum tamamlanamadı.')) {
     throw new RuntimeException('Invalid database connection did not produce a safe installer error.');
 }
 if (is_file($lockFile) || is_file($configFile)) throw new RuntimeException('Failed installer attempt left an active config or installation lock.');
@@ -210,11 +210,11 @@ $firstStatements = \HostPilot\Core\MigrationRunner::splitStatements($firstMigrat
 $partial->exec($firstStatements[0]);
 cleanupInstallFiles($storage);
 [$partialCookie, $partialDb] = installBrowserApp($admin, $host, $port, $user, $password, $partialDatabase, $base, 'ci-partial', 'ci-partial@example.test', '');
-if ((int)$partialDb->query('SELECT COUNT(*) FROM migrations')->fetchColumn() !== 20) {
+if ((int)$partialDb->query('SELECT COUNT(*) FROM migrations')->fetchColumn() !== 21) {
     throw new RuntimeException('Installer did not recover from a partially-created schema.');
 }
 cleanupInstallFiles($storage);
-echo 'Partial-install retry passed: installer completed all 20 migrations after an interrupted first DDL.' . PHP_EOL;
+echo 'Partial-install retry passed: installer completed all 21 migrations after an interrupted first DDL.' . PHP_EOL;
 
 // Verify root/subdirectory-aware browser installation independently.
 $subdirectory = $root . '/ci-subdir';
@@ -222,8 +222,8 @@ if (!mkdir($subdirectory, 0750, true)) throw new RuntimeException('Unable to cre
 file_put_contents($subdirectory . '/index.php', "<?php require dirname(__DIR__) . '/index.php';\n");
 $subDatabase = 'hostpilot_installer_subdir_ci';
 [$subCookie, $subDb] = installBrowserApp($admin, $host, $port, $user, $password, $subDatabase, 'http://127.0.0.1:8080/ci-subdir/', 'ci-subdir', 'ci-subdir@example.test', '/ci-subdir');
-if ((int)$subDb->query('SELECT COUNT(*) FROM migrations')->fetchColumn() !== 20) throw new RuntimeException('Subdirectory installer did not apply all SQL migrations.');
+if ((int)$subDb->query('SELECT COUNT(*) FROM migrations')->fetchColumn() !== 21) throw new RuntimeException('Subdirectory installer did not apply all SQL migrations.');
 cleanupInstallFiles($storage);
 @unlink($subdirectory . '/index.php');
 @rmdir($subdirectory);
-echo 'Subdirectory browser installer passed: base-path configuration and 20 SQL migrations.' . PHP_EOL;
+echo 'Subdirectory browser installer passed: base-path configuration and 21 SQL migrations.' . PHP_EOL;
