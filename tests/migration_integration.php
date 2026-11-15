@@ -183,7 +183,7 @@ if ($legacyPending !== ['20261115_0002_staff_permissions_departments', '20261115
     throw new RuntimeException('SQL runner did not isolate the new staff permission migration on a legacy-upgraded database: ' . json_encode($legacyPending));
 }
 $legacyApplied = MigrationRunner::runPending($legacy, $directory, true);
-if ($legacyApplied !== ['20261115_0002_staff_permissions_departments', '20261115_0003_customer_email_verification', '20261115_0004_user_auth_version']) {
+if ($legacyApplied !== ['20261115_0002_staff_permissions_departments', '20261115_0003_customer_email_verification', '20261115_0004_user_auth_version', '20261115_0005_security_audit_logs']) {
     throw new RuntimeException('SQL runner did not apply only the pending Stage 2 security migrations to a legacy-upgraded database.');
 }
 if (MigrationRunner::pending($legacy, $directory) !== []) {
