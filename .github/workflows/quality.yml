@@ -33,6 +33,8 @@ jobs:
         run: php tests/migration_runner.php
       - name: Test authentication session policy
         run: php tests/auth_session_security.php
+      - name: Test login rate limiting
+        run: php tests/auth_rate_limit.php
       - name: Test centralized admin authorization
         run: php tests/authorization.php
       - name: Prevent Composer dependency
