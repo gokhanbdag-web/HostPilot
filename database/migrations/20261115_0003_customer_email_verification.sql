@@ -1,3 +1,12 @@
+SET @hostpilot_email_verified_column = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='email_verified_at') = 0,
+    'ALTER TABLE users ADD COLUMN email_verified_at DATETIME NULL AFTER status',
+    'DO 0'
+);
+PREPARE hostpilot_email_verified_stmt FROM @hostpilot_email_verified_column;
+EXECUTE hostpilot_email_verified_stmt;
+DEALLOCATE PREPARE hostpilot_email_verified_stmt;
+
 CREATE TABLE IF NOT EXISTS email_verification_tokens (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     user_id BIGINT UNSIGNED NOT NULL,
