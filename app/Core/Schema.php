@@ -471,5 +471,22 @@ final class Schema
         }
 
 
+        // Forward repair: the legacy billing-lifecycle migration did not execute
+        // its foreign-key existence query before casting the statement to int.
+        // Keep the historical migration immutable and repair the intended FK here.
+        $invoiceServiceFkRepair = '20261115_0001_invoice_service_fk_repair';
+        $repairCheck = $db->prepare('SELECT id FROM migrations WHERE migration=:name LIMIT 1');
+        $repairCheck->execute([':name' => $invoiceServiceFkRepair]);
+        if (!$repairCheck->fetchColumn()) {
+            $foreignKey = $db->prepare("SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() AND TABLE_NAME='invoices' AND CONSTRAINT_NAME='fk_invoice_service'");
+            $foreignKey->execute();
+            if (!(int)$foreignKey->fetchColumn()) {
+                $db->exec('ALTER TABLE invoices ADD CONSTRAINT fk_invoice_service FOREIGN KEY(service_id) REFERENCES services(id) ON DELETE SET NULL');
+            }
+            $record = $db->prepare('INSERT IGNORE INTO migrations(migration,batch,applied_at) VALUES(:name,18,:applied)');
+            $record->execute([':name' => $invoiceServiceFkRepair, ':applied' => gmdate('Y-m-d H:i:s')]);
+        }
+
+
     }
 }

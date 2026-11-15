@@ -1,6 +1,6 @@
 # Legacy schema migration conversion audit
 
-The SQL migration directory contains the 17 identifiers historically run by app/Core/Schema.php, plus the two standalone migrations for password reset tokens and admin first/last names. The original PHP migration implementations remain in place and are still the active application path.
+The SQL migration directory contains the 17 identifiers historically run by app/Core/Schema.php, plus the two standalone migrations for password reset tokens and admin first/last names, and one forward repair migration for the invoice/service foreign key. The original PHP migration implementations remain in place and are still the active application path.
 
 ## Identifier mapping
 
@@ -25,11 +25,12 @@ The SQL filenames preserve the exact migration keys already stored in customer d
 17. 20261112_0017_domain_expiry_sync_queue
 18. 20261113_0016_admin_password_resets
 19. 20261113_0017_admin_first_last_name
+20. 20261115_0001_invoice_service_fk_repair
 
 ## Conversion-sensitive operations
 
 - Migration 3 conditionally adds server and provisioning columns to services, then adds its foreign key only if absent.
-- Migration 5 conditionally adds invoice/service lifecycle columns, indexes and a foreign key.
+- Migration 5 conditionally adds invoice/service lifecycle columns and indexes. The legacy PHP implementation's FK existence statement was never executed; migration 20 repairs the missing invoice/service foreign key on already-upgraded databases.
 - Migrations 6, 7, 9, 12, 13, 15, 16 and 17 contain guarded column/index/constraint operations.
 - Migration 15 adds the registrar action tracking columns before its data update. The update is scoped to legacy rows still in pending_remote with no action_eaq_id.
 - The password reset migration creates a token table with unique token hashes and user relationship.
@@ -37,8 +38,8 @@ The SQL filenames preserve the exact migration keys already stored in customer d
 
 ## Verification status
 
-- [x] All 19 migration identifiers have matching SQL files.
-- [x] Parser/discovery test asserts all 19 identifiers in order.
+- [x] All 20 migration identifiers have matching SQL files.
+- [x] Parser/discovery test asserts all 20 identifiers in order.
 - [x] SQL splitter checks semicolons in comments and quoted values.
 - [x] Runner refuses execution without explicit confirmation and uses a MySQL advisory lock.
 - [x] Dedicated MySQL 8.0 and MariaDB 10.11 integration tests added to CI, including partial-DDL retry and repeated-run checks.

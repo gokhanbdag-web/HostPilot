@@ -8,7 +8,7 @@ Use a unique, monotonically increasing filename in YYYYMMDD_NNNN_short_descripti
 
 ## Current inventory
 
-The 17 historical migrations from app/Core/Schema.php and two standalone PHP migrations have corresponding SQL files: 19 migration files total. The filenames preserve the exact identifiers already stored in customer databases.
+The 17 historical migrations from app/Core/Schema.php and two standalone PHP migrations have corresponding SQL files: 20 migration files total. The 19 historical filenames preserve the exact identifiers already stored in customer databases; one new forward repair migration addresses a legacy foreign-key omission.
 
 The legacy Schema::migrate(), PasswordResetMigration::migrate(), and AdminProfileMigration::migrate() paths remain active for compatibility. The SQL runner is deliberately not wired into the public front controller or production update flow yet. This avoids changing customer databases before real MySQL/MariaDB integration and schema-parity checks pass.
 
@@ -20,7 +20,7 @@ MySQL DDL may implicitly commit. A partially executed migration therefore cannot
 
 ## Test coverage
 
-- Parser/discovery tests verify statement splitting and the exact ordered list of all 19 migration keys.
+- Parser/discovery tests verify statement splitting and the exact ordered list of all 20 migration keys.
 - tests/migration_integration.php executes the complete SQL migration set against a dedicated disposable database. It checks a partial-DDL retry, the confirmation guard, tracking records, expected tables, and a second run as a no-op.
 - GitHub Actions runs the integration test on both MySQL 8.0 and MariaDB 10.11 using isolated service containers. The test refuses to run unless the database name is exactly hostpilot_ci.
 - These tests validate SQL execution and retry safety; they do not yet prove structural equivalence with every legacy PHP migration path.

@@ -33,7 +33,7 @@ $pdo->exec("CREATE TABLE migrations (
 
 $directory = dirname(__DIR__) . '/database/migrations';
 $files = MigrationRunner::discover($directory);
-if (count($files) !== 19) throw new RuntimeException('Expected 19 SQL migrations; discovered ' . count($files) . '.');
+if (count($files) !== 20) throw new RuntimeException('Expected 20 SQL migrations; discovered ' . count($files) . '.');
 
 // Simulate interruption after the first DDL statement; the migration must safely retry.
 $firstSql = file_get_contents($files[0]['path']);
@@ -49,9 +49,9 @@ try {
     if (!str_contains($exception->getMessage(), 'Explicit administrator confirmation')) throw $exception;
 }
 $applied = MigrationRunner::runPending($pdo, $directory, true);
-if (count($applied) !== 19) throw new RuntimeException('Expected 19 applied migrations; got ' . count($applied) . '.');
+if (count($applied) !== 20) throw new RuntimeException('Expected 20 applied migrations; got ' . count($applied) . '.');
 $appliedCount = (int)$pdo->query('SELECT COUNT(*) FROM migrations')->fetchColumn();
-if ($appliedCount !== 19) throw new RuntimeException('Expected exactly 19 migration tracking rows.');
+if ($appliedCount !== 20) throw new RuntimeException('Expected exactly 20 migration tracking rows.');
 if (MigrationRunner::pending($pdo, $directory) !== []) throw new RuntimeException('Pending migrations remain after successful run.');
 if (MigrationRunner::runPending($pdo, $directory, true) !== []) throw new RuntimeException('Second run was not a no-op.');
 
