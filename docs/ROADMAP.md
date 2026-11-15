@@ -15,14 +15,19 @@
 **Exit criteria:** Reviewed requirements, database model, route/module boundaries, and test plan.
 
 ## Phase 1 — Core framework and installer
-- [x] Root front controller and subdirectory-aware route dispatch (initial routes only).
-- [ ] Configuration loader, environment checks, logging, error handling.
-- [x] Browser installer with DB credentials, admin identity, app URL, locale, generated encryption key, and single/multi-vendor selection (initial implementation; hardening remains).
-- [ ] Full migration/seed manager and upgrade UI (initial idempotent catalogue migration runner added).
-- [ ] Installation lock and protected storage.
-- [ ] Root and nested-subdirectory installation test matrix.
 
-**Exit criteria:** Fresh install on supported shared hosting without Composer, SSH, or CLI.
+- [x] Root front controller and subdirectory-aware route dispatch.
+- [ ] Centralized application logging and global error handling (migration-specific audit logging is implemented; application-wide consolidation remains).
+- [x] Browser installer with database credentials, administrator identity, single/multi-vendor selection, protected configuration and installation lock.
+- [x] Server preflight checks for PHP 8.2+, PDO, PDO MySQL, OpenSSL, zlib and storage write permission; cURL status is shown for external integrations.
+- [x] Shared ordered SQL migration runner used by fresh installation and authenticated existing-install upgrades.
+- [x] Migration tracking, advisory lock, explicit admin confirmation, retry-safe partial DDL behavior and migration history.
+- [x] Pre-upgrade compressed database backup with integrity verification; CI restore rehearsal.
+- [x] Maintenance mode, public HTTP 503 response, authenticated upgrade route, CSRF confirmation, failure logging and safe retry/recovery.
+- [x] Root and nested-subdirectory browser installer tests; invalid database connection and interrupted partial-install retry tests.
+- [ ] Real shared-hosting provider smoke-test matrix and production release approval.
+
+**Exit criteria:** The installer and controlled migration workflow pass the MySQL 8.0 and MariaDB 10.11 CI matrix without Composer, SSH or CLI setup. Real shared-hosting validation and application-wide logging consolidation remain release follow-ups.
 
 ## Phase 2 — Identity and administration shell
 - [ ] Customer and staff authentication.

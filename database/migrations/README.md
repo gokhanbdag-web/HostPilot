@@ -42,7 +42,8 @@ MySQL DDL may implicitly commit. A partially executed migration therefore cannot
 GitHub Actions uses isolated disposable databases and never contacts the live HostPilot database:
 - Parser/discovery tests verify statement splitting and all 20 migration identifiers in order.
 - MySQL 8.0 and MariaDB 10.11 execute all SQL migrations.
-- The actual browser installer is smoke-tested over HTTP against a disposable database; the test verifies all 20 migrations, the first super-administrator and the installation lock.
+- The actual browser installer is smoke-tested over HTTP against disposable databases at the root and in a nested subdirectory; the test verifies all 20 migrations, the first super-administrator and the installation lock.
+- The HTTP test also exercises authenticated admin upgrade, CSRF confirmation, maintenance-mode 503, pre-upgrade backup, invalid database connection failure and retry after a partially-created first migration.
 - A deliberately interrupted first migration verifies partial-DDL retry.
 - The test verifies explicit confirmation, tracking records, expected tables and a second run as a no-op.
 - A separate clean schema runs the legacy PHP migration path; table/column/index/foreign-key definitions and admin-name data backfill are compared with the SQL path.

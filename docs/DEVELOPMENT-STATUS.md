@@ -36,7 +36,7 @@ The branch currently contains:
 - A front-controller maintenance response that keeps the admin login and upgrade route available while public traffic receives HTTP 503.
 - A forward repair migration for a missing invoice/service foreign key on databases where the old PHP migration's existence check did not execute.
 - CI integration tests against MySQL 8.0 and MariaDB 10.11, including partial-DDL retry, schema parity against the legacy PHP migration path, existing-upgrade detection, backup integrity and restore rehearsal.
-- An HTTP browser-installer smoke test on both database engines, including fresh schema creation, first-admin creation and install lock.
+- An HTTP browser-installer and upgrade smoke test on both database engines: root and nested-subdirectory install, server preflight, first-admin creation, authenticated/CSRF-protected upgrade, maintenance-mode 503, pre-upgrade backup, invalid database connection and partial-install retry.
 
 The legacy PHP migration classes remain as a comparison baseline; the public front controller no longer applies schema changes automatically on every request. Production databases are not touched by CI.
 
