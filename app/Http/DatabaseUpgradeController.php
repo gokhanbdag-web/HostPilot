@@ -21,7 +21,19 @@ final class DatabaseUpgradeController
         unset($_SESSION['hostpilot_migration_backup']);
         if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             if (!Auth::verifyCsrf($_POST['_token'] ?? null)) $error = 'Güvenlik doğrulaması başarısız. Sayfayı yenileyip tekrar deneyin.';
-            elseif ((string)($_POST['confirm_upgrade'] ?? '') !== '1') $error = 'Veritabanı güncellemesini onaylamanız gerekiyor.';
+            elseif ((string)($_POST['action'] ?? '') === 'clear_maintenance' && (string)($_POST['confirm_clear'] ?? '') === '1') {
+                try {
+                    if (MigrationRunner::pending($this->db, $this->migrationDirectory) !== []) throw new \RuntimeException('Pending migrations remain.');
+                    $lockPath = $this->storageDirectory . DIRECTORY_SEPARATOR . 'maintenance.lock';
+                    if (is_file($lockPath) && !@unlink($lockPath)) throw new \RuntimeException('Unable to remove maintenance lock.');
+                    $this->log('MAINTENANCE_CLEARED', 'user=' . (int)(Auth::user()['id'] ?? 0));
+                    $_SESSION['hostpilot_migration_success'] = 'Bekleyen migration bulunmadığı doğrulandı ve bakım modu kapatıldı.';
+                    header('Location: ' . $this->url('/admin/database-upgrade')); exit;
+                } catch (Throwable $exception) {
+                    $this->log('MAINTENANCE_CLEAR_FAILED', $exception->getMessage());
+                    $error = 'Bakım modu kapatılamadı. Önce bekleyen migration olmadığını ve dosya izinlerini kontrol edin.';
+                }
+            } elseif ((string)($_POST['confirm_upgrade'] ?? '') !== '1') $error = 'Veritabanı güncellemesini onaylamanız gerekiyor.';
             else {
                 $error = $this->runUpgrade($backupInfo);
                 if ($error === '') { header('Location: ' . $this->url('/admin/database-upgrade')); exit; }
@@ -36,8 +48,10 @@ final class DatabaseUpgradeController
         if ($error !== '') echo '<div class="error">' . $this->e($error) . '</div>';
         if ($maintenance) echo '<div class="warning"><b>Bakım modu etkin.</b> Normal ziyaretçiler geçici olarak engelleniyor. Güncelleme başarılı olunca bakım modu otomatik kapanır; hata durumunda bu sayfadan güvenli tekrar deneyebilirsiniz.</div>';
         echo '<section class="panel"><div class="stat"><span>Bekleyen migration</span><strong>' . count($pending) . '</strong></div>';
-        if ($pending === []) echo '<h2>Veritabanı güncel</h2><p>Bekleyen SQL migration bulunmuyor.</p>';
-        else {
+        if ($pending === []) {
+            echo '<h2>Veritabanı güncel</h2><p>Bekleyen SQL migration bulunmuyor.</p>';
+            if ($maintenance) echo '<form method="post"><input type="hidden" name="_token" value="' . $this->e(Auth::csrfToken()) . '"><input type="hidden" name="action" value="clear_maintenance"><label class="confirm"><input type="checkbox" name="confirm_clear" value="1" required> Bekleyen migration olmadığını kontrol ettim; bakım modunu kapat.</label><button type="submit">Bakım modunu kapat</button></form>';
+        } else {
             echo '<h2>Uygulanacak sürümler</h2><ol class="migrations">';
             foreach ($pending as $migration) echo '<li><code>' . $this->e($migration) . '</code></li>';
             echo '</ol><p>İşlem başlamadan önce veritabanının sıkıştırılmış SQL yedeği alınır ve doğrulanır. Ardından bakım modu açılır. SQL migration dosyaları sırasıyla uygulanır.</p>';

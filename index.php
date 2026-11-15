@@ -50,14 +50,7 @@ try {
 } catch (Throwable $exception) {
     error_log('[HostPilot] Database bootstrap or migration failed: ' . $exception->getMessage());
     http_response_code(503);
-    exit('HostPilot veritabanına bağlanamıyor veya veritabanı güncellemesini tamamlayamıyor. Yapılandırmayı ve hata kayıtlarını kontrol edin.');
-}
-
-// Demo data is optional and non-blocking: a seeding issue must never take the storefront offline.
-try {
-    \HostPilot\Core\DemoSeeder::seed($pdo);
-} catch (Throwable $exception) {
-    error_log('[HostPilot] Demo seed skipped: ' . $exception->getMessage());
+    exit('HostPilot veritabanına bağlanamıyor. Yapılandırmayı ve veritabanı erişim bilgilerini kontrol edin.');
 }
 
 $requestPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
@@ -87,6 +80,13 @@ if ($requestPath === '/admin/database-upgrade' && in_array($method, ['GET', 'POS
         HOSTPILOT_ROOT . DIRECTORY_SEPARATOR . 'database' . DIRECTORY_SEPARATOR . 'migrations'
     ))->index();
     exit;
+}
+
+// Demo data is optional and non-blocking: a seeding issue must never take the storefront offline.
+try {
+    \HostPilot\Core\DemoSeeder::seed($pdo);
+} catch (Throwable $exception) {
+    error_log('[HostPilot] Demo seed skipped: ' . $exception->getMessage());
 }
 
 $client = new \HostPilot\Http\ClientController($pdo, $basePath, (string)($config['app']['key'] ?? ''));
