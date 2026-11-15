@@ -48,7 +48,9 @@ The filenames preserve the exact identifiers already stored in customer database
 - [x] Already-upgraded legacy database recognized with no pending migrations.
 - [x] Compressed database backup integrity and restore rehearsal in isolated CI database.
 - [x] Browser installer uses the shared SQL migration directory.
-- [x] Authenticated admin upgrade page, CSRF confirmation, pre-upgrade backup, maintenance mode and failure retry/clear safeguards implemented.
+- [x] Authenticated admin upgrade page, CSRF confirmation, maintenance mode before backup, failure retry and guarded maintenance-clear safeguards.
+- [x] HTTP smoke tests cover root and subdirectory installs, invalid database connection, partial-install retry, admin authentication and upgrade flow.
+- [x] Installer preflight checks PHP/PDO/PDO MySQL/OpenSSL/zlib/storage write permissions.
 - [ ] Final review and production deployment approval.
 
 No production database migration is run by CI. The public front controller does not automatically execute pending schema changes.
