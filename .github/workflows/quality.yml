@@ -8,7 +8,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: hostpilot-quality-\${{ github.ref }}
+  group: hostpilot-quality-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   php-and-deployment-safety:
@@ -27,8 +27,8 @@ jobs:
         run: |
           set -Eeuo pipefail
           mapfile -d '' files < <(git ls-files -z -- '*.php')
-          if [ "\${#files[@]}" -eq 0 ]; then echo "No tracked PHP files were found."; exit 1; fi
-          for file in "\${files[@]}"; do php -l "$file"; done
+          if [ "${#files[@]}" -eq 0 ]; then echo "No tracked PHP files were found."; exit 1; fi
+          for file in "${files[@]}"; do php -l "$file"; done
       - name: Test SQL migration parser
         run: php tests/migration_runner.php
       - name: Prevent Composer dependency
@@ -42,7 +42,7 @@ jobs:
           echo "No tracked runtime configuration or installation lock found."
 
   migration-runner-tests:
-    name: SQL migration integration (\${{ matrix.database }})
+    name: SQL migration integration (${{ matrix.database }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -55,7 +55,7 @@ jobs:
             image: mariadb:10.11
     services:
       database:
-        image: \${{ matrix.image }}
+        image: ${{ matrix.image }}
         env:
           MYSQL_ROOT_PASSWORD: root
           MYSQL_DATABASE: hostpilot_ci
