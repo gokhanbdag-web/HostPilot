@@ -62,3 +62,93 @@ foreach ($requiredTables as $table) {
     if ((int)$check->fetchColumn() !== 1) throw new RuntimeException('Expected table was not created: ' . $table);
 }
 echo 'MySQL/MariaDB migration integration passed: 19 migrations, partial-DDL retry, confirmation guard, tracking and idempotent second run.' . PHP_EOL;
+
+// Compare the SQL migration path with the retained legacy PHP migration path
+// on an independent clean schema. This remains an ephemeral CI-only database.
+$legacyDatabase = 'hostpilot_legacy_ci';
+$pdo->exec('CREATE DATABASE ' . $legacyDatabase . ' CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
+$legacy = new PDO(
+    sprintf('mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4', $host, $port, $legacyDatabase),
+    $user,
+    $password,
+    [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES => false,
+        PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true,
+    ]
+);
+$legacy->exec("CREATE TABLE users (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(80) NOT NULL, first_name VARCHAR(80) NULL, last_name VARCHAR(80) NULL,
+    email VARCHAR(190) NOT NULL, username VARCHAR(80) NOT NULL, password_hash VARCHAR(255) NOT NULL,
+    role VARCHAR(32) NOT NULL DEFAULT 'customer', status VARCHAR(24) NOT NULL DEFAULT 'active',
+    created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL,
+    UNIQUE KEY uq_users_email (email), UNIQUE KEY uq_users_username (username)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+$legacy->exec("CREATE TABLE migrations (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    migration VARCHAR(190) NOT NULL, batch INT UNSIGNED NOT NULL, applied_at DATETIME NOT NULL,
+    UNIQUE KEY uq_migrations_name (migration)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+$seedUser = $legacy->prepare("INSERT INTO users (name,first_name,last_name,email,username,password_hash,role,status,created_at,updated_at) VALUES ('Ada Lovelace',NULL,NULL,:email,:username,'test-hash','admin','active',UTC_TIMESTAMP(),UTC_TIMESTAMP())");
+$seedUser->execute([':email' => 'ada@example.test', ':username' => 'ada-admin']);
+$pdo->prepare("INSERT INTO users (name,first_name,last_name,email,username,password_hash,role,status,created_at,updated_at) VALUES ('Ada Lovelace',NULL,NULL,:email,:username,'test-hash','admin','active',UTC_TIMESTAMP(),UTC_TIMESTAMP())")
+    ->execute([':email' => 'ada@example.test', ':username' => 'ada-admin']);
+
+require_once dirname(__DIR__) . '/app/Core/Schema.php';
+require_once dirname(__DIR__) . '/app/Core/PasswordResetMigration.php';
+require_once dirname(__DIR__) . '/app/Core/AdminProfileMigration.php';
+\HostPilot\Core\Schema::migrate($legacy);
+\HostPilot\Core\PasswordResetMigration::migrate($legacy);
+\HostPilot\Core\AdminProfileMigration::migrate($legacy);
+
+$schemaSignature = static function (PDO $connection): array {
+    $tables = $connection->query("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE' AND TABLE_NAME NOT IN ('users','migrations') ORDER BY TABLE_NAME")->fetchAll(PDO::FETCH_COLUMN);
+    $signature = [];
+    foreach ($tables as $table) {
+        $columns = $connection->prepare("SELECT COLUMN_NAME,COLUMN_TYPE,IS_NULLABLE,COLUMN_DEFAULT,EXTRA,COLUMN_KEY,ORDINAL_POSITION FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=:table_name ORDER BY ORDINAL_POSITION");
+        $columns->execute([':table_name' => $table]);
+        $columnRows = $columns->fetchAll(PDO::FETCH_ASSOC);
+        $columns->closeCursor();
+
+        $indexes = $connection->prepare("SELECT INDEX_NAME,NON_UNIQUE,SEQ_IN_INDEX,COLUMN_NAME,SUB_PART,INDEX_TYPE FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=:table_name ORDER BY INDEX_NAME,SEQ_IN_INDEX");
+        $indexes->execute([':table_name' => $table]);
+        $indexRows = $indexes->fetchAll(PDO::FETCH_ASSOC);
+        $indexes->closeCursor();
+
+        $foreignKeys = $connection->prepare("SELECT k.CONSTRAINT_NAME,k.COLUMN_NAME,k.REFERENCED_TABLE_NAME,k.REFERENCED_COLUMN_NAME,r.UPDATE_RULE,r.DELETE_RULE FROM information_schema.KEY_COLUMN_USAGE k JOIN information_schema.REFERENTIAL_CONSTRAINTS r ON r.CONSTRAINT_SCHEMA=k.CONSTRAINT_SCHEMA AND r.TABLE_NAME=k.TABLE_NAME AND r.CONSTRAINT_NAME=k.CONSTRAINT_NAME WHERE k.CONSTRAINT_SCHEMA=DATABASE() AND k.TABLE_NAME=:table_name AND k.REFERENCED_TABLE_NAME IS NOT NULL ORDER BY k.CONSTRAINT_NAME,k.ORDINAL_POSITION");
+        $foreignKeys->execute([':table_name' => $table]);
+        $foreignKeyRows = $foreignKeys->fetchAll(PDO::FETCH_ASSOC);
+        $foreignKeys->closeCursor();
+
+        $signature[$table] = ['columns' => $columnRows, 'indexes' => $indexRows, 'foreign_keys' => $foreignKeyRows];
+    }
+    return $signature;
+};
+
+$sqlSignature = $schemaSignature($pdo);
+$legacySignature = $schemaSignature($legacy);
+if ($sqlSignature !== $legacySignature) {
+    $sqlTables = array_keys($sqlSignature);
+    $legacyTables = array_keys($legacySignature);
+    $missingInSql = array_values(array_diff($legacyTables, $sqlTables));
+    $missingInLegacy = array_values(array_diff($sqlTables, $legacyTables));
+    throw new RuntimeException('SQL/legacy schema parity failed. Missing in SQL: ' . implode(',', $missingInSql) . '; missing in legacy: ' . implode(',', $missingInLegacy) . '. Inspect table signatures in CI logs.');
+}
+
+foreach ([$pdo, $legacy] as $connection) {
+    $userCheck = $connection->query("SELECT first_name,last_name FROM users WHERE username='ada-admin'");
+    $profile = $userCheck->fetch(PDO::FETCH_ASSOC);
+    $userCheck->closeCursor();
+    if (($profile['first_name'] ?? null) !== 'Ada' || ($profile['last_name'] ?? null) !== 'Lovelace') {
+        throw new RuntimeException('Admin profile migration did not preserve the legacy name backfill.');
+    }
+}
+if (MigrationRunner::pending($legacy, $directory) !== []) {
+    throw new RuntimeException('SQL runner did not recognize all migration keys from a legacy-upgraded database.');
+}
+if (MigrationRunner::runPending($legacy, $directory, true) !== []) {
+    throw new RuntimeException('SQL runner attempted to reapply migrations on an already-upgraded legacy database.');
+}
+echo 'Fresh SQL schema matches the legacy PHP schema; existing-upgrade detection and admin-name data backfill passed.' . PHP_EOL;
