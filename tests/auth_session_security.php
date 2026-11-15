@@ -12,7 +12,7 @@ $cases = [
     ['invalid timestamps fail closed', 0, $now, $now, true],
 ];
 foreach ($cases as [$name, $created, $last, $clock, $expected]) {
-    $actual = \\HostPilot\\Core\\Auth::sessionExpired($created, $last, $clock);
+    $actual = \HostPilot\Core\Auth::sessionExpired($created, $last, $clock);
     if ($actual !== $expected) throw new RuntimeException('Session policy test failed: ' . $name);
     echo 'PASS ' . $name . PHP_EOL;
 }
