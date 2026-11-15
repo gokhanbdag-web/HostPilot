@@ -35,9 +35,11 @@ $pdo->exec("CREATE TABLE migrations (
 $pdo->prepare("INSERT INTO users (name,first_name,last_name,email,username,password_hash,role,status,created_at,updated_at) VALUES ('Ada Lovelace',NULL,NULL,:email,:username,'test-hash','admin','active',UTC_TIMESTAMP(),UTC_TIMESTAMP())")
     ->execute([':email' => 'ada@example.test', ':username' => 'ada-admin']);
 
+$pdo->exec("INSERT INTO users (name,email,username,password_hash,role,status,created_at,updated_at) VALUES ('Grace Hopper','grace@example.test','grace-staff','test-hash','staff','active',UTC_TIMESTAMP(),UTC_TIMESTAMP())");
+
 $directory = dirname(__DIR__) . '/database/migrations';
 $files = MigrationRunner::discover($directory);
-if (count($files) !== 20) throw new RuntimeException('Expected 20 SQL migrations; discovered ' . count($files) . '.');
+if (count($files) !== 21) throw new RuntimeException('Expected 21 SQL migrations; discovered ' . count($files) . '.');
 
 // Simulate interruption after the first DDL statement; the migration must safely retry.
 $firstSql = file_get_contents($files[0]['path']);
@@ -53,19 +55,21 @@ try {
     if (!str_contains($exception->getMessage(), 'Explicit administrator confirmation')) throw $exception;
 }
 $applied = MigrationRunner::runPending($pdo, $directory, true);
-if (count($applied) !== 20) throw new RuntimeException('Expected 20 applied migrations; got ' . count($applied) . '.');
+if (count($applied) !== 21) throw new RuntimeException('Expected 21 applied migrations; got ' . count($applied) . '.');
 $appliedCount = (int)$pdo->query('SELECT COUNT(*) FROM migrations')->fetchColumn();
-if ($appliedCount !== 20) throw new RuntimeException('Expected exactly 20 migration tracking rows.');
+if ($appliedCount !== 21) throw new RuntimeException('Expected exactly 21 migration tracking rows.');
 if (MigrationRunner::pending($pdo, $directory) !== []) throw new RuntimeException('Pending migrations remain after successful run.');
 if (MigrationRunner::runPending($pdo, $directory, true) !== []) throw new RuntimeException('Second run was not a no-op.');
 
-$requiredTables = ['product_groups','products','product_pricing','orders','order_items','services','invoices','invoice_items','payment_transactions','servers','provisioning_jobs','service_package_changes','email_outbox','domain_registrations','domain_renewals','password_reset_tokens'];
+$requiredTables = ['product_groups','products','product_pricing','orders','order_items','services','invoices','invoice_items','payment_transactions','servers','provisioning_jobs','service_package_changes','email_outbox','domain_registrations','domain_renewals','password_reset_tokens','staff_permissions','staff_departments'];
 $check = $pdo->prepare('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table_name');
 foreach ($requiredTables as $table) {
     $check->execute([':table_name' => $table]);
     if ((int)$check->fetchColumn() !== 1) throw new RuntimeException('Expected table was not created: ' . $table);
 }
-echo 'MySQL/MariaDB migration integration passed: 20 migrations, partial-DDL retry, confirmation guard, tracking and idempotent second run.' . PHP_EOL;
+if ((int)$pdo->query(\"SELECT COUNT(*) FROM staff_permissions sp JOIN users u ON u.id=sp.user_id WHERE u.username='grace-staff'\")->fetchColumn() !== 8) throw new RuntimeException('Existing staff permission defaults were not seeded.');
+if ((int)$pdo->query(\"SELECT COUNT(*) FROM staff_departments sd JOIN users u ON u.id=sd.user_id WHERE u.username='grace-staff'\")->fetchColumn() !== 4) throw new RuntimeException('Existing staff department defaults were not seeded.');
+echo 'MySQL/MariaDB migration integration passed: 21 migrations, staff defaults, partial-DDL retry, confirmation guard, tracking and idempotent second run.' . PHP_EOL;
 
 // Compare the SQL migration path with the retained legacy PHP migration path
 // on an independent clean schema. This remains an ephemeral CI-only database.
