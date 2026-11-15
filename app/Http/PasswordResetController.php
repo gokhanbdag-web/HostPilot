@@ -3,6 +3,7 @@ declare(strict_types=1);
 namespace HostPilot\Http;
 use HostPilot\Core\Auth;
 use HostPilot\Core\EmailService;
+use HostPilot\Core\SecurityAudit;
 use PDO;
 use Throwable;
 final class PasswordResetController
@@ -56,7 +57,7 @@ final class PasswordResetController
      else{
       $this->db->prepare('UPDATE users SET password_hash=:hash,auth_version=auth_version+1 WHERE id=:id')->execute([':hash'=>password_hash($pass,PASSWORD_DEFAULT),':id'=>(int)$row['user_id']]);
       $this->db->prepare('UPDATE password_reset_tokens SET used_at=UTC_TIMESTAMP() WHERE user_id=:id AND used_at IS NULL')->execute([':id'=>(int)$row['user_id']]);
-      $this->db->commit();$success=true;
+      $this->db->commit();SecurityAudit::record($this->db, 'auth.password_reset_completed', (int)$row['user_id']);$success=true;
      }
     }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();error_log('[HostPilot] Password reset failed: '.$e->getMessage());$error='İşlem tamamlanamadı. Daha sonra tekrar deneyin.';}
    }
