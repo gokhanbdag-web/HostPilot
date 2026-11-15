@@ -18,7 +18,8 @@ final class Auth
         $identifier = strtolower(trim($identifier));
         if ($identifier === '' || strlen($identifier) > 254 || self::consumeAttempt()) return false;
 
-        $stmt = $db->prepare("SELECT id, name, email, password_hash, role, status, auth_version FROM users WHERE email = :email OR username = :username LIMIT 1");
+        $versionSelect = self::hasAuthVersionColumn($db) ? ', auth_version' : ', 1 AS auth_version';
+        $stmt = $db->prepare("SELECT id, name, email, password_hash, role, status" . $versionSelect . " FROM users WHERE email = :email OR username = :username LIMIT 1");
         $stmt->execute([':email' => $identifier, ':username' => $identifier]);
         $user = $stmt->fetch();
 
@@ -72,6 +73,7 @@ final class Auth
         $user = $_SESSION['hostpilot_user'] ?? null;
         if (!is_array($user) || !isset($user['id'])) return true;
         try {
+            if (!self::hasAuthVersionColumn($db)) return true; // Allow the administrator to log in and apply the pending migration.
             $statement = $db->prepare('SELECT auth_version FROM users WHERE id = :id LIMIT 1');
             $statement->execute([':id' => (int)$user['id']]);
             $version = $statement->fetchColumn();
@@ -84,7 +86,7 @@ final class Auth
                 $_SESSION['hostpilot_user']['auth_version'] = $current;
                 return true;
             }
-            if ((int)$user['auth_version'] !== $current) {
+            if (!self::sessionVersionMatches((int)$user['auth_version'], $current)) {
                 self::expireSession();
                 return false;
             }
@@ -94,6 +96,17 @@ final class Auth
             self::expireSession();
             return false;
         }
+    }
+
+    public static function sessionVersionMatches(int $sessionVersion, int $currentVersion): bool
+    {
+        return $sessionVersion > 0 && $sessionVersion === $currentVersion;
+    }
+
+    private static function hasAuthVersionColumn(PDO $db): bool
+    {
+        $statement = $db->query("SHOW COLUMNS FROM users LIKE 'auth_version'");
+        return $statement !== false && $statement->fetchColumn() !== false;
     }
 
     public static function revokeOtherSessions(PDO $db): bool

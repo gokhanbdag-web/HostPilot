@@ -9,6 +9,9 @@ $cases = [
     ['absolute timeout expires even with recent activity', $now - 43201, $now - 1, $now, true],
     ['invalid timestamps fail closed', 0, $now, $now, true],
 ];
+if (!\\HostPilot\\Core\\Auth::sessionVersionMatches(3, 3)) throw new RuntimeException('A current session version should remain valid.');
+if (\\HostPilot\\Core\\Auth::sessionVersionMatches(2, 3)) throw new RuntimeException('A stale session version must be rejected.');
+echo 'PASS session version matching and revocation policy.' . PHP_EOL;
 foreach ($cases as [$name, $created, $last, $clock, $expected]) {
     $actual = \HostPilot\Core\Auth::sessionExpired($created, $last, $clock);
     if ($actual !== $expected) throw new RuntimeException('Session policy test failed: ' . $name);
