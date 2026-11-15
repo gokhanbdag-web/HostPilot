@@ -92,7 +92,7 @@ if (\HostPilot\Core\Authorization::isAdminPath($requestPath)
     }
 }
 
-if ($requestPath === '/admin/security/sessions' && in_array($method, ['GET','POST'], true)) { (new \\HostPilot\\Http\\SessionSecurityController($pdo, $basePath))->index(); exit; }
+if ($requestPath === '/admin/security/sessions' && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\SessionSecurityController($pdo, $basePath))->index(); exit; }
 
 if ($requestPath === '/admin/database-upgrade' && in_array($method, ['GET', 'POST'], true)) {
     (new \HostPilot\Http\DatabaseUpgradeController(
