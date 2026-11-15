@@ -67,15 +67,25 @@ final class DatabaseUpgradeController
         try {
             $pending = MigrationRunner::pending($this->db, $this->migrationDirectory);
             if ($pending === []) { $_SESSION['hostpilot_migration_success'] = 'Veritabanı zaten güncel; uygulanacak migration bulunamadı.'; return ''; }
-            $backup = DatabaseBackup::create($this->db, $this->storageDirectory);
-            if (!is_file($backup['path']) || !is_readable($backup['path']) || filesize($backup['path']) !== $backup['size'] || hash_file('sha256', $backup['path']) !== $backup['sha256']) throw new \RuntimeException('Database backup verification failed.');
-            $backupInfo = ['filename' => $backup['filename'], 'sha256' => $backup['sha256'], 'size' => $backup['size']];
-            $_SESSION['hostpilot_migration_backup'] = $backupInfo;
+            // Freeze public writes before taking the backup so it is a consistent pre-upgrade snapshot.
             $lockPath = $this->storageDirectory . DIRECTORY_SEPARATOR . 'maintenance.lock';
-            $lockPayload = json_encode(['started_at' => gmdate(DATE_ATOM), 'started_by' => (int)(Auth::user()['id'] ?? 0), 'backup' => $backup['filename'], 'status' => 'running'], JSON_UNESCAPED_SLASHES);
+            $lockPayload = json_encode(['started_at' => gmdate(DATE_ATOM), 'started_by' => (int)(Auth::user()['id'] ?? 0), 'backup' => null, 'status' => 'backup'], JSON_UNESCAPED_SLASHES);
             $temporaryLock = $lockPath . '.tmp';
             if (!is_string($lockPayload) || file_put_contents($temporaryLock, $lockPayload, LOCK_EX) === false || !rename($temporaryLock, $lockPath)) { @unlink($temporaryLock); throw new \RuntimeException('Unable to activate maintenance mode.'); }
             @chmod($lockPath, 0640);
+
+            try {
+                $backup = DatabaseBackup::create($this->db, $this->storageDirectory);
+                if (!is_file($backup['path']) || !is_readable($backup['path']) || filesize($backup['path']) !== $backup['size'] || hash_file('sha256', $backup['path']) !== $backup['sha256']) throw new \RuntimeException('Database backup verification failed.');
+                $backupInfo = ['filename' => $backup['filename'], 'sha256' => $backup['sha256'], 'size' => $backup['size']];
+                $_SESSION['hostpilot_migration_backup'] = $backupInfo;
+                $lockPayload = json_encode(['started_at' => gmdate(DATE_ATOM), 'started_by' => (int)(Auth::user()['id'] ?? 0), 'backup' => $backup['filename'], 'status' => 'running'], JSON_UNESCAPED_SLASHES);
+                if (!is_string($lockPayload) || file_put_contents($lockPath, $lockPayload, LOCK_EX) === false) throw new \RuntimeException('Unable to update maintenance status after backup.');
+            } catch (Throwable $backupException) {
+                @unlink($lockPath);
+                throw $backupException;
+            }
+
             $this->log('STARTED', 'user=' . (int)(Auth::user()['id'] ?? 0) . ' backup=' . $backup['filename'] . ' pending=' . implode(',', $pending));
             $applied = MigrationRunner::runPending($this->db, $this->migrationDirectory, true);
             if (!@unlink($lockPath) && is_file($lockPath)) throw new \RuntimeException('Migrations applied, but maintenance lock could not be removed.');

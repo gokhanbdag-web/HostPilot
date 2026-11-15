@@ -82,11 +82,13 @@ if ($requestPath === '/admin/database-upgrade' && in_array($method, ['GET', 'POS
     exit;
 }
 
-// Demo data is optional and non-blocking: a seeding issue must never take the storefront offline.
-try {
-    \HostPilot\Core\DemoSeeder::seed($pdo);
-} catch (Throwable $exception) {
-    error_log('[HostPilot] Demo seed skipped: ' . $exception->getMessage());
+// Demo data is optional and non-blocking. Never seed while maintenance mode is active.
+if (!is_file($maintenanceFile)) {
+    try {
+        \HostPilot\Core\DemoSeeder::seed($pdo);
+    } catch (Throwable $exception) {
+        error_log('[HostPilot] Demo seed skipped: ' . $exception->getMessage());
+    }
 }
 
 $client = new \HostPilot\Http\ClientController($pdo, $basePath, (string)($config['app']['key'] ?? ''));
