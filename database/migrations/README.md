@@ -59,3 +59,6 @@ These tests validate the migration and backup mechanisms. They are not a substit
 - Do not run SQL migrations on production outside the authenticated admin upgrade screen or initial browser installer.
 - Verify backups and check free storage before large customer upgrades.
 - Never deploy a migration to production until the CI matrix is green and the deployment is explicitly approved.
+
+
+- `20261115_0003_customer_email_verification.sql`: stores hashed, expiring, single-use customer email verification tokens. New customer registrations remain pending until the address is verified; existing accounts are not modified.

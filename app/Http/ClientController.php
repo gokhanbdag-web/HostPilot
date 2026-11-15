@@ -10,7 +10,7 @@ use Throwable;
 final class ClientController
 {
     private SecretVault $vault;
-    public function __construct(private readonly PDO $db, private readonly string $basePath = '',private readonly string $applicationKey='') {$this->vault=new SecretVault($this->applicationKey);}
+    public function __construct(private readonly PDO $db, private readonly string $basePath = '',private readonly string $applicationKey='',private readonly string $baseUrl='') {$this->vault=new SecretVault($this->applicationKey);}
 
     public function login(): void
     {
@@ -27,15 +27,94 @@ final class ClientController
 
     public function register(): void
     {
-        if(Auth::check())$this->go('/client');$error='';
+        if(Auth::check())$this->go('/client');$error='';$notice='';
         if($_SERVER['REQUEST_METHOD']==='POST'){
             $name=trim((string)($_POST['name']??''));$email=strtolower(trim((string)($_POST['email']??'')));$username=trim((string)($_POST['username']??''));$password=(string)($_POST['password']??'');
             if(!Auth::verifyCsrf($_POST['_token']??null))$error='Güvenlik doğrulaması başarısız.';
-            elseif($name===''||strlen($name)>80||!filter_var($email,FILTER_VALIDATE_EMAIL)||!preg_match('/^[a-zA-Z0-9_.-]{3,80}$/',$username)||strlen($password)<12)$error='Bilgileri kontrol edin. Parola en az 12 karakter olmalıdır.';
-            else try{$now=gmdate('Y-m-d H:i:s');$s=$this->db->prepare("INSERT INTO users(name,email,username,password_hash,role,status,created_at,updated_at) VALUES(:n,:e,:u,:p,'customer','active',:c,:u2)");$s->execute([':n'=>$name,':e'=>$email,':u'=>$username,':p'=>password_hash($password,PASSWORD_DEFAULT),':c'=>$now,':u2'=>$now]);Auth::attempt($this->db,$email,$password);$this->go('/client');}catch(Throwable){$error='Bu e-posta veya kullanıcı adı kullanılıyor olabilir.';}
+            elseif($name===''||strlen($name)>80||!filter_var($email,FILTER_VALIDATE_EMAIL)||strlen($email)>190||!preg_match('/^[a-zA-Z0-9_.-]{3,80}$/',$username)||strlen($password)<12||strlen($password)>4096)$error='Bilgileri kontrol edin. Parola en az 12 karakter olmalıdır.';
+            else try{
+                $now=gmdate('Y-m-d H:i:s');
+                $s=$this->db->prepare("INSERT INTO users(name,email,username,password_hash,role,status,created_at,updated_at) VALUES(:n,:e,:u,:p,'customer','pending_verification',:c,:u2)");
+                $s->execute([':n'=>$name,':e'=>$email,':u'=>$username,':p'=>password_hash($password,PASSWORD_DEFAULT),':c'=>$now,':u2'=>$now]);
+                $userId=(int)$this->db->lastInsertId();
+                $queued=$this->queueVerificationEmail($userId,$name,$email);
+                $notice='Hesabınız oluşturuldu. Giriş yapmadan önce e-posta adresinize gönderilen doğrulama bağlantısını açın.';
+                if(!$queued)$notice.=' E-posta gönderimi henüz kuyruğa eklenemedi; doğrulama e-postasını yeniden istemeyi deneyin.';
+            }catch(Throwable){$error='Bu e-posta veya kullanıcı adı kullanılıyor olabilir.';}
         }
-        $this->start('Müşteri kaydı');echo '<main class="auth"><div class="brand">HOST<span>PILOT</span></div><h1>Hesap oluşturun</h1>';$this->err($error);
-        echo '<form method="post"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><label>Ad soyad<input name="name" maxlength="80" required></label><label>Kullanıcı adı<input name="username" minlength="3" maxlength="80" pattern="[A-Za-z0-9_.-]+" required></label><label>E-posta<input type="email" name="email" required></label><label>Parola (en az 12 karakter)<input type="password" name="password" minlength="12" required></label><button>Hesap oluştur</button></form><a href="'.$this->url('/client/login').'">Zaten hesabım var</a></main>';$this->end();
+        $this->start('Müşteri kaydı');echo '<main class="auth"><div class="brand">HOST<span>PILOT</span></div><h1>Hesap oluşturun</h1>';
+        if($notice!=='')echo '<div class="notice">'.$this->e($notice).'</div>';
+        $this->err($error);
+        echo '<form method="post"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><label>Ad soyad<input name="name" maxlength="80" required></label><label>Kullanıcı adı<input name="username" minlength="3" maxlength="80" pattern="[A-Za-z0-9_.-]+" required></label><label>E-posta<input type="email" name="email" maxlength="190" required></label><label>Parola (en az 12 karakter)<input type="password" name="password" minlength="12" maxlength="4096" required></label><button>Hesap oluştur</button></form><a href="'.$this->url('/client/resend-verification').'">Doğrulama e-postasını yeniden gönder</a><br><a href="'.$this->url('/client/login').'">Zaten hesabım var</a></main>';$this->end();
+    }
+
+    public function verifyEmail(): void
+    {
+        header('Cache-Control: no-store, max-age=0');
+        header('Referrer-Policy: no-referrer');
+        $token=trim((string)($_GET['token']??''));
+        $message='Doğrulama bağlantısı geçersiz veya süresi dolmuş.';
+        $success=false;
+        if(preg_match('/^[a-f0-9]{64}$/D',$token)===1){
+            try{
+                $this->db->beginTransaction();
+                $q=$this->db->prepare("SELECT t.user_id FROM email_verification_tokens t JOIN users u ON u.id=t.user_id WHERE t.token_hash=:hash AND t.used_at IS NULL AND t.expires_at>UTC_TIMESTAMP() AND u.role='customer' AND u.status='pending_verification' LIMIT 1 FOR UPDATE");
+                $q->execute([':hash'=>hash('sha256',$token)]);
+                $row=$q->fetch(PDO::FETCH_ASSOC);
+                if($row){
+                    $userId=(int)$row['user_id'];
+                    $this->db->prepare("UPDATE users SET status='active',email_verified_at=UTC_TIMESTAMP(),updated_at=UTC_TIMESTAMP() WHERE id=:id AND role='customer' AND status='pending_verification'")->execute([':id'=>$userId]);
+                    $this->db->prepare('UPDATE email_verification_tokens SET used_at=UTC_TIMESTAMP() WHERE user_id=:id AND used_at IS NULL')->execute([':id'=>$userId]);
+                    $this->db->commit();$success=true;
+                }else $this->db->rollBack();
+            }catch(Throwable $exception){
+                if($this->db->inTransaction())$this->db->rollBack();
+                error_log('[HostPilot] Email verification failed: '.$exception->getMessage());
+            }
+        }
+        $this->start('E-posta doğrulaması');
+        echo '<main class="auth"><div class="brand">HOST<span>PILOT</span></div><h1>E-posta doğrulaması</h1>';
+        if($success)echo '<div class="notice">E-posta adresiniz doğrulandı. Artık müşteri hesabınıza giriş yapabilirsiniz.</div><a href="'.$this->url('/client/login').'">Giriş yap</a>';
+        else echo '<div class="error">'.$this->e($message).'</div><a href="'.$this->url('/client/resend-verification').'">Yeni doğrulama bağlantısı iste</a>';
+        echo '</main>';$this->end();
+    }
+
+    public function resendVerification(): void
+    {
+        $notice='';
+        if(($_SERVER['REQUEST_METHOD']??'GET')==='POST'){
+            if(!Auth::verifyCsrf($_POST['_token']??null))$notice='Güvenlik doğrulaması başarısız. Sayfayı yenileyin.';
+            else{
+                $email=strtolower(trim((string)($_POST['email']??'')));
+                if(filter_var($email,FILTER_VALIDATE_EMAIL)&&strlen($email)<=190){
+                    try{
+                        $q=$this->db->prepare("SELECT id,name,email FROM users WHERE email=:email AND role='customer' AND status='pending_verification' LIMIT 1");
+                        $q->execute([':email'=>$email]);$user=$q->fetch(PDO::FETCH_ASSOC);
+                        if($user)$this->queueVerificationEmail((int)$user['id'],(string)$user['name'],(string)$user['email']);
+                    }catch(Throwable $exception){error_log('[HostPilot] Verification resend failed: '.$exception->getMessage());}
+                }
+                $notice='Adres kayıtlı ve doğrulama bekleyen bir hesaba aitse yeni bağlantı e-posta kuyruğuna eklenecektir.';
+            }
+        }
+        $this->start('Doğrulama e-postasını yeniden gönder');
+        echo '<main class="auth"><div class="brand">HOST<span>PILOT</span></div><h1>Doğrulama bağlantısı</h1><p>Kayıt sırasında kullandığınız e-posta adresini girin.</p>';
+        if($notice!=='')echo '<div class="notice">'.$this->e($notice).'</div>';
+        echo '<form method="post"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><label>E-posta<input type="email" name="email" maxlength="190" autocomplete="email" required></label><button>Bağlantıyı gönder</button></form><a href="'.$this->url('/client/login').'">Giriş sayfasına dön</a></main>';$this->end();
+    }
+
+    private function queueVerificationEmail(int $userId,string $name,string $email): bool
+    {
+        if($userId<1||$this->applicationKey===''||$this->baseUrl===''||!filter_var($email,FILTER_VALIDATE_EMAIL))return false;
+        $cooldown=$this->db->prepare('SELECT id FROM email_verification_tokens WHERE user_id=:id AND created_at>DATE_SUB(UTC_TIMESTAMP(),INTERVAL 60 SECOND) LIMIT 1');
+        $cooldown->execute([':id'=>$userId]);
+        if($cooldown->fetchColumn())return false;
+        $this->db->prepare('UPDATE email_verification_tokens SET used_at=UTC_TIMESTAMP() WHERE user_id=:id AND used_at IS NULL')->execute([':id'=>$userId]);
+        $token=bin2hex(random_bytes(32));$hash=hash('sha256',$token);$now=gmdate('Y-m-d H:i:s');
+        $this->db->prepare('INSERT INTO email_verification_tokens(user_id,token_hash,expires_at,created_at) VALUES(:id,:hash,:expires,:created)')
+            ->execute([':id'=>$userId,':hash'=>$hash,':expires'=>gmdate('Y-m-d H:i:s',time()+86400),':created'=>$now]);
+        $link=rtrim($this->baseUrl,'/').rtrim($this->basePath,'/').'/client/verify-email?token='.rawurlencode($token);
+        $body="Merhaba ".$name.",\n\nHostPilot müşteri hesabınızı etkinleştirmek için 24 saat içinde aşağıdaki bağlantıyı açın:\n\n".$link."\n\nBu kaydı siz yapmadıysanız bu e-postayı dikkate almayın.";
+        return (new EmailService($this->db,$this->applicationKey))->queue($email,'HostPilot e-posta adresinizi doğrulayın',$body,'email-verification:'.$userId.':'.$hash,'customer_email_verification');
     }
 
     public function dashboard():void

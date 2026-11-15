@@ -139,3 +139,5 @@
 ## Definition of done
 
 A feature is complete only when UI, data model, permissions, validation, failure handling, logs, tests, documentation, and upgrade behavior are present. Mock screens and simulated provider success do not count as production functionality.
+
+- [x] Stage 2: customer email verification with hashed single-use tokens, expiry, resend cooldown and non-enumerating responses (implemented in PR #7; migration requires authenticated admin application).

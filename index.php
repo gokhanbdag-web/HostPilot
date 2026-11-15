@@ -115,6 +115,8 @@ if ($requestPath === '/admin/forgot-password' && in_array($method, ['GET','POST'
 if ($requestPath === '/admin/reset-password' && in_array($method, ['GET','POST'], true)) { $passwordReset->reset(); exit; }
 if ($requestPath === '/client/login' && in_array($method, ['GET', 'POST'], true)) { $client->login(); exit; }
 if ($requestPath === '/client/register' && in_array($method, ['GET', 'POST'], true)) { $client->register(); exit; }
+if ($requestPath === '/client/verify-email' && $method === 'GET') { $client->verifyEmail(); exit; }
+if ($requestPath === '/client/resend-verification' && in_array($method, ['GET','POST'], true)) { $client->resendVerification(); exit; }
 if ($requestPath === '/client/logout' && $method === 'POST') { $client->logout(); exit; }
 if ($requestPath === '/client' || $requestPath === '/client/') { $client->dashboard(); exit; }
 if ($requestPath === '/client/services' && $method === 'GET') { $client->services(); exit; }
