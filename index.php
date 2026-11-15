@@ -134,6 +134,8 @@ if ($requestPath === '/admin/email-queue' && in_array($method, ['GET','POST'], t
 if ($requestPath === '/admin/updates' && $method === 'GET') { (new \HostPilot\Http\UpdateController($pdo, $basePath, (string)($config['app']['base_url'] ?? '')))->index(); exit; }
 if ($requestPath === '/admin/updates/status' && $method === 'GET') { (new \HostPilot\Http\UpdateController($pdo, $basePath, (string)($config['app']['base_url'] ?? '')))->status(); exit; }
 $controller = new \HostPilot\Http\AdminController($pdo, $basePath, (string)($config['app']['key'] ?? ''));
+if ($requestPath === '/admin/staff' && $method === 'GET') { (new \\HostPilot\\Http\\StaffAccessController($pdo, $basePath))->index(); exit; }
+if ($requestPath === '/admin/staff/save' && $method === 'POST') { (new \\HostPilot\\Http\\StaffAccessController($pdo, $basePath))->save(); exit; }
 if ($requestPath === '/admin/customers' && $method === 'GET') { $controller->customers(); exit; }
 if ($requestPath === '/admin/reports' && $method === 'GET') { $controller->reports(); exit; }
 if ($requestPath === '/admin/tickets' && $method === 'GET') { $controller->tickets(); exit; }
