@@ -34,6 +34,9 @@ $basePath = rtrim((string)($config['app']['base_path'] ?? ''), '/');
 $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
     || (($_SERVER['SERVER_PORT'] ?? null) === '443');
 if (session_status() !== PHP_SESSION_ACTIVE) {
+    ini_set('session.use_strict_mode', '1');
+    ini_set('session.use_only_cookies', '1');
+    ini_set('session.gc_maxlifetime', '43200');
     session_set_cookie_params([
         'lifetime' => 0,
         'path' => ($basePath !== '' ? $basePath : '/') . (str_ends_with($basePath, '/') ? '' : ''),

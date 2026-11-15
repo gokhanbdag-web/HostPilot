@@ -92,3 +92,12 @@ Reference: https://owasp.org/www-project-application-security-verification-stand
 - Provide backup/restore and application-key recovery guidance.
 - Keep admin notifications for failed jobs, suspicious logins, and repeated webhook verification failures.
 - Security testing is required before production release; this baseline is not a certification.
+
+
+## 11. Implemented authentication/session baseline (Stage 2)
+
+- Login attempts are throttled by a hashed credential+IP bucket and a separate hashed IP bucket. The raw identifier and IP are not written to rate-limit files.
+- Rate-limit state is stored under the protected storage directory with file locking for shared-host concurrency. If the directory cannot be written, login fails closed.
+- Authenticated sessions expire after 30 minutes of inactivity or 12 hours absolute lifetime. Existing sessions receive timestamps on their first request after rollout.
+- Session IDs are regenerated after successful login; the CSRF token is rotated. Logout clears session data and expires the session cookie.
+- These controls are an initial security slice, not a substitute for centralized RBAC, MFA, audit trails, or full session revocation.
