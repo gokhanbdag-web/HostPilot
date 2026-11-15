@@ -52,29 +52,39 @@ final class ClientController
     {
         header('Cache-Control: no-store, max-age=0');
         header('Referrer-Policy: no-referrer');
-        $token=trim((string)($_GET['token']??''));
+        $method=strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'));
+        $token=trim((string)($method==='POST'?($_POST['token']??''):($_GET['token']??'')));
         $message='Doğrulama bağlantısı geçersiz veya süresi dolmuş.';
-        $success=false;
+        $success=false;$valid=false;
         if(preg_match('/^[a-f0-9]{64}$/D',$token)===1){
-            try{
-                $this->db->beginTransaction();
-                $q=$this->db->prepare("SELECT t.user_id FROM email_verification_tokens t JOIN users u ON u.id=t.user_id WHERE t.token_hash=:hash AND t.used_at IS NULL AND t.expires_at>UTC_TIMESTAMP() AND u.role='customer' AND u.status='pending_verification' LIMIT 1 FOR UPDATE");
-                $q->execute([':hash'=>hash('sha256',$token)]);
-                $row=$q->fetch(PDO::FETCH_ASSOC);
-                if($row){
-                    $userId=(int)$row['user_id'];
-                    $this->db->prepare("UPDATE users SET status='active',email_verified_at=UTC_TIMESTAMP(),updated_at=UTC_TIMESTAMP() WHERE id=:id AND role='customer' AND status='pending_verification'")->execute([':id'=>$userId]);
-                    $this->db->prepare('UPDATE email_verification_tokens SET used_at=UTC_TIMESTAMP() WHERE user_id=:id AND used_at IS NULL')->execute([':id'=>$userId]);
-                    $this->db->commit();$success=true;
-                }else $this->db->rollBack();
-            }catch(Throwable $exception){
-                if($this->db->inTransaction())$this->db->rollBack();
-                error_log('[HostPilot] Email verification failed: '.$exception->getMessage());
+            if($method==='POST'&&!Auth::verifyCsrf($_POST['_token']??null)){
+                $message='Güvenlik doğrulaması başarısız. Sayfayı yenileyin.';
+            }else{
+                try{
+                    if($method==='GET'){
+                        $q=$this->db->prepare("SELECT t.id FROM email_verification_tokens t JOIN users u ON u.id=t.user_id WHERE t.token_hash=:hash AND t.used_at IS NULL AND t.expires_at>UTC_TIMESTAMP() AND u.role='customer' AND u.status='pending_verification' LIMIT 1");
+                        $q->execute([':hash'=>hash('sha256',$token)]);$valid=(bool)$q->fetchColumn();
+                    }elseif($method==='POST'){
+                        $this->db->beginTransaction();
+                        $q=$this->db->prepare("SELECT t.user_id FROM email_verification_tokens t JOIN users u ON u.id=t.user_id WHERE t.token_hash=:hash AND t.used_at IS NULL AND t.expires_at>UTC_TIMESTAMP() AND u.role='customer' AND u.status='pending_verification' LIMIT 1 FOR UPDATE");
+                        $q->execute([':hash'=>hash('sha256',$token)]);$row=$q->fetch(PDO::FETCH_ASSOC);
+                        if($row){
+                            $userId=(int)$row['user_id'];
+                            $this->db->prepare("UPDATE users SET status='active',email_verified_at=UTC_TIMESTAMP(),updated_at=UTC_TIMESTAMP() WHERE id=:id AND role='customer' AND status='pending_verification'")->execute([':id'=>$userId]);
+                            $this->db->prepare('UPDATE email_verification_tokens SET used_at=UTC_TIMESTAMP() WHERE user_id=:id AND used_at IS NULL')->execute([':id'=>$userId]);
+                            $this->db->commit();$success=true;
+                        }else $this->db->rollBack();
+                    }
+                }catch(Throwable $exception){
+                    if($this->db->inTransaction())$this->db->rollBack();
+                    error_log('[HostPilot] Email verification failed: '.$exception->getMessage());
+                }
             }
         }
         $this->start('E-posta doğrulaması');
         echo '<main class="auth"><div class="brand">HOST<span>PILOT</span></div><h1>E-posta doğrulaması</h1>';
         if($success)echo '<div class="notice">E-posta adresiniz doğrulandı. Artık müşteri hesabınıza giriş yapabilirsiniz.</div><a href="'.$this->url('/client/login').'">Giriş yap</a>';
+        elseif($valid&&$method==='GET')echo '<p>E-posta adresinizi doğrulamak ve hesabınızı etkinleştirmek için aşağıdaki düğmeye basın.</p><form method="post"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="token" value="'.$this->e($token).'"><button>E-posta adresini doğrula</button></form>';
         else echo '<div class="error">'.$this->e($message).'</div><a href="'.$this->url('/client/resend-verification').'">Yeni doğrulama bağlantısı iste</a>';
         echo '</main>';$this->end();
     }
