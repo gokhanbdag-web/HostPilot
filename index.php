@@ -47,20 +47,10 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 try {
     $database = new \HostPilot\Core\Database($config['database']);
     $pdo = $database->connection();
-    \HostPilot\Core\Schema::migrate($pdo);
-    \HostPilot\Core\PasswordResetMigration::migrate($pdo);
-    \HostPilot\Core\AdminProfileMigration::migrate($pdo);
 } catch (Throwable $exception) {
     error_log('[HostPilot] Database bootstrap or migration failed: ' . $exception->getMessage());
     http_response_code(503);
-    exit('HostPilot veritabanına bağlanamıyor veya veritabanı güncellemesini tamamlayamıyor. Yapılandırmayı ve hata kayıtlarını kontrol edin.');
-}
-
-// Demo data is optional and non-blocking: a seeding issue must never take the storefront offline.
-try {
-    \HostPilot\Core\DemoSeeder::seed($pdo);
-} catch (Throwable $exception) {
-    error_log('[HostPilot] Demo seed skipped: ' . $exception->getMessage());
+    exit('HostPilot veritabanına bağlanamıyor. Yapılandırmayı ve veritabanı erişim bilgilerini kontrol edin.');
 }
 
 $requestPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
@@ -71,6 +61,35 @@ $requestPath = '/' . trim($requestPath, '/');
 if ($requestPath === '//') $requestPath = '/';
 
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+
+$maintenanceFile = HOSTPILOT_STORAGE . DIRECTORY_SEPARATOR . 'maintenance.lock';
+$maintenanceAllowedPaths = ['/admin/database-upgrade', '/admin/login', '/admin/forgot-password', '/admin/reset-password', '/admin/logout'];
+if (is_file($maintenanceFile) && !in_array($requestPath, $maintenanceAllowedPaths, true)) {
+    http_response_code(503);
+    header('Retry-After: 300');
+    header('Content-Type: text/html; charset=utf-8');
+    echo '<!doctype html><html lang="tr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Bakım çalışması</title><body style="font:16px system-ui;background:#0a1020;color:#e8edf7;display:grid;place-items:center;min-height:100vh;margin:0"><main style="max-width:560px;padding:32px;text-align:center"><h1>Planlı bakım çalışması</h1><p>Veritabanı güncellemesi devam ediyor. Lütfen birkaç dakika sonra tekrar deneyin.</p></main></body></html>';
+    exit;
+}
+
+if ($requestPath === '/admin/database-upgrade' && in_array($method, ['GET', 'POST'], true)) {
+    (new \HostPilot\Http\DatabaseUpgradeController(
+        $pdo,
+        $basePath,
+        HOSTPILOT_STORAGE,
+        HOSTPILOT_ROOT . DIRECTORY_SEPARATOR . 'database' . DIRECTORY_SEPARATOR . 'migrations'
+    ))->index();
+    exit;
+}
+
+// Demo data is optional and non-blocking. Never seed while maintenance mode is active.
+if (!is_file($maintenanceFile)) {
+    try {
+        \HostPilot\Core\DemoSeeder::seed($pdo);
+    } catch (Throwable $exception) {
+        error_log('[HostPilot] Demo seed skipped: ' . $exception->getMessage());
+    }
+}
 
 $client = new \HostPilot\Http\ClientController($pdo, $basePath, (string)($config['app']['key'] ?? ''));
 $passwordReset = new \HostPilot\Http\PasswordResetController($pdo, $basePath, (string)($config['app']['base_url'] ?? ''), (string)($config['app']['key'] ?? ''));

@@ -52,8 +52,11 @@ final class MigrationRunner
     /** @return list<string> */
     public static function pending(PDO $db, string $directory): array
     {
+        self::prepareConnection($db);
         self::assertTrackingTable($db);
-        $applied = $db->query('SELECT migration FROM migrations')->fetchAll(PDO::FETCH_COLUMN);
+        $appliedStatement = $db->query('SELECT migration FROM migrations');
+        $applied = $appliedStatement->fetchAll(PDO::FETCH_COLUMN);
+        $appliedStatement->closeCursor();
         $appliedSet = array_fill_keys(array_map('strval', $applied), true);
         $pending = [];
         foreach (self::discover($directory) as $file) {
@@ -71,22 +74,28 @@ final class MigrationRunner
     public static function runPending(PDO $db, string $directory, bool $confirmed = false): array
     {
         if (!$confirmed) throw new RuntimeException('Explicit administrator confirmation is required.');
+        self::prepareConnection($db);
         self::assertTrackingTable($db);
-        if ($db->getAttribute(PDO::ATTR_DRIVER_NAME) !== 'mysql') {
-            throw new RuntimeException('SQL migrations currently require MySQL or MariaDB.');
-        }
 
-        $database = (string)$db->query('SELECT DATABASE()')->fetchColumn();
+        $databaseStatement = $db->query('SELECT DATABASE()');
+        $database = (string)$databaseStatement->fetchColumn();
+        $databaseStatement->closeCursor();
         $lockName = 'hostpilot_migrations_' . substr(hash('sha256', $database), 0, 32);
         $lock = $db->prepare('SELECT GET_LOCK(:lock_name, 10)');
         $lock->execute([':lock_name' => $lockName]);
-        if ((int)$lock->fetchColumn() !== 1) throw new RuntimeException('Another database migration is already running.');
+        $lockAcquired = (int)$lock->fetchColumn();
+        $lock->closeCursor();
+        if ($lockAcquired !== 1) throw new RuntimeException('Another database migration is already running.');
 
         $appliedNow = [];
         try {
-            $applied = $db->query('SELECT migration FROM migrations')->fetchAll(PDO::FETCH_COLUMN);
+            $appliedStatement = $db->query('SELECT migration FROM migrations');
+            $applied = $appliedStatement->fetchAll(PDO::FETCH_COLUMN);
+            $appliedStatement->closeCursor();
             $appliedSet = array_fill_keys(array_map('strval', $applied), true);
-            $batch = (int)$db->query('SELECT COALESCE(MAX(batch), 0) + 1 FROM migrations')->fetchColumn();
+            $batchStatement = $db->query('SELECT COALESCE(MAX(batch), 0) + 1 FROM migrations');
+            $batch = (int)$batchStatement->fetchColumn();
+            $batchStatement->closeCursor();
 
             foreach (self::discover($directory) as $file) {
                 if (isset($appliedSet[$file['name']])) continue;
@@ -105,6 +114,8 @@ final class MigrationRunner
         } finally {
             $release = $db->prepare('SELECT RELEASE_LOCK(:lock_name)');
             $release->execute([':lock_name' => $lockName]);
+            $release->fetchColumn();
+            $release->closeCursor();
         }
         return $appliedNow;
     }
@@ -169,10 +180,21 @@ final class MigrationRunner
         return $statements;
     }
 
+    private static function prepareConnection(PDO $db): void
+    {
+        if ($db->getAttribute(PDO::ATTR_DRIVER_NAME) !== 'mysql') {
+            throw new RuntimeException('SQL migrations currently require MySQL or MariaDB.');
+        }
+        // MariaDB/PDO configurations may default to unbuffered results. The runner
+        // must issue DDL after metadata queries on the same connection.
+        $db->setAttribute(PDO::MYSQL_ATTR_USE_BUFFERED_QUERY, true);
+    }
+
     private static function assertTrackingTable(PDO $db): void
     {
         try {
-            $db->query('SELECT migration, batch, applied_at FROM migrations LIMIT 0');
+            $statement = $db->query('SELECT migration, batch, applied_at FROM migrations LIMIT 0');
+            $statement->closeCursor();
         } catch (Throwable $exception) {
             throw new RuntimeException('The base migrations tracking table is not installed.', 0, $exception);
         }

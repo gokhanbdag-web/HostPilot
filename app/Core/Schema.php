@@ -216,7 +216,8 @@ final class Schema
             $serviceIndex=$db->prepare("SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='invoices' AND INDEX_NAME='idx_invoice_service_due'");
             if(!(int)$serviceIndex->fetchColumn())$db->exec('ALTER TABLE invoices ADD KEY idx_invoice_service_due(service_id,status,due_at)');
             $fk=$db->prepare("SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() AND TABLE_NAME='invoices' AND CONSTRAINT_NAME='fk_invoice_service'");
-            if(!(int)$fk)$db->exec('ALTER TABLE invoices ADD CONSTRAINT fk_invoice_service FOREIGN KEY(service_id) REFERENCES services(id) ON DELETE SET NULL');
+            $fk->execute();
+            if(!(int)$fk->fetchColumn())$db->exec('ALTER TABLE invoices ADD CONSTRAINT fk_invoice_service FOREIGN KEY(service_id) REFERENCES services(id) ON DELETE SET NULL');
             $record=$db->prepare('INSERT IGNORE INTO migrations(migration,batch,applied_at) VALUES(:name,5,:applied)');
             $record->execute([':name'=>$billingLifecycleName,':applied'=>gmdate('Y-m-d H:i:s')]);
         }
@@ -468,6 +469,23 @@ final class Schema
             if(!(int)$index->fetchColumn())$db->exec('ALTER TABLE domain_registrations ADD KEY idx_domain_expiry_sync_queue(status,registrar_sync_attempted_at,locked_at)');
             $record=$db->prepare('INSERT IGNORE INTO migrations(migration,batch,applied_at) VALUES(:name,17,:applied)');
             $record->execute([':name'=>$domainSyncQueueName,':applied'=>gmdate('Y-m-d H:i:s')]);
+        }
+
+
+        // Forward repair: the legacy billing-lifecycle migration did not execute
+        // its foreign-key existence query before casting the statement to int.
+        // Keep the historical migration immutable and repair the intended FK here.
+        $invoiceServiceFkRepair = '20261115_0001_invoice_service_fk_repair';
+        $repairCheck = $db->prepare('SELECT id FROM migrations WHERE migration=:name LIMIT 1');
+        $repairCheck->execute([':name' => $invoiceServiceFkRepair]);
+        if (!$repairCheck->fetchColumn()) {
+            $foreignKey = $db->prepare("SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() AND TABLE_NAME='invoices' AND CONSTRAINT_NAME='fk_invoice_service'");
+            $foreignKey->execute();
+            if (!(int)$foreignKey->fetchColumn()) {
+                $db->exec('ALTER TABLE invoices ADD CONSTRAINT fk_invoice_service FOREIGN KEY(service_id) REFERENCES services(id) ON DELETE SET NULL');
+            }
+            $record = $db->prepare('INSERT IGNORE INTO migrations(migration,batch,applied_at) VALUES(:name,18,:applied)');
+            $record->execute([':name' => $invoiceServiceFkRepair, ':applied' => gmdate('Y-m-d H:i:s')]);
         }
 
 

@@ -1,9 +1,9 @@
-SET @hostpilot_migration_sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='first_name') = 0, 'ALTER TABLE users ADD COLUMN first_name VARCHAR(80) NULL', 'SELECT 1');
+SET @hostpilot_migration_sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='first_name') = 0, 'ALTER TABLE users ADD COLUMN first_name VARCHAR(80) NULL', 'DO 0');
 PREPARE hostpilot_migration_stmt FROM @hostpilot_migration_sql;
 EXECUTE hostpilot_migration_stmt;
 DEALLOCATE PREPARE hostpilot_migration_stmt;
 
-SET @hostpilot_migration_sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='last_name') = 0, 'ALTER TABLE users ADD COLUMN last_name VARCHAR(80) NULL', 'SELECT 1');
+SET @hostpilot_migration_sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='last_name') = 0, 'ALTER TABLE users ADD COLUMN last_name VARCHAR(80) NULL', 'DO 0');
 PREPARE hostpilot_migration_stmt FROM @hostpilot_migration_sql;
 EXECUTE hostpilot_migration_stmt;
 DEALLOCATE PREPARE hostpilot_migration_stmt;

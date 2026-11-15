@@ -1,9 +1,9 @@
-SET @hostpilot_migration_sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='domain_renewals' AND COLUMN_NAME='action_eaq_id') = 0, 'ALTER TABLE domain_renewals ADD COLUMN action_eaq_id VARCHAR(40) NULL', 'SELECT 1');
+SET @hostpilot_migration_sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='domain_renewals' AND COLUMN_NAME='action_eaq_id') = 0, 'ALTER TABLE domain_renewals ADD COLUMN action_eaq_id VARCHAR(40) NULL', 'DO 0');
 PREPARE hostpilot_migration_stmt FROM @hostpilot_migration_sql;
 EXECUTE hostpilot_migration_stmt;
 DEALLOCATE PREPARE hostpilot_migration_stmt;
 
-SET @hostpilot_migration_sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='domain_renewals' AND COLUMN_NAME='action_type') = 0, 'ALTER TABLE domain_renewals ADD COLUMN action_type VARCHAR(80) NULL', 'SELECT 1');
+SET @hostpilot_migration_sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='domain_renewals' AND COLUMN_NAME='action_type') = 0, 'ALTER TABLE domain_renewals ADD COLUMN action_type VARCHAR(80) NULL', 'DO 0');
 PREPARE hostpilot_migration_stmt FROM @hostpilot_migration_sql;
 EXECUTE hostpilot_migration_stmt;
 DEALLOCATE PREPARE hostpilot_migration_stmt;

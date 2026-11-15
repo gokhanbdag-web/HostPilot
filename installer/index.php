@@ -42,8 +42,22 @@ if (empty($_SESSION['hostpilot_install_csrf'])) {
 
 $errors = [];
 $success = false;
+$preflight = [
+    ['PHP 8.2+', PHP_VERSION_ID >= 80200, PHP_VERSION],
+    ['PDO', extension_loaded('pdo'), extension_loaded('pdo') ? 'Etkin' : 'Eksik'],
+    ['PDO MySQL', extension_loaded('pdo_mysql'), extension_loaded('pdo_mysql') ? 'Etkin' : 'Eksik'],
+    ['OpenSSL', extension_loaded('openssl'), extension_loaded('openssl') ? 'Etkin' : 'Eksik'],
+    ['zlib (yedek sıkıştırma)', extension_loaded('zlib'), extension_loaded('zlib') ? 'Etkin' : 'Eksik'],
+    ['Storage yazma izni', is_dir($storage) ? is_writable($storage) : is_writable(dirname($storage)), is_dir($storage) ? (is_writable($storage) ? 'Yazılabilir' : 'Yazılamıyor') : (is_writable(dirname($storage)) ? 'Dizin oluşturulabilir' : 'Üst dizin yazılamıyor')],
+    ['cURL (dış servis entegrasyonları)', extension_loaded('curl'), extension_loaded('curl') ? 'Etkin' : 'Eksik — entegrasyonlar kullanılamaz'],
+];
+$preflightReady = true;
+foreach (array_slice($preflight, 0, 6) as $check) {
+    if (!$check[1]) $preflightReady = false;
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!$preflightReady) $errors[] = 'Sunucu ön gereksinimleri tamamlanmadan kurulum başlatılamaz. Eksik PHP bileşenlerini hosting sağlayıcınızdan etkinleştirin.';
     $token = (string)($_POST['_token'] ?? '');
     if (!hash_equals((string)$_SESSION['hostpilot_install_csrf'], $token)) {
         $errors[] = 'Güvenlik doğrulaması başarısız. Sayfayı yenileyip tekrar deneyin.';
@@ -107,6 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                 PDO::ATTR_EMULATE_PREPARES => false,
+                PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true,
             ]);
 
             $pdo->exec("CREATE TABLE IF NOT EXISTS users (
@@ -189,157 +204,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 KEY idx_kb_status_sort (status, sort_order)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-            $pdo->exec("CREATE TABLE IF NOT EXISTS product_groups (
-                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                name VARCHAR(120) NOT NULL,
-                slug VARCHAR(150) NOT NULL,
-                description TEXT NULL,
-                status VARCHAR(20) NOT NULL DEFAULT 'active',
-                sort_order INT NOT NULL DEFAULT 0,
-                created_at DATETIME NOT NULL,
-                updated_at DATETIME NOT NULL,
-                UNIQUE KEY uq_product_groups_slug (slug)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-
-            $pdo->exec("CREATE TABLE IF NOT EXISTS products (
-                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                group_id BIGINT UNSIGNED NULL,
-                name VARCHAR(190) NOT NULL,
-                slug VARCHAR(190) NOT NULL,
-                description LONGTEXT NULL,
-                product_type VARCHAR(40) NOT NULL DEFAULT 'hosting',
-                status VARCHAR(20) NOT NULL DEFAULT 'draft',
-                featured TINYINT(1) NOT NULL DEFAULT 0,
-                sort_order INT NOT NULL DEFAULT 0,
-                created_at DATETIME NOT NULL,
-                updated_at DATETIME NOT NULL,
-                UNIQUE KEY uq_products_slug (slug),
-                KEY idx_products_status_type (status, product_type),
-                CONSTRAINT fk_products_group FOREIGN KEY (group_id) REFERENCES product_groups(id) ON DELETE SET NULL
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-
-            $pdo->exec("CREATE TABLE IF NOT EXISTS product_pricing (
-                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                product_id BIGINT UNSIGNED NOT NULL,
-                currency CHAR(3) NOT NULL DEFAULT 'TRY',
-                billing_cycle VARCHAR(24) NOT NULL DEFAULT 'monthly',
-                price DECIMAL(12,2) NOT NULL DEFAULT 0.00,
-                setup_fee DECIMAL(12,2) NOT NULL DEFAULT 0.00,
-                is_active TINYINT(1) NOT NULL DEFAULT 1,
-                created_at DATETIME NOT NULL,
-                updated_at DATETIME NOT NULL,
-                UNIQUE KEY uq_product_price_cycle (product_id,currency,billing_cycle),
-                CONSTRAINT fk_product_pricing_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-
-            $pdo->exec("CREATE TABLE IF NOT EXISTS orders (
-                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                order_number VARCHAR(30) NOT NULL,
-                user_id BIGINT UNSIGNED NOT NULL,
-                status VARCHAR(24) NOT NULL DEFAULT 'pending',
-                currency CHAR(3) NOT NULL DEFAULT 'TRY',
-                subtotal DECIMAL(12,2) NOT NULL DEFAULT 0.00,
-                tax_total DECIMAL(12,2) NOT NULL DEFAULT 0.00,
-                total DECIMAL(12,2) NOT NULL DEFAULT 0.00,
-                notes TEXT NULL,
-                created_at DATETIME NOT NULL,
-                updated_at DATETIME NOT NULL,
-                UNIQUE KEY uq_orders_number (order_number),
-                KEY idx_orders_user_status (user_id,status),
-                CONSTRAINT fk_orders_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-
-            $pdo->exec("CREATE TABLE IF NOT EXISTS order_items (
-                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                order_id BIGINT UNSIGNED NOT NULL,
-                product_id BIGINT UNSIGNED NOT NULL,
-                product_name VARCHAR(190) NOT NULL,
-                billing_cycle VARCHAR(24) NOT NULL,
-                quantity INT UNSIGNED NOT NULL DEFAULT 1,
-                unit_price DECIMAL(12,2) NOT NULL,
-                line_total DECIMAL(12,2) NOT NULL,
-                created_at DATETIME NOT NULL,
-                CONSTRAINT fk_order_items_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
-                CONSTRAINT fk_order_items_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT,
-                KEY idx_order_items_order (order_id)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-
-            $pdo->exec("CREATE TABLE IF NOT EXISTS services (
-                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                user_id BIGINT UNSIGNED NOT NULL,
-                product_id BIGINT UNSIGNED NOT NULL,
-                order_id BIGINT UNSIGNED NULL,
-                domain VARCHAR(190) NULL,
-                status VARCHAR(24) NOT NULL DEFAULT 'pending',
-                billing_cycle VARCHAR(24) NOT NULL,
-                amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
-                next_due_date DATE NULL,
-                created_at DATETIME NOT NULL,
-                updated_at DATETIME NOT NULL,
-                KEY idx_services_user_status (user_id,status),
-                CONSTRAINT fk_services_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT,
-                CONSTRAINT fk_services_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT,
-                CONSTRAINT fk_services_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-
-            $pdo->exec("CREATE TABLE IF NOT EXISTS invoices (
-                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                invoice_number VARCHAR(30) NOT NULL,
-                order_id BIGINT UNSIGNED NOT NULL,
-                user_id BIGINT UNSIGNED NOT NULL,
-                status VARCHAR(24) NOT NULL DEFAULT 'unpaid',
-                currency CHAR(3) NOT NULL DEFAULT 'TRY',
-                subtotal DECIMAL(12,2) NOT NULL DEFAULT 0.00,
-                tax_total DECIMAL(12,2) NOT NULL DEFAULT 0.00,
-                total DECIMAL(12,2) NOT NULL DEFAULT 0.00,
-                amount_paid DECIMAL(12,2) NOT NULL DEFAULT 0.00,
-                issued_at DATETIME NOT NULL,
-                due_at DATETIME NULL,
-                paid_at DATETIME NULL,
-                created_at DATETIME NOT NULL,
-                updated_at DATETIME NOT NULL,
-                UNIQUE KEY uq_invoices_number (invoice_number),
-                UNIQUE KEY uq_invoices_order (order_id),
-                KEY idx_invoices_user_status (user_id,status),
-                CONSTRAINT fk_invoices_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE RESTRICT,
-                CONSTRAINT fk_invoices_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-
-            $pdo->exec("CREATE TABLE IF NOT EXISTS invoice_items (
-                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                invoice_id BIGINT UNSIGNED NOT NULL,
-                description VARCHAR(255) NOT NULL,
-                quantity DECIMAL(10,2) NOT NULL DEFAULT 1.00,
-                unit_price DECIMAL(12,2) NOT NULL,
-                tax_rate DECIMAL(7,4) NOT NULL DEFAULT 0.0000,
-                tax_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
-                line_total DECIMAL(12,2) NOT NULL,
-                created_at DATETIME NOT NULL,
-                KEY idx_invoice_items_invoice (invoice_id),
-                CONSTRAINT fk_invoice_items_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-
-            $pdo->exec("CREATE TABLE IF NOT EXISTS payment_transactions (
-                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                invoice_id BIGINT UNSIGNED NOT NULL,
-                user_id BIGINT UNSIGNED NOT NULL,
-                gateway VARCHAR(40) NOT NULL,
-                gateway_transaction_id VARCHAR(190) NULL,
-                idempotency_key VARCHAR(100) NOT NULL,
-                status VARCHAR(24) NOT NULL DEFAULT 'pending',
-                currency CHAR(3) NOT NULL DEFAULT 'TRY',
-                amount DECIMAL(12,2) NOT NULL,
-                request_reference VARCHAR(190) NULL,
-                response_code VARCHAR(100) NULL,
-                safe_message VARCHAR(500) NULL,
-                created_at DATETIME NOT NULL,
-                updated_at DATETIME NOT NULL,
-                UNIQUE KEY uq_payment_idempotency (idempotency_key),
-                KEY idx_payment_invoice_status (invoice_id,status),
-                KEY idx_payment_gateway_txn (gateway,gateway_transaction_id),
-                CONSTRAINT fk_payment_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE RESTRICT,
-                CONSTRAINT fk_payment_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            // Fresh installs use the same ordered SQL migration files as controlled upgrades.
+            require_once $root . '/app/Core/MigrationRunner.php';
+            \HostPilot\Core\MigrationRunner::runPending($pdo, $root . '/database/migrations', true);
 
             $pdo->beginTransaction();
             $now = gmdate('Y-m-d H:i:s');
@@ -437,6 +304,14 @@ button{border:0;border-radius:10px;padding:14px 20px;background:#1d4ed8;color:#f
 <body>
 <div class="wrap">
 <header><span>HOSTPILOT</span><h1>Kurulum sihirbazı</h1><p>Veritabanı bağlantısını ve ilk yönetici hesabını oluşturun. Kurulum SSH veya Composer gerektirmez.</p></header>
+
+<?php if (!$success): ?>
+<section class="panel"><h2>Sunucu ön kontrolü</h2><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+<?php foreach ($preflight as [$label, $ok, $detail]): ?>
+<div style="padding:10px;border-radius:9px;background:<?= $ok ? '#ecfdf5' : '#fff1f2' ?>;color:<?= $ok ? '#065f46' : '#9f1239' ?>;font-size:12px"><strong><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?></strong><br><?= htmlspecialchars($detail, ENT_QUOTES, 'UTF-8') ?> <?= $ok ? '✓' : '!' ?></div>
+<?php endforeach; ?>
+</div><p class="hint">cURL dış servis bağlantıları için önerilir. PHP 8.2+, PDO MySQL, OpenSSL, zlib ve storage yazma izni kurulum için zorunludur.</p></section>
+<?php endif; ?>
 
 <?php if ($success): ?>
 <div class="panel"><div class="ok"><strong>Kurulum tamamlandı.</strong><br>HostPilot çekirdek tabloları, destek talebi altyapısı, bilgi bankası ve ilk yönetici kaydı oluşturuldu. Güvenlik için kurulum kilitlendi. Yönetim paneline geçebilirsiniz.</div><p style="margin-top:18px"><a href="<?= htmlspecialchars($basePath . '/admin/login', ENT_QUOTES, 'UTF-8') ?>" style="display:block;text-align:center;padding:14px;background:#1d4ed8;color:#fff;text-decoration:none;border-radius:10px;font-weight:750">Yönetici giriş ekranına git</a></p></div>

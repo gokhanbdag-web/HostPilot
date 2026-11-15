@@ -1,63 +1,56 @@
 # Legacy schema migration conversion audit
 
-Audit source: `app/Core/Schema.php` at feature commit `b945774d4bf6ce57ae9d80a309461cadb80a51c5`.
+The shared SQL migration directory now contains 20 ordered migration files: the 17 identifiers historically run by app/Core/Schema.php, two standalone PHP migrations, and one forward repair migration for a legacy invoice/service foreign-key omission.
 
-This document is a conversion checklist and status record. The legacy migration code remains active and must not be removed until each SQL file has been reviewed and tested against both a clean install and a representative upgraded database.
+## Identifier mapping
 
-## Existing migration identifiers
+The filenames preserve the exact identifiers already stored in customer databases:
 
-The identifiers below are the exact values currently stored in the `migrations.migration` column. SQL filenames use these identifiers unchanged so already-upgraded customer databases can skip the corresponding files.
+1. 20261111_0001_catalog_orders_services
+2. 20261111_0002_invoices_payments
+3. 20261111_0003_hosting_servers
+4. 20261111_0004_provisioning_queue
+5. 20261111_0005_service_billing_lifecycle
+6. 20261111_0006_provisioning_intent
+7. 20261111_0007_remote_package_identifiers
+8. 20261112_0008_service_package_changes
+9. 20261112_0009_service_package_change_type
+10. 20261112_0010_email_outbox
+11. 20261112_0011_domain_registration_queue
+12. 20261112_0012_domain_nameserver_queue
+13. 20261112_0013_domain_expiry_sync
+14. 20261112_0014_domain_renewal_queue
+15. 20261112_0015_domain_renewal_action_tracking
+16. 20261112_0016_domain_expiry_reminder_index
+17. 20261112_0017_domain_expiry_sync_queue
+18. 20261113_0016_admin_password_resets
+19. 20261113_0017_admin_first_last_name
+20. 20261115_0001_invoice_service_fk_repair
 
-| Order | Existing migration | Conversion notes |
-|---:|---|---|
-| 1 | `20261111_0001_catalog_orders_services` | Creates product groups, products, pricing, orders, order items and services. |
-| 2 | `20261111_0002_invoices_payments` | Creates invoices, invoice items and payment transactions. |
-| 3 | `20261111_0003_hosting_servers` | Creates server/provisioning tables and conditionally adds columns and a foreign key to services. |
-| 4 | `20261111_0004_provisioning_queue` | Creates provisioning jobs. |
-| 5 | `20261111_0005_service_billing_lifecycle` | Conditionally adds invoice/service columns, indexes and a foreign key. |
-| 6 | `20261111_0006_provisioning_intent` | Conditionally adds provisioning credential-intent columns to services. |
-| 7 | `20261111_0007_remote_package_identifiers` | Conditionally adds server-product mapping columns. |
-| 8 | `20261112_0008_service_package_changes` | Creates service package change records. |
-| 9 | `20261112_0009_service_package_change_type` | Conditionally adds the change_type column. |
-| 10 | `20261112_0010_email_outbox` | Creates the email outbox table. |
-| 11 | `20261112_0011_domain_registration_queue` | Creates domain registration records/queue. |
-| 12 | `20261112_0012_domain_nameserver_queue` | Conditionally adds nameserver and pending-nameserver fields. |
-| 13 | `20261112_0013_domain_expiry_sync` | Conditionally adds expiry date and registrar sync fields. |
-| 14 | `20261112_0014_domain_renewal_queue` | Creates domain renewal records and queue indexes/constraints. |
-| 15 | `20261112_0015_domain_renewal_action_tracking` | Adds registrar action tracking columns and updates legacy pending_remote rows. The UPDATE is placed after the guarded column additions and remains scoped to rows with no action_eaq_id. |
-| 16 | `20261112_0016_domain_expiry_reminder_index` | Conditionally creates an index after checking information_schema.STATISTICS. |
-| 17 | `20261112_0017_domain_expiry_sync_queue` | Conditionally adds sync attempt/error columns and a queue index. |
+## Conversion-sensitive operations
 
-## Conversion rules applied
+- Migration 3 conditionally adds server and provisioning columns to services, then adds its foreign key only if absent.
+- Migration 5 conditionally adds invoice/service lifecycle columns and indexes. The legacy PHP implementation's FK existence statement was not executed; migration 20 repairs the missing invoice/service foreign key on already-upgraded databases.
+- Migrations 6, 7, 9, 12, 13, 15, 16 and 17 contain guarded column/index/constraint operations.
+- Migration 15 adds registrar action tracking columns before its data update. The update is scoped to legacy rows still in pending_remote with no action_eaq_id.
+- The password reset migration creates a token table with unique token hashes and user relationship.
+- The admin profile migration conditionally adds first/last name fields and performs the legacy name backfill.
+- Conditional no-op branches use DO 0 rather than SELECT 1 so PDO does not leave an unconsumed result set while subsequent DDL is executed.
 
-1. Keep each migration key exactly as listed; do not generate new keys for these historical schema changes.
-2. Each migration has a corresponding `database/migrations/<identifier>.sql` file in the same order.
-3. CREATE TABLE definitions are copied from the legacy source, preserving their column definitions, defaults, indexes, foreign keys, engine, character set and collation.
-4. Conditional column, index and foreign-key operations use information_schema checks with prepared DDL statements rather than unconditional ALTER statements.
-5. Migration 15 preserves the original UPDATE predicate and values. The two required columns are added before the UPDATE; the UPDATE changes only rows that remain in `pending_remote` with `action_eaq_id IS NULL`.
-6. The runner records a migration only after all statements in its SQL file complete. Existing installations with a matching migration row should skip that file.
-7. No installer, front-controller, or production-upgrade cutover has been made.
+## Verification status
 
-## Additional migrations outside Schema.php
+- [x] All 20 migration identifiers have matching SQL files.
+- [x] Parser/discovery test asserts all 20 identifiers in order.
+- [x] MySQL 8.0 and MariaDB 10.11 integration tests execute the SQL migration set.
+- [x] Partial-DDL retry, explicit confirmation, tracking and idempotent repeated-run checks.
+- [x] Fresh SQL schema compared with legacy PHP schema for tables, columns, indexes and foreign keys.
+- [x] Legacy admin-name data backfill compared.
+- [x] Already-upgraded legacy database recognized with no pending migrations.
+- [x] Compressed database backup integrity and restore rehearsal in isolated CI database.
+- [x] Browser installer uses the shared SQL migration directory.
+- [x] Authenticated admin upgrade page, CSRF confirmation, maintenance mode before backup, failure retry and guarded maintenance-clear safeguards.
+- [x] HTTP smoke tests cover root and subdirectory installs, invalid database connection, partial-install retry, admin authentication and upgrade flow.
+- [x] Installer preflight checks PHP/PDO/PDO MySQL/OpenSSL/zlib/storage write permissions.
+- [ ] Final review and production deployment approval.
 
-Two additional PHP migrations were identified and converted as separate, later SQL files:
-
-- `20261113_0016_admin_password_resets` creates `password_reset_tokens`, retaining its unique token hash, lookup indexes, and cascading user foreign key.
-- `20261113_0017_admin_first_last_name` conditionally adds `users.first_name` and `users.last_name`, then preserves the original name backfill UPDATE predicate and expressions.
-
-The PHP classes remain unchanged for compatibility. Their SQL files are included in ordered discovery after the 17 `Schema.php` migrations.
-
-## Current status
-
-- [x] Inventory all 17 legacy Schema.php migration identifiers.
-- [x] Add 17 corresponding ordered SQL files with the original migration keys.
-- [x] Add parser/discovery coverage for the 17 files.
-- [x] Correct migration 15 statement order so its columns exist before its data UPDATE.
-- [ ] Execute every migration on clean MySQL and MariaDB databases.
-- [ ] Compare final schemas from the legacy and SQL paths.
-- [ ] Test already-upgraded databases, partial failure/retry, and repeated execution.
-- [ ] Convert and reconcile the two standalone PHP migrations.
-- [ ] Implement authenticated admin upgrade with verified backup, maintenance mode, explicit confirmation, logs, and recovery procedure.
-- [ ] Switch the installer and upgrade flow only after all checks pass.
-
-MySQL DDL can implicitly commit. A failed migration therefore cannot be assumed to roll back transactionally. Before production execution, require authenticated admin confirmation, a verified backup, maintenance/locking safeguards, and a tested recovery plan. No customer database, installed lock, runtime configuration, or live server was modified during this conversion work.
+No production database migration is run by CI. The public front controller does not automatically execute pending schema changes.

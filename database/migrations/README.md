@@ -1,48 +1,61 @@
 # SQL database migrations
 
-New schema changes belong in this directory as UTF-8 SQL files.
+All new schema changes belong in this directory as UTF-8 SQL files. The same ordered SQL files are the schema source for fresh installs and authenticated upgrades.
 
 ## Naming and ordering
 
-Use a unique, monotonically increasing filename:
+Use a unique, monotonically increasing filename in YYYYMMDD_NNNN_short_description.sql format. Files are applied in lexicographic filename order. The filename without .sql is the migration key stored in the existing migrations table. Never rename or edit a migration after it has been applied to a customer database; create a new forward migration instead.
 
-**YYYYMMDD_NNNN_short_description.sql**
+## Current inventory
 
-Example: **20261114_0001_add_customer_locale.sql**.
+There are 20 SQL migration files:
+- 17 historical migrations converted from app/Core/Schema.php.
+- Two standalone migrations for password reset tokens and admin first/last names.
+- One forward repair migration for a legacy invoice/service foreign-key omission.
 
-Files are applied in lexicographic filename order. The filename without .sql is the migration key stored in the existing migrations table. Never rename or edit a migration after it has been applied to a customer database; create a new forward migration instead.
+The original PHP migration implementations remain in app/Core/Schema.php and the two standalone migration classes as compatibility references and as the independent schema-parity test baseline. The public front controller no longer executes schema migrations automatically on every request.
 
-## Legacy conversion status
+## Fresh installation
 
-The 17 historical migrations from `app/Core/Schema.php` now have corresponding SQL files in this directory. Their filenames preserve the exact identifiers already stored in customer databases, so the runner can skip already-applied versions.
+The browser installer creates only the foundational tables needed for installation (users, settings, migrations and support knowledge-base tables), then runs MigrationRunner against this directory before creating the first administrator and installation lock. It does not require Composer or SSH. A failed installation can be retried: migration files are designed to tolerate a partially completed DDL run.
 
-The legacy `Schema::migrate()` path remains active for compatibility. The new SQL files are staged for review and are **not yet wired into the installer, front controller, or production upgrade flow**. Do not remove or bypass the legacy PHP migrations until clean-install and representative-upgrade equivalence tests have passed.
+## Existing installation upgrade
 
-Two additional PHP migrations outside the 17-entry `Schema.php` list have also been converted:
-- `20261113_0016_admin_password_resets` creates the password reset token table.
-- `20261113_0017_admin_first_last_name` adds the profile name columns conditionally and preserves the legacy user-name backfill.
+Super administrators and administrators can open /admin/database-upgrade. The page:
+1. Lists pending migration versions.
+2. Requires an authenticated admin session, CSRF token and explicit confirmation.
+3. Creates and verifies a compressed SQL backup under storage/backups.
+4. Enables storage/maintenance.lock so public requests receive HTTP 503 while the update runs.
+5. Applies pending SQL files in order and records each successful version in the migrations table.
+6. Removes maintenance mode after success. If a migration fails, maintenance mode remains active and the page stays available for a safe retry.
 
-All 19 currently identified PHP migration keys now have corresponding ordered SQL files. The PHP migration classes remain in place for compatibility; no installer or runtime cutover has occurred.
+The backup folder contains an access-deny rule and is under the private storage tree. Migration events are recorded in storage/logs/migrations.log. If all migrations have completed but the maintenance lock could not be removed, the admin page offers a separate, CSRF-protected maintenance-clear action after verifying that no migrations remain.
 
-## Safety rules
+## Runner behavior and safety
 
-- Prefer additive, backward-compatible changes.
-- Use idempotent DDL (CREATE TABLE IF NOT EXISTS, guarded/index-aware operations where needed). MySQL DDL may implicitly commit, so a failed file can be retried only if its statements are safe to repeat.
-- Conditional legacy column, index, and constraint additions use information_schema checks and prepared DDL statements; validate this strategy against the minimum supported MySQL and MariaDB versions.
-- The historical domain-renewal tracking migration includes a data UPDATE. Its columns are added first and the UPDATE is intentionally scoped to rows still in the legacy `pending_remote` state.
-- Do not put destructive data changes, credential changes, or irreversible operations in a routine migration.
-- Test against supported MySQL/MariaDB versions and a copy of representative data.
-- Production upgrades must require an authenticated administrator, explicit confirmation, a verified database backup, and a maintenance/lock strategy.
-- Never run migrations from ordinary storefront requests.
+HostPilot\Core\MigrationRunner provides ordered discovery, pending-version lookup, SQL statement splitting, MySQL advisory locking and explicit runPending(..., true) execution. It records a migration only after every statement in its file succeeds.
 
-HostPilot\\Core\\MigrationRunner provides ordered discovery, pending-version lookup, SQL statement splitting, advisory locking, and an explicit runPending(..., true) execution method. It is intentionally not wired into the public front controller yet.
+MySQL DDL may implicitly commit. A partially executed migration therefore cannot be assumed to roll back. Every migration must be safe to retry after partial DDL. The runner's confirmation argument is a guardrail, not an authorization system; production authorization is enforced by the admin controller and installer flow.
 
-The parser test also verifies that all 19 converted SQL files are discovered in their historical order and can be split into statements. This is not a substitute for executing them against real MySQL/MariaDB databases.
+## Test coverage
 
-## Remaining work before activation
+GitHub Actions uses isolated disposable databases and never contacts the live HostPilot database:
+- Parser/discovery tests verify statement splitting and all 20 migration identifiers in order.
+- MySQL 8.0 and MariaDB 10.11 execute all SQL migrations.
+- The actual browser installer is smoke-tested over HTTP against disposable databases at the root and in a nested subdirectory; the test verifies all 20 migrations, the first super-administrator and the installation lock.
+- The HTTP test also exercises authenticated admin upgrade, CSRF confirmation, maintenance-mode 503, pre-upgrade backup, invalid database connection failure and retry after a partially-created first migration.
+- A deliberately interrupted first migration verifies partial-DDL retry.
+- The test verifies explicit confirmation, tracking records, expected tables and a second run as a no-op.
+- A separate clean schema runs the legacy PHP migration path; table/column/index/foreign-key definitions and admin-name data backfill are compared with the SQL path.
+- A legacy-upgraded schema is checked for zero pending SQL migrations.
+- A compressed database backup is restored into a separate disposable database and its schema/data are verified.
 
-1. Convert the two standalone PHP migrations listed above.
-2. Compare every SQL file against the original PHP DDL and data changes.
-3. Add clean-install, already-upgraded, partially-applied/retry, and repeated-run tests on supported MySQL/MariaDB versions.
-4. Verify backup and restore, maintenance mode, authenticated admin confirmation, and failure recovery.
-5. Only then switch new installs and controlled upgrades to the shared SQL migration directory.
+These tests validate the migration and backup mechanisms. They are not a substitute for a production backup retention policy or a separately rehearsed recovery procedure for a specific hosting account.
+
+## Production activation rules
+
+- Do not add DDL to normal storefront requests.
+- Do not edit an applied SQL file; add a new forward migration.
+- Do not run SQL migrations on production outside the authenticated admin upgrade screen or initial browser installer.
+- Verify backups and check free storage before large customer upgrades.
+- Never deploy a migration to production until the CI matrix is green and the deployment is explicitly approved.
