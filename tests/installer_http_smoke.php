@@ -17,6 +17,7 @@ $admin = new PDO(sprintf('mysql:host=%s;port=%d;charset=utf8mb4', $host, $port),
 $root = dirname(__DIR__);
 $storage = $root . '/storage';
 $lockFile = $storage . '/installed.lock';
+$maintenanceFile = $storage . '/maintenance.lock';
 $configFile = $storage . '/config.php';
 $base = 'http://127.0.0.1:8080/';
 
@@ -128,12 +129,12 @@ echo 'Root browser installer passed: fresh schema, 20 migrations and first admin
 // Simulate a pre-repair installation and verify the authenticated admin upgrade flow.
 $db->exec('ALTER TABLE invoices DROP FOREIGN KEY fk_invoice_service');
 $db->exec("DELETE FROM migrations WHERE migration='20261115_0001_invoice_service_fk_repair'");
-file_put_contents($lockFile, '{"status":"test"}', LOCK_EX);
+file_put_contents($maintenanceFile, '{"status":"test"}', LOCK_EX);
 [$maintenanceBody, $maintenanceHeaders] = httpRequest($base);
 if (statusCode($maintenanceHeaders) !== 503) throw new RuntimeException('Maintenance mode did not block public storefront requests.');
 [$upgradeRedirect, $upgradeHeaders] = httpRequest($base . 'admin/database-upgrade', 'GET', $cookie);
 if (statusCode($upgradeHeaders) !== 302) throw new RuntimeException('Unauthenticated upgrade route did not redirect to admin login.');
-@unlink($lockFile);
+@unlink($maintenanceFile);
 
 [$loginPage, $loginHeaders] = httpRequest($base . 'admin/login', 'GET', $cookie);
 if (statusCode($loginHeaders) !== 200) throw new RuntimeException('Admin login page is unavailable.');
