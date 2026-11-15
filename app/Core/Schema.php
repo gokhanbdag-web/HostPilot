@@ -488,6 +488,13 @@ final class Schema
             $record->execute([':name' => $invoiceServiceFkRepair, ':applied' => gmdate('Y-m-d H:i:s')]);
         }
 
+        // Keep the retained legacy schema path aligned with the SQL migration schema.
+        $authVersionColumn = $db->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='auth_version'");
+        $authVersionColumn->execute();
+        if (!(int)$authVersionColumn->fetchColumn()) {
+            $db->exec('ALTER TABLE users ADD COLUMN auth_version BIGINT UNSIGNED NOT NULL DEFAULT 1 AFTER password_hash');
+        }
+
 
     }
 }
