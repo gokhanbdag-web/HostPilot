@@ -158,7 +158,7 @@ $upgradeToken = csrfFromHtml($upgradePage);
     'confirm_upgrade' => '1',
 ]);
 if (statusCode($upgradeResponseHeaders) !== 302) throw new RuntimeException('Authenticated migration upgrade did not complete: ' . substr($upgradeResult, 0, 800));
-if (is_file($lockFile)) throw new RuntimeException('Successful upgrade did not clear maintenance mode.');
+if (is_file($maintenanceFile)) throw new RuntimeException('Successful upgrade did not clear maintenance mode.');
 $applied = $db->prepare("SELECT COUNT(*) FROM migrations WHERE migration='20261115_0001_invoice_service_fk_repair'");
 $applied->execute();
 if ((int)$applied->fetchColumn() !== 1) throw new RuntimeException('Admin upgrade did not record the pending migration.');
