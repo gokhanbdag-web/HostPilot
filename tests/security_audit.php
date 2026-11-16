@@ -19,6 +19,11 @@ foreach (['security.attachment_scanner_settings_updated','attachment.scanned_cle
 }
 $attachmentMetadata = SecurityAudit::sanitizeMetadata(['resource_id'=>12,'action'=>'unavailable','signature'=>'Eicar.Test']);
 if ($attachmentMetadata !== ['resource_id'=>12,'action'=>'unavailable']) throw new RuntimeException('Attachment scan metadata was not safely minimized.');
+foreach (['payment.transaction_reconciled','payment.manual_refund_confirmed'] as $event) {
+    if (!SecurityAudit::isAllowedEvent($event)) throw new RuntimeException('Payment reconciliation audit event not allowlisted: '.$event);
+}
+$paymentMetadata = SecurityAudit::sanitizeMetadata(['resource_id'=>42,'action'=>'refund_confirmed','provider_reference'=>'private-reference']);
+if ($paymentMetadata !== ['resource_id'=>42,'action'=>'refund_confirmed']) throw new RuntimeException('Payment reconciliation metadata was not minimized.');
 if (!SecurityAudit::isAllowedEvent('auth.login_succeeded')) throw new RuntimeException('Known event was rejected.');
 if (SecurityAudit::isAllowedEvent('auth.custom_payload')) throw new RuntimeException('Unknown event was accepted.');
 $hash = SecurityAudit::hashIp('192.0.2.10');
