@@ -43,7 +43,7 @@ final class Authorization
         return $catalog;
     }
 
-    public static function allowsCurrentRequest(?array $user, ?\\PDO $db, string $basePath=''): bool
+    public static function allowsCurrentRequest(?array $user, ?\PDO $db, string $basePath=''): bool
     {
         $path=(string)(parse_url((string)($_SERVER['REQUEST_URI']??'/'),PHP_URL_PATH)?:'/');
         $base=rtrim($basePath,'/');
