@@ -86,7 +86,7 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
-          extensions: pdo, pdo_mysql
+          extensions: curl, pdo, pdo_mysql
           coverage: none
       - name: Lint and run parser tests
         run: |
@@ -103,6 +103,16 @@ jobs:
         run: |
           php -l tests/migration_integration.php
           php tests/migration_integration.php
+      - name: Run authenticated HTTP security integration tests
+        env:
+          HOSTPILOT_DB_HOST: 127.0.0.1
+          HOSTPILOT_DB_PORT: 3306
+          HOSTPILOT_DB_NAME: hostpilot_ci
+          HOSTPILOT_DB_USER: root
+          HOSTPILOT_DB_PASSWORD: root
+        run: |
+          php -l tests/http_security_integration.php
+          php tests/http_security_integration.php
       - name: Smoke-test browser installer on disposable database
         env:
           HOSTPILOT_DB_HOST: 127.0.0.1
