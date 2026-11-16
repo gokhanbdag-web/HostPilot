@@ -42,6 +42,7 @@ $a = $makeUser('HTTP Customer A', 'http-a@example.test', 'http-customer-a', 'cus
 $b = $makeUser('HTTP Customer B', 'http-b@example.test', 'http-customer-b', 'customer');
 $staff = $makeUser('HTTP Staff', 'http-staff@example.test', 'http-staff', 'staff');
 $admin = $makeUser('HTTP Admin', 'http-admin@example.test', 'http-admin', 'admin');
+$superAdmin = $makeUser('HTTP Super Admin', 'http-super@example.test', 'http-super', 'super_admin');
 $financeStaff = $makeUser('HTTP Finance Staff', 'http-finance@example.test', 'http-finance', 'staff');
 $c = $makeUser('HTTP Erasure Customer', 'http-c@example.test', 'http-customer', 'customer');
 $pdo->prepare("INSERT INTO staff_permissions(user_id,permission,created_at) VALUES(:id,'support.view',UTC_TIMESTAMP())")->execute([':id'=>$staff]);
@@ -178,6 +179,7 @@ $cookieA = sys_get_temp_dir().'/hp-http-a-'.getmypid().'.cookie';
 $cookieB = sys_get_temp_dir().'/hp-http-b-'.getmypid().'.cookie';
 $cookieStaff = sys_get_temp_dir().'/hp-http-staff-'.getmypid().'.cookie';
 $cookieAdmin = sys_get_temp_dir().'/hp-http-admin-'.getmypid().'.cookie';
+$cookieSuper = sys_get_temp_dir().'/hp-http-super-'.getmypid().'.cookie';
 $cookieFinance = sys_get_temp_dir().'/hp-http-finance-'.getmypid().'.cookie';
 $cookieCron = sys_get_temp_dir().'/hp-http-cron-'.getmypid().'.cookie';
 try {
@@ -186,6 +188,12 @@ try {
     $login('/client/login','http-b@example.test',$cookieB);
     $login('/admin/login','http-staff@example.test',$cookieStaff);
     $login('/admin/login','http-admin@example.test',$cookieAdmin);
+    $login('/admin/login','http-super@example.test',$cookieSuper);
+
+    $r=$request('/admin/database-restore',$cookieAdmin);
+    $assert($r['status']===403,'ordinary admin cannot access destructive database restore screen');
+    $r=$request('/admin/database-restore',$cookieSuper);
+    $assert($r['status']===200 && str_contains($r['body'],'Veritabanı yedeğini geri yükle'),'super admin can access verified database restore screen');
 
     $paymentSettingsForm=$request('/admin/payments',$cookieAdmin);
     $paymentSettingsToken=$getToken($paymentSettingsForm['body']);
