@@ -3,6 +3,7 @@ declare(strict_types=1);
 namespace HostPilot\Http;
 
 use HostPilot\Core\Auth;
+use HostPilot\Core\Authorization;
 use HostPilot\Core\EmailService;
 use HostPilot\Core\SecretVault;
 use HostPilot\Payment\GatewayTransport;
@@ -333,7 +334,10 @@ final class PaymentController
         foreach($q->fetchAll() as $row)if(array_key_exists($row['setting_key'],$defaults))$defaults[$row['setting_key']]=(string)$row['setting_value'];
         return $defaults;
     }
-    private function isStaff():bool{return in_array((Auth::user()['role']??''),['super_admin','admin'],true);}
+    private function isStaff():bool
+    {
+        return Authorization::allowsCurrentRequest(Auth::user(),$this->db,$this->basePath);
+    }
     private function clientIp():string
     {$ip=(string)($_SERVER['REMOTE_ADDR']??'');return filter_var($ip,FILTER_VALIDATE_IP)?$ip:'127.0.0.1';}
     private function asciiEmail(string $email):string
