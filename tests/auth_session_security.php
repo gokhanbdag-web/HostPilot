@@ -36,3 +36,17 @@ try {
     @rmdir($root . '/auth-rate-limits');
     @rmdir($root);
 }
+
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_id('hostpilot-csrf-policy-' . bin2hex(random_bytes(8)));
+    session_start();
+}
+$csrf = \HostPilot\Core\Auth::csrfToken();
+if (!preg_match('/^[a-f0-9]{64}$/D', $csrf)) throw new RuntimeException('CSRF token must be a cryptographically random 256-bit hex token.');
+if (!\HostPilot\Core\Auth::verifyCsrf($csrf)) throw new RuntimeException('A valid CSRF token was rejected.');
+if (\HostPilot\Core\Auth::verifyCsrf(str_repeat('0', 64))) throw new RuntimeException('An invalid CSRF token was accepted.');
+if (\HostPilot\Core\Auth::verifyCsrf(null)) throw new RuntimeException('A missing CSRF token was accepted.');
+unset($_SESSION['hostpilot_csrf']);
+if (\HostPilot\Core\Auth::verifyCsrf($csrf)) throw new RuntimeException('A CSRF token remained valid after session token removal.');
+session_destroy();
+echo 'PASS CSRF token generation, validation, missing-token rejection and invalidation.' . PHP_EOL;

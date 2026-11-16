@@ -17,6 +17,9 @@ $cases = [
     ['unknown admin route is denied by default', '/admin/unmapped-action', 'POST', $admin, false],
     ['wrong HTTP method is denied', '/admin/payments', 'DELETE', $admin, false],
     ['login route remains public', '/admin/login', 'GET', null, true],
+    ['customer cannot access admin MFA management', '/admin/security/mfa', 'GET', $customer, false],
+    ['staff can manage own MFA without an unrelated permission', '/admin/security/mfa', 'GET', $staff, true],
+    ['customer cannot post to admin MFA management', '/admin/security/mfa', 'POST', $customer, false],
 ];
 foreach ($cases as [$name, $path, $method, $user, $expected]) {
     $actual = \HostPilot\Core\Authorization::allowsAdminRequest($path, $method, $user);

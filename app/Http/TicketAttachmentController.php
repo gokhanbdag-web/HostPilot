@@ -59,7 +59,7 @@ final class TicketAttachmentController
                 $d=$this->db->prepare('SELECT 1 FROM staff_departments WHERE user_id=:u AND department=:d LIMIT 1');$d->execute([':u'=>$actor['id'],':d'=>$row['department']]);if(!$d->fetchColumn()){http_response_code(404);return;}
             }
         }else{
-            if(($actor['role']??'')!=='customer'){http_response_code(403);return;}
+            if(!self::isCustomerRole((string)($actor['role']??''))){http_response_code(403);return;}
             $q=$this->db->prepare('SELECT a.* FROM ticket_attachments a JOIN tickets t ON t.id=a.ticket_id WHERE a.id=:id AND t.user_id=:uid LIMIT 1');$q->execute([':id'=>$attachmentId,':uid'=>$actor['id']]);$row=$q->fetch(PDO::FETCH_ASSOC);
             if(!$row){http_response_code(404);return;}
         }
@@ -72,6 +72,7 @@ final class TicketAttachmentController
         readfile($file);
     }
 
+    public static function isCustomerRole(string $role):bool{return in_array($role,['customer','client'],true);}
     public static function cleanupStored(array $paths):void{foreach($paths as $path)if(is_string($path)&&is_file($path))@unlink($path);}
     public static function allowedMime(string $mime):bool{return isset(self::TYPES[$mime]);}
     public static function maxBytes():int{return self::MAX_BYTES;}
