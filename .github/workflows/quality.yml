@@ -37,6 +37,8 @@ jobs:
         run: php tests/payment_idempotency_policy.php
       - name: Test hosting transport SSRF policy
         run: php tests/hosting_transport_ssrf.php
+      - name: Test cron header authentication policy
+        run: php tests/cron_auth_policy.php
       - name: Test authentication session policy
         run: php tests/auth_session_security.php
       - name: Test login rate limiting
