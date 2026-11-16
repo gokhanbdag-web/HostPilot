@@ -58,15 +58,18 @@ $orderB = (int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO services(user_id,product_id,order_id,domain,status,billing_cycle,amount,created_at,updated_at) VALUES(:user,:product,:order_id,:domain,'active','monthly',100,UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':user'=>$b, ':product'=>$product, ':order_id'=>$orderB, ':domain'=>'private-customer-b.example']);
 $pdo->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,status,currency,subtotal,tax_total,total,amount_paid,issued_at,created_at,updated_at) VALUES('HTTP-B-INV',:order_id,:user,'unpaid','TRY',100,0,100,0,UTC_TIMESTAMP(),UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':order_id'=>$orderB, ':user'=>$b]);
 $invoiceB = (int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO invoice_items(invoice_id,description,quantity,unit_price,tax_rate,tax_amount,line_total,created_at) VALUES(:invoice,'Customer B confidential line',1,100,0,0,100,UTC_TIMESTAMP())")->execute([':invoice'=>$invoiceB]);
 $pdo->prepare("INSERT INTO payment_transactions(invoice_id,user_id,gateway,idempotency_key,status,currency,amount,request_reference,response_code,safe_message,created_at,updated_at) VALUES(:invoice,:user,'paytr',:key,'review','TRY',100,'HTTP-B-REVIEW','overpayment_review','Provider-confirmed duplicate capture awaiting review',UTC_TIMESTAMP(),UTC_TIMESTAMP())")
     ->execute([':invoice'=>$invoiceB,':user'=>$b,':key'=>hash('sha256','http-b-review-payment')]);
 $reviewPaymentId=(int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,status,currency,subtotal,tax_total,total,amount_paid,issued_at,created_at,updated_at) VALUES('HTTP-A-INV',:order_id,:user,'unpaid','TRY',100,0,100,0,UTC_TIMESTAMP(),UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':order_id'=>$orderA, ':user'=>$a]);
 $invoiceA = (int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO invoice_items(invoice_id,description,quantity,unit_price,tax_rate,tax_amount,line_total,created_at) VALUES(:invoice,'Customer A hosting plan',1,100,0,0,100,UTC_TIMESTAMP())")->execute([':invoice'=>$invoiceA]);
 $pdo->prepare("INSERT INTO orders(order_number,user_id,status,currency,subtotal,tax_total,total,created_at,updated_at) VALUES('HTTP-C-ORDER',:user,'paid','TRY',50,0,50,UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':user'=>$c]);
 $orderC = (int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,status,currency,subtotal,tax_total,total,amount_paid,issued_at,created_at,updated_at) VALUES('HTTP-C-INV',:order_id,:user,'paid','TRY',50,0,50,50,UTC_TIMESTAMP(),UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':order_id'=>$orderC, ':user'=>$c]);
 $invoiceC = (int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO invoice_items(invoice_id,description,quantity,unit_price,tax_rate,tax_amount,line_total,created_at) VALUES(:invoice,'Customer C paid hosting plan',1,50,0,0,50,UTC_TIMESTAMP())")->execute([':invoice'=>$invoiceC]);
 $pdo->prepare("INSERT INTO payment_transactions(invoice_id,user_id,gateway,idempotency_key,status,currency,amount,request_reference,created_at,updated_at) VALUES(:invoice,:user,'manual',:key,'success','TRY',50,'HTTP-C-PAID',UTC_TIMESTAMP(),UTC_TIMESTAMP())")
     ->execute([':invoice'=>$invoiceC,':user'=>$c,':key'=>hash('sha256','http-c-paid-payment')]);
 require_once $root . '/app/Core/SecretVault.php';
@@ -194,6 +197,7 @@ $login = static function (string $route, string $email, string $cookie) use ($re
 };
 $cookieA = sys_get_temp_dir().'/hp-http-a-'.getmypid().'.cookie';
 $cookieB = sys_get_temp_dir().'/hp-http-b-'.getmypid().'.cookie';
+$cookieC = sys_get_temp_dir().'/hp-http-c-'.getmypid().'.cookie';
 $cookieStaff = sys_get_temp_dir().'/hp-http-staff-'.getmypid().'.cookie';
 $cookieAdmin = sys_get_temp_dir().'/hp-http-admin-'.getmypid().'.cookie';
 $cookieSuper = sys_get_temp_dir().'/hp-http-super-'.getmypid().'.cookie';
@@ -203,6 +207,7 @@ try {
     for ($i=0;$i<20;$i++) { $probe=@fsockopen('127.0.0.1',8091,$errno,$errstr,0.2); if($probe){fclose($probe);break;} usleep(100000); }
     $login('/client/login','http-a@example.test',$cookieA);
     $login('/client/login','http-b@example.test',$cookieB);
+    $login('/client/login','http-c@example.test',$cookieC);
     $login('/admin/login','http-staff@example.test',$cookieStaff);
     $login('/admin/login','http-admin@example.test',$cookieAdmin);
     $login('/admin/login','http-super@example.test',$cookieSuper);
@@ -382,6 +387,21 @@ try {
     $assert($r['status']===409 && str_contains($r['body'],'bekleyen bir ödeme işlemi') && $afterPaymentAttempts===$beforePaymentAttempts,
         'customer cannot create a second gateway attempt while an invoice payment is pending');
 
+    $invoiceDetailA=$request('/client/invoices/'.$invoiceA,$cookieA);
+    $assert($invoiceDetailA['status']===200 && str_contains($invoiceDetailA['body'],'HTTP-A-INV')
+        && str_contains($invoiceDetailA['body'],'Customer A hosting plan') && str_contains($invoiceDetailA['body'],'PayTR')
+        && str_contains($invoiceDetailA['body'],'Bekliyor') && str_contains($invoiceDetailA['body'],'Yazdır / PDF kaydet'),
+        'customer invoice detail shows owned line items, payment status and browser print-to-PDF action');
+    $invoiceDetailB=$request('/client/invoices/'.$invoiceB,$cookieA);
+    $assert($invoiceDetailB['status']===404 && !str_contains($invoiceDetailB['body'],'HTTP-B-INV')
+        && !str_contains($invoiceDetailB['body'],'Customer B confidential line'),
+        'customer A cannot read customer B invoice details or line items');
+    $invoiceDetailC=$request('/client/invoices/'.$invoiceC,$cookieC);
+    $assert($invoiceDetailC['status']===200 && str_contains($invoiceDetailC['body'],'HTTP-C-INV')
+        && str_contains($invoiceDetailC['body'],'Customer C paid hosting plan') && str_contains($invoiceDetailC['body'],'Manuel ödeme')
+        && str_contains($invoiceDetailC['body'],'Başarılı'),
+        'paid customer invoice detail displays its payment history without exposing provider references');
+
     $r=$request('/client/tickets/'.$ticketB,$cookieA);
     $assert($r['status']===404 && !str_contains($r['body'],'Private customer B message'),'customer A cannot read customer B ticket over HTTP');
     $r=$request('/client/tickets/attachment/'.$attachmentB,$cookieA);
@@ -525,7 +545,7 @@ try {
 } finally {
     proc_terminate($process);
     proc_close($process);
-    foreach ([$cookieA,$cookieB,$cookieStaff,$cookieAdmin,$cookieFinance,$cookieCron,$serverLog] as $path) if (is_file($path)) @unlink($path);
+    foreach ([$cookieA,$cookieB,$cookieC,$cookieStaff,$cookieAdmin,$cookieFinance,$cookieCron,$serverLog] as $path) if (is_file($path)) @unlink($path);
     @unlink($storage . '/config.php');
     @unlink($storage . '/installed.lock');
     if (is_file($attachmentDir . '/' . $stored)) @unlink($attachmentDir . '/' . $stored);
