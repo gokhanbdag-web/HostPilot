@@ -475,13 +475,17 @@ try {
     }
 
     $paymentForm=$request('/client/invoices/'.$invoiceA.'/pay',$cookieA);
-    $paymentToken=$getToken($paymentForm['body']);
+    $assert($paymentForm['status']===200 && str_contains($paymentForm['body'],'Bu fatura için bir ödeme işlemi bekliyor')
+        && !str_contains($paymentForm['body'],'<form method="post">'),
+        'customer payment page explains a pending attempt and suppresses another payment form');
+    $paymentSecurityPage=$request('/client/security/mfa',$cookieA);
+    $paymentToken=$getToken($paymentSecurityPage['body']);
     $beforePaymentAttempts=(int)$pdo->query("SELECT COUNT(*) FROM payment_transactions WHERE invoice_id=".$invoiceA)->fetchColumn();
     $r=$request('/client/invoices/'.$invoiceA.'/pay',$cookieA,'POST',[
         '_token'=>$paymentToken,'gateway'=>'paytr','phone'=>'+905551112233','address'=>'Test address','city'=>'Ankara','zip'=>'06000'
     ]);
     $afterPaymentAttempts=(int)$pdo->query("SELECT COUNT(*) FROM payment_transactions WHERE invoice_id=".$invoiceA)->fetchColumn();
-    $assert($r['status']===409 && str_contains($r['body'],'bekleyen bir ödeme işlemi') && $afterPaymentAttempts===$beforePaymentAttempts,
+    $assert($r['status']===409 && str_contains($r['body'],'Bu fatura için bir ödeme işlemi bekliyor') && $afterPaymentAttempts===$beforePaymentAttempts,
         'customer cannot create a second gateway attempt while an invoice payment is pending');
 
     $invoiceDetailA=$request('/client/invoices/'.$invoiceA,$cookieA);
