@@ -11,7 +11,7 @@ $checks=[
     'invoice list hides a second pay action while a payment is active'=>str_contains($source,"&&!\$activePayment)"),
     'invoice detail queries active attempts scoped to invoice and customer'=>str_contains($source,"WHERE invoice_id=:id AND user_id=:uid AND status IN ('pending','review') ORDER BY id DESC LIMIT 1"),
     'invoice detail uses no-store caching for a fresh status view'=>str_contains($source,"header('Cache-Control: no-store, max-age=0')")&&str_contains($source,"header('Pragma: no-cache')"),
-    'invoice detail shows a read-only refresh link without a provider polling action'=>str_contains($source,'Durumu yenile')&&str_contains($source,"'>Durumu yenile</a>"),
+    'invoice detail shows a read-only refresh link without a provider polling action'=>str_contains($source,'Durumu yenile')&&str_contains($source,'">Durumu yenile</a>'),
     'invoice detail suppresses checkout while an active attempt exists'=>str_contains($source,'&& !is_array($activePayment)'),
     'review and pending states use safe customer-facing explanations'=>str_contains($source,'Ödeme sağlayıcısından sonuç bekleniyor')&&str_contains($source,'yeni ödeme başlatılamaz'),
     'invoice detail route remains customer-owned GET'=>str_contains($routes,"preg_match('#^/client/invoices/([0-9]+)$'")&&str_contains($routes,'$catalog->clientInvoiceDetail((int)$invoiceDetailMatch[1])'),
