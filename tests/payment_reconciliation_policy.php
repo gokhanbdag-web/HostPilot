@@ -8,7 +8,7 @@ $checks=[
     'reconciliation requires current admin password'=>str_contains($source,'Auth::verifyCredentials'),
     'reconciliation requires CSRF'=>str_contains($source,'Auth::verifyCsrf'),
     'payment application reuses the normal settlement path'=>str_contains($source,'$this->settle('),
-    'external refund is recorded as manual and not sent to gateway'=>str_contains($source,'manual_refund_confirmed')&&str_contains($source,'provider panelinde tamamlanan tam iade'),
+    'external refund is recorded as manual and not sent to gateway'=>str_contains($source,'manual_refund_confirmed')&&str_contains($source,'tam iade kaydedildi'),
     'refund path only handles reviewed captures'=>str_contains($source,"status']!=='review"),
     'payment reconciliation is stored in a dedicated table'=>str_contains($source,'INSERT INTO payment_reconciliations'),
 ];
