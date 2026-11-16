@@ -134,7 +134,7 @@ $assert = static function (bool $condition, string $label): void {
     if (!$condition) throw new RuntimeException('FAIL ' . $label);
     echo 'PASS ' . $label . PHP_EOL;
 };
-$request = static function (string $url, string $cookie, string $method='GET', array $data=[]) use ($base): array {
+$request = static function (string $url, string $cookie, string $method='GET', array $data=[], array $headers=[]) use ($base): array {
     $ch = curl_init($base . $url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true, CURLOPT_MAXREDIRS=>4,
@@ -142,7 +142,7 @@ $request = static function (string $url, string $cookie, string $method='GET', a
         CURLOPT_POST=>$method==='POST',
         CURLOPT_POSTFIELDS=>$method==='POST' ? http_build_query($data) : null,
         CURLOPT_HTTPGET=>$method==='GET',
-        CURLOPT_HTTPHEADER=>$method==='POST' ? ['Content-Type: application/x-www-form-urlencoded'] : [],
+        CURLOPT_HTTPHEADER=>array_merge($method==='POST' ? ['Content-Type: application/x-www-form-urlencoded'] : [],$headers),
     ]);
     $body = curl_exec($ch);
     if ($body === false) { $error=curl_error($ch); curl_close($ch); throw new RuntimeException('HTTP request failed: '.$error); }
@@ -167,12 +167,27 @@ $cookieA = sys_get_temp_dir().'/hp-http-a-'.getmypid().'.cookie';
 $cookieB = sys_get_temp_dir().'/hp-http-b-'.getmypid().'.cookie';
 $cookieStaff = sys_get_temp_dir().'/hp-http-staff-'.getmypid().'.cookie';
 $cookieAdmin = sys_get_temp_dir().'/hp-http-admin-'.getmypid().'.cookie';
+$cookieCron = sys_get_temp_dir().'/hp-http-cron-'.getmypid().'.cookie';
 try {
     for ($i=0;$i<20;$i++) { $probe=@fsockopen('127.0.0.1',8091,$errno,$errstr,0.2); if($probe){fclose($probe);break;} usleep(100000); }
     $login('/client/login','http-a@example.test',$cookieA);
     $login('/client/login','http-b@example.test',$cookieB);
     $login('/admin/login','http-staff@example.test',$cookieStaff);
     $login('/admin/login','http-admin@example.test',$cookieAdmin);
+
+    $cronKey=str_repeat('h',64);
+    $cronCases=[
+        ['/cron/provision','HostPilot provisioning cron v1'],
+        ['/cron/email','HostPilot email cron v1'],
+        ['/cron/domains','HostPilot domain cron v1'],
+        ['/cron/domain-renewals','HostPilot domain cron v1'],
+        ['/cron/domain-expiry-sync','HostPilot domain sync cron v1'],
+    ];
+    foreach($cronCases as [$cronPath,$purpose]){
+        $queryToken=hash_hmac('sha256',$purpose,$cronKey);
+        $r=$request($cronPath.'?token='.$queryToken,$cookieCron);
+        $assert($r['status']===403,'cron endpoint rejects bearer secret in query string: '.$cronPath);
+    }
 
     $paymentForm=$request('/client/invoices/'.$invoiceA.'/pay',$cookieA);
     $paymentToken=$getToken($paymentForm['body']);
@@ -273,6 +288,12 @@ try {
     $assert((int)$retainedInvoice->fetchColumn()===1 && (int)$retainedPayment->fetchColumn()===1,
         'paid invoice and successful payment evidence remain for statutory retention');
 
+    $domainSyncToken=hash_hmac('sha256','HostPilot domain sync cron v1',$cronKey);
+    $r=$request('/cron/domain-expiry-sync',$cookieCron,'GET',[],['Authorization: Bearer '.$domainSyncToken]);
+    $assert($r['status']===200 && str_contains($r['body'],'"ok":true'),'cron worker accepts a valid Authorization Bearer header');
+    $r=$request('/cron/domain-expiry-sync',$cookieCron,'GET',[],['X-HostPilot-Cron-Token: '.$domainSyncToken]);
+    $assert($r['status']===200 && str_contains($r['body'],'"ok":true'),'cron worker accepts the dedicated token header');
+
     $r=$request('/admin',$cookieA);
     $assert($r['status']===403,'customer cannot access admin route over HTTP');
 
@@ -297,7 +318,7 @@ try {
 } finally {
     proc_terminate($process);
     proc_close($process);
-    foreach ([$cookieA,$cookieB,$cookieStaff,$cookieAdmin,$serverLog] as $path) if (is_file($path)) @unlink($path);
+    foreach ([$cookieA,$cookieB,$cookieStaff,$cookieAdmin,$cookieCron,$serverLog] as $path) if (is_file($path)) @unlink($path);
     @unlink($storage . '/config.php');
     @unlink($storage . '/installed.lock');
     if (is_file($attachmentDir . '/' . $stored)) @unlink($attachmentDir . '/' . $stored);
