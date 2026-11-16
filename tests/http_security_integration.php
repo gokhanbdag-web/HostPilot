@@ -328,7 +328,7 @@ try {
     $r=$request('/admin/payment-transactions',$cookieStaff);
     $assert($r['status']===403,'support-only staff cannot view payment transactions');
     $r=$request('/admin/payment-transactions',$cookieFinance);
-    $assert($r['status']===200 && str_contains($r['body'],'HTTP-EXISTING-PENDING'),'finance staff can view payment transactions with payments.view');
+    $assert($r['status']===200 && str_contains($r['body'],'HTTP-A-INV'),'finance staff can view payment transactions with payments.view');
     $r=$request('/admin/payments',$cookieFinance);
     $assert($r['status']===403,'payments.view does not grant payment gateway settings access');
     $r=$request('/admin/servers',$cookieFinance);
@@ -345,6 +345,7 @@ try {
     $assert($r['status']===403,'staff cannot manage staff permissions');
     $r=$request('/admin',$cookieFinance);
     $assert($r['status']===200 && str_contains($r['body'],'/admin/payment-transactions') && str_contains($r['body'],'/admin/servers')
+        && str_contains($r['body'],'/admin/domains/orders') && str_contains($r['body'],'/admin/domains/renewals')
         && !str_contains($r['body'],'/admin/payments') && !str_contains($r['body'],'/admin/domains/registrar'),
         'staff dashboard navigation shows only assigned modules');
 
