@@ -103,7 +103,39 @@ final class CatalogController
         $q=$this->db->prepare('SELECT id,invoice_number,status,currency,total,amount_paid,issued_at,due_at FROM invoices WHERE user_id=:uid ORDER BY issued_at DESC');$q->execute([':uid'=>$u['id']]);$rows=$q->fetchAll();
         $this->start('Faturalarım');echo '<main class="detail"><a class="brand" href="'.$this->url('/').'">HOST<span>PILOT</span></a><a class="back" href="'.$this->url('/client').'">← Müşteri paneli</a><section class="productdetail"><h1>Faturalarım</h1>';
         if(!$rows)echo '<p>Henüz faturanız bulunmuyor.</p>';
-        foreach($rows as $v){echo '<article class="order"><b>#'.$this->e($v['invoice_number']).'</b><span>'.$this->e($this->invoiceStatus($v['status'])).'</span><p>'.number_format((float)$v['total'],2,',','.').' '.$this->e($v['currency']).' · Düzenlenme: '.date('d.m.Y',strtotime($v['issued_at'])).'</p><small>Son ödeme: '.($v['due_at']?date('d.m.Y',strtotime($v['due_at'])):'—').' · Ödenen: '.number_format((float)$v['amount_paid'],2,',','.').' '.$this->e($v['currency']).'</small>';if($v['status']!=='paid'&&$v['status']!=='cancelled')echo '<p><a class="button" href="'.$this->url('/client/invoices/'.$v['id'].'/pay').'">Faturayı öde</a></p>';echo '</article>';}
+        foreach($rows as $v){echo '<article class="order"><b>#'.$this->e($v['invoice_number']).'</b><span>'.$this->e($this->invoiceStatus($v['status'])).'</span><p>'.number_format((float)$v['total'],2,',','.').' '.$this->e($v['currency']).' · Düzenlenme: '.date('d.m.Y',strtotime($v['issued_at'])).'</p><small>Son ödeme: '.($v['due_at']?date('d.m.Y',strtotime($v['due_at'])):'—').' · Ödenen: '.number_format((float)$v['amount_paid'],2,',','.').' '.$this->e($v['currency']).'</small><p><a class="button" href="'.$this->url('/client/invoices/'.$v['id']).'">Fatura detayını görüntüle</a></p>';if(in_array($v['status'],['unpaid','partially_paid','overdue'],true))echo '<p><a class="button" href="'.$this->url('/client/invoices/'.$v['id'].'/pay').'">Faturayı öde</a></p>';echo '</article>';}
+        echo '</section></main>';$this->end();
+    }
+
+    public function clientInvoiceDetail(int $invoiceId):void
+    {
+        if(!Auth::check()){$this->redirect('/client/login');}
+        $u=Auth::user();
+        if(($u['role']??'')!=='customer'){http_response_code(403);echo 'Müşteri hesabı gerekli.';return;}
+        $q=$this->db->prepare('SELECT i.*,o.order_number FROM invoices i JOIN orders o ON o.id=i.order_id WHERE i.id=:id AND i.user_id=:uid LIMIT 1');
+        $q->execute([':id'=>$invoiceId,':uid'=>$u['id']]);$invoice=$q->fetch(PDO::FETCH_ASSOC);
+        if(!$invoice){http_response_code(404);echo 'Fatura bulunamadı.';return;}
+        $itemsQuery=$this->db->prepare('SELECT description,quantity,unit_price,tax_rate,tax_amount,line_total FROM invoice_items WHERE invoice_id=:id ORDER BY id');
+        $itemsQuery->execute([':id'=>$invoiceId]);$items=$itemsQuery->fetchAll(PDO::FETCH_ASSOC);
+        $paymentsQuery=$this->db->prepare('SELECT gateway,status,currency,amount,created_at FROM payment_transactions WHERE invoice_id=:id AND user_id=:uid ORDER BY id');
+        $paymentsQuery->execute([':id'=>$invoiceId,':uid'=>$u['id']]);$payments=$paymentsQuery->fetchAll(PDO::FETCH_ASSOC);
+        $total=(float)$invoice['total'];$paid=(float)$invoice['amount_paid'];$remaining=max(0.0,round($total-$paid,2));
+        $gatewayLabels=['paytr'=>'PayTR','iyzico'=>'iyzico','manual'=>'Manuel ödeme'];
+        $paymentStatuses=['success'=>'Başarılı','pending'=>'Bekliyor','review'=>'İncelemede','failed'=>'Başarısız','cancelled'=>'İptal','refunded'=>'İade edildi'];
+        $this->start('Fatura detayları');
+        echo '<style>@media print{body{background:#fff!important;color:#111!important}.invoice-detail .brand,.invoice-detail .back,.invoice-actions{display:none!important}.invoice-detail .productdetail{box-shadow:none!important;border:0!important;max-width:none!important}a{color:#111!important;text-decoration:none!important}}</style>';
+        echo '<main class="detail invoice-detail"><a class="brand" href="'.$this->url('/').'">HOST<span>PILOT</span></a><a class="back" href="'.$this->url('/client/invoices').'">← Faturalarıma dön</a><section class="productdetail">';
+        echo '<div class="invoice-actions" style="display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end"><button type="button" class="button" onclick="window.print()">Yazdır / PDF kaydet</button>';
+        if(in_array($invoice['status'],['unpaid','partially_paid','overdue'],true)&&$remaining>0)echo '<a class="button" href="'.$this->url('/client/invoices/'.$invoiceId.'/pay').'">Faturayı öde</a>';
+        echo '</div><small>FATURA DETAYI</small><h1>#'.$this->e((string)$invoice['invoice_number']).'</h1><p><b>'.$this->e($this->invoiceStatus((string)$invoice['status'])).'</b> · Sipariş #'.$this->e((string)$invoice['order_number']).'</p>';
+        echo '<div class="stats"><article><small>Fatura tarihi</small><strong>'.($invoice['issued_at']?date('d.m.Y',strtotime($invoice['issued_at'])):'—').'</strong></article><article><small>Son ödeme tarihi</small><strong>'.($invoice['due_at']?date('d.m.Y',strtotime($invoice['due_at'])):'—').'</strong></article><article><small>Para birimi</small><strong>'.$this->e((string)$invoice['currency']).'</strong></article></div>';
+        echo '<h2>Fatura kalemleri</h2><div class="tablewrap"><table><thead><tr><th>Açıklama</th><th>Adet</th><th>Birim fiyat</th><th>KDV</th><th>Toplam</th></tr></thead><tbody>';
+        if(!$items)echo '<tr><td colspan="5">Fatura kalemi bulunmuyor.</td></tr>';
+        foreach($items as $item)echo '<tr><td>'.$this->e((string)$item['description']).'</td><td>'.(int)$item['quantity'].'</td><td>'.number_format((float)$item['unit_price'],2,',','.').' '.$this->e((string)$invoice['currency']).'</td><td>'.number_format((float)$item['tax_amount'],2,',','.').' '.$this->e((string)$invoice['currency']).'</td><td>'.number_format((float)$item['line_total'],2,',','.').' '.$this->e((string)$invoice['currency']).'</td></tr>';
+        echo '</tbody></table></div><div class="invoice-total" style="max-width:380px;margin:18px 0 18px auto"><p>Ara toplam: <b>'.number_format((float)$invoice['subtotal'],2,',','.').' '.$this->e((string)$invoice['currency']).'</b></p><p>Vergi: <b>'.number_format((float)$invoice['tax_total'],2,',','.').' '.$this->e((string)$invoice['currency']).'</b></p><p>Fatura toplamı: <b>'.number_format($total,2,',','.').' '.$this->e((string)$invoice['currency']).'</b></p><p>Ödenen: <b>'.number_format($paid,2,',','.').' '.$this->e((string)$invoice['currency']).'</b></p><p>Kalan bakiye: <b>'.number_format($remaining,2,',','.').' '.$this->e((string)$invoice['currency']).'</b></p></div>';
+        echo '<h2>Ödeme geçmişi</h2>';
+        if(!$payments)echo '<p>Bu fatura için henüz ödeme işlemi bulunmuyor.</p>';
+        foreach($payments as $payment){$gateway=$gatewayLabels[$payment['gateway']]??'Ödeme sağlayıcısı';$status=$paymentStatuses[$payment['status']]??'Durum güncelleniyor';echo '<article class="order"><b>'.$this->e($gateway).' · '.$this->e($status).'</b><p>'.number_format((float)$payment['amount'],2,',','.').' '.$this->e((string)$payment['currency']).' · '.date('d.m.Y H:i',strtotime($payment['created_at'])).'</p></article>';}
         echo '</section></main>';$this->end();
     }
 

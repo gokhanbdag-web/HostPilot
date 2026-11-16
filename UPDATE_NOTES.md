@@ -14,3 +14,10 @@ Yeni sürümlerde bu dosyaya tarihli başlık altında kullanıcıya görünen d
 - 30 dakikadan uzun süredir sonuçlanmayan ödeme oturumları otomatik olarak yeni tahsilata izin vermek yerine manuel incelemeye alınır.
 - Yönetici, sağlayıcı panelinde tahsilat olmadığını doğrulayıp oturumu kapatabilir; bu karar referans, açıklama ve denetim kaydıyla saklanır.
 - Manuel olarak kapatılmış ödeme oturumlarına geç gelen doğrulanmış sağlayıcı bildirimi faturaya tahsilat işleyemez.
+
+## 2026-11-16 · 2026.11.16.12
+
+- Müşteri faturaları artık ayrı detay sayfasında kalem, vergi, toplam, ödenen ve kalan tutarları gösterir.
+- Fatura detayında yalnızca ilgili müşteriye ait ödeme geçmişi listelenir; sağlayıcı işlem referansları ve dahili hata mesajları gösterilmez.
+- Fatura sayfasına tarayıcı yazdırma / PDF olarak kaydetme görünümü eklendi; bu özellik yasal e-fatura/e-arşiv belgesi üretimi değildir.
+- Müşteri A'nın müşteri B faturasını görüntüleyemediğini doğrulayan HTTP IDOR testi eklendi.
