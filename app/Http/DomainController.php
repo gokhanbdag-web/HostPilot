@@ -5,6 +5,7 @@ namespace HostPilot\Http;
 use HostPilot\Core\Auth;
 use HostPilot\Core\Authorization;
 use HostPilot\Core\CronAuthenticator;
+use HostPilot\Core\SecurityAudit;
 use HostPilot\Core\ResellerClubClient;
 use HostPilot\Core\SecretVault;
 use PDO;
@@ -30,6 +31,7 @@ final class DomainController
                     if($secret==='')throw new \RuntimeException('API anahtarı gerekli. İlk kayıt sırasında anahtarı girin.');
                     $values=['enabled'=>$enabled,'environment'=>$environment,'user_id'=>$userId,'api_key_enc'=>$secret];
                     foreach($values as $key=>$value){$q=$this->db->prepare("INSERT INTO settings(setting_group,setting_key,setting_value,is_secret,updated_at) VALUES('domain_registrar',:key,:value,:secret,:updated) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value),is_secret=VALUES(is_secret),updated_at=VALUES(updated_at)");$q->execute([':key'=>$key,':value'=>$value,':secret'=>$key==='api_key_enc'?1:0,':updated'=>gmdate('Y-m-d H:i:s')]);}
+                    $actor=Auth::user();SecurityAudit::record($this->db,'domain.registrar_settings_updated',isset($actor['id'])?(int)$actor['id']:null,['action'=>'updated']);
                     $notice='ResellerClub ayarları kaydedildi.';
                 }catch(Throwable $e){$error='Ayarlar kaydedilemedi: '.$e->getMessage();}
             }
@@ -75,7 +77,7 @@ final class DomainController
             if(in_array($row['nameserver_status']??'', ['queued','processing','needs_review'],true))throw new \RuntimeException('Önceki nameserver işlemi tamamlanmalı veya destek ekibince incelenmeli.');
             $encrypted=$this->vault->encrypt(json_encode($servers,JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR));
             $this->db->prepare("UPDATE domain_registrations SET pending_nameservers_enc=:payload,nameserver_status='queued',nameserver_error=NULL,nameserver_updated_at=:now,updated_at=:now WHERE id=:id")->execute([':payload'=>$encrypted,':now'=>gmdate('Y-m-d H:i:s'),':id'=>$id]);
-            $this->db->commit();$this->go('/client/domains','notice='.rawurlencode('Nameserver değişikliği güvenli işlem kuyruğuna alındı.'));
+            $this->db->commit();SecurityAudit::record($this->db,'domain.nameservers_change_requested',(int)$user['id'],['resource_id'=>$id,'action'=>'queued']);$this->go('/client/domains','notice='.rawurlencode('Nameserver değişikliği güvenli işlem kuyruğuna alındı.'));
         }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();$this->go('/client/domains','error='.rawurlencode($e->getMessage()));}
     }
 
@@ -135,7 +137,7 @@ final class DomainController
             $line->execute([':invoice'=>$invoiceId,':description'=>$domain['domain_name'].' · '.$years.' yıllık domain yenileme',':price'=>$total,':now'=>$now]);
             $renew=$this->db->prepare("INSERT INTO domain_renewals(domain_registration_id,user_id,order_id,invoice_id,years,registrar_order_id,expiry_before,status,idempotency_key,available_at,created_at,updated_at) VALUES(:domain,:user,:order,:invoice,:years,:registrar,:expiry,'awaiting_payment',:key,:now,:now,:now)");
             $renew->execute([':domain'=>$id,':user'=>$user['id'],':order'=>$orderId,':invoice'=>$invoiceId,':years'=>$years,':registrar'=>$domain['registrar_order_id'],':expiry'=>$domain['expiry_date'],':key'=>hash('sha256','domain-renewal:'.$id.':'.$orderId),':now'=>$now]);
-            $this->db->commit();$this->go('/client/invoices','notice='.rawurlencode('Domain yenileme faturası oluşturuldu. Ödeme doğrulanınca işlem kuyruğa alınacak.'));
+            $this->db->commit();SecurityAudit::record($this->db,'domain.renewal_requested',(int)$user['id'],['resource_id'=>$id,'action'=>'queued']);$this->go('/client/invoices','notice='.rawurlencode('Domain yenileme faturası oluşturuldu. Ödeme doğrulanınca işlem kuyruğa alınacak.'));
         }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();$this->go('/client/domains','error='.rawurlencode($e->getMessage()));}
     }
 
@@ -226,6 +228,7 @@ final class DomainController
         $order=$sort==='expiry_asc'?'d.expiry_date IS NULL ASC,d.expiry_date ASC':($sort==='expiry_desc'?'d.expiry_date IS NULL ASC,d.expiry_date DESC':"CASE WHEN d.status IN ('needs_review','failed') THEN 0 ELSE 1 END,d.created_at DESC");
         $stmt=$this->db->prepare('SELECT d.domain_name,d.status,d.expiry_date,d.registrar_auto_renew,d.registrar_synced_at,d.registrar_sync_error,u.name AS customer_name,u.email,i.invoice_number,i.status AS invoice_status FROM domain_registrations d JOIN users u ON u.id=d.user_id JOIN invoices i ON i.id=d.invoice_id'.$whereSql.' ORDER BY '.$order);
         $stmt->execute($params);
+        $actor=Auth::user();SecurityAudit::record($this->db,'domain.exported',isset($actor['id'])?(int)$actor['id']:null,['action'=>'export']);
         $filename='hostpilot-domain-raporu-'.gmdate('Y-m-d').'.csv';
         header('Content-Type: text/csv; charset=UTF-8');
         header('Content-Disposition: attachment; filename="'.$filename.'"');
@@ -258,7 +261,7 @@ final class DomainController
         if(is_array($raw)){foreach(array_slice($raw,0,51) as $value){$id=filter_var($value,FILTER_VALIDATE_INT,['options'=>['min_range'=>1]]);if($id!==false)$ids[(int)$id]=(int)$id;}}
         if(!$ids){$this->go('/admin/domains/orders','error='.rawurlencode('Toplu işlem için en az bir domain seçin.'));return;}
         if(count($ids)>50){$this->go('/admin/domains/orders','error='.rawurlencode('Tek seferde en fazla 50 domain seçilebilir.'));return;}
-        $queued=0;$skipped=0;$now=gmdate('Y-m-d H:i:s');
+        $queued=0;$skipped=0;$queuedIds=[];$now=gmdate('Y-m-d H:i:s');
         try{
             $this->db->beginTransaction();
             $find=$this->db->prepare('SELECT id,status,registrar_order_id,locked_at,nameserver_status FROM domain_registrations WHERE id=:id FOR UPDATE');
@@ -266,9 +269,10 @@ final class DomainController
             foreach($ids as $id){
                 $find->execute([':id'=>$id]);$row=$find->fetch(PDO::FETCH_ASSOC);
                 if(!$row||$row['status']!=='active'||empty($row['registrar_order_id'])||!empty($row['locked_at'])||in_array($row['nameserver_status']??'', ['queued','processing'],true)){$skipped++;continue;}
-                $update->execute([':now'=>$now,':id'=>$id]);$queued++;
+                $update->execute([':now'=>$now,':id'=>$id]);$queued++;$queuedIds[]=$id;
             }
             $this->db->commit();
+            $actor=Auth::user();foreach($queuedIds as $queuedId)SecurityAudit::record($this->db,'domain.expiry_sync_queued',isset($actor['id'])?(int)$actor['id']:null,['resource_id'=>$queuedId,'action'=>'queued']);
             $this->go('/admin/domains/orders','notice='.rawurlencode($queued.' domain senkronizasyon kuyruğuna alındı; '.$skipped.' kayıt uygun olmadığı için atlandı. Worker registrar API çağrılarını cron üzerinden yapacak.'));
         }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();$this->go('/admin/domains/orders','error='.rawurlencode('Toplu işlem tamamlanamadı: '.$e->getMessage()));}
     }
@@ -287,6 +291,7 @@ final class DomainController
             if(!empty($row['locked_at'])||in_array($row['nameserver_status']??'', ['queued','processing'],true))throw new \RuntimeException('Domain başka bir işlem tarafından kullanılıyor; senkronizasyon kuyruğa alınmadı.');
             $this->db->prepare('UPDATE domain_registrations SET registrar_sync_attempted_at=NULL,registrar_sync_error=NULL,updated_at=:now WHERE id=:id')->execute([':now'=>gmdate('Y-m-d H:i:s'),':id'=>$id]);
             $this->db->commit();
+            $actor=Auth::user();SecurityAudit::record($this->db,'domain.expiry_sync_queued',isset($actor['id'])?(int)$actor['id']:null,['resource_id'=>$id,'action'=>'queued']);
             $this->go('/admin/domains/orders','notice='.rawurlencode('Domain bir sonraki cron çalışmasında registrar senkronizasyon kuyruğundan işlenecek.'));
         }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();$this->go('/admin/domains/orders','error='.rawurlencode($e->getMessage()));}
     }
@@ -342,7 +347,7 @@ final class DomainController
                 $this->db->prepare("UPDATE domain_renewals SET status='failed',action_status='Admin verified failed',last_error=:reason,locked_at=NULL,updated_at=:now WHERE id=:id")->execute([':reason'=>substr($reason,0,1000),':now'=>$now,':id'=>$id]);
                 $message='Domain yenilemesi yönetici tarafından başarısız olarak kapatıldı.';
             }else throw new \RuntimeException('Geçersiz yenileme uzlaştırma kararı.');
-            $this->db->commit();$this->go('/admin/domains/renewals','notice='.rawurlencode($message));
+            $this->db->commit();$actor=Auth::user();SecurityAudit::record($this->db,'domain.renewal_reconciled',isset($actor['id'])?(int)$actor['id']:null,['resource_id'=>$id,'action'=>$decision]);$this->go('/admin/domains/renewals','notice='.rawurlencode($message));
         }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();$this->go('/admin/domains/renewals','error='.rawurlencode($e->getMessage()));}
     }
 
@@ -364,7 +369,7 @@ final class DomainController
             }elseif($decision==='mark_failed'){
                 $this->db->prepare("UPDATE domain_registrations SET pending_nameservers_enc=NULL,nameserver_status='failed',nameserver_error='Yönetici nameserver işleminin uygulanmadığını ve kapatıldığını doğruladı.',nameserver_updated_at=:now,updated_at=:now WHERE id=:id")->execute([':now'=>$now,':id'=>$id]);
             }else throw new \RuntimeException('Geçersiz nameserver uzlaştırma kararı.');
-            $this->db->commit();$this->go('/admin/domains/orders','notice='.rawurlencode('Nameserver işlemi uzlaştırıldı.'));
+            $this->db->commit();$actor=Auth::user();SecurityAudit::record($this->db,'domain.nameservers_reconciled',isset($actor['id'])?(int)$actor['id']:null,['resource_id'=>$id,'action'=>$decision]);$this->go('/admin/domains/orders','notice='.rawurlencode('Nameserver işlemi uzlaştırıldı.'));
         }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();$this->go('/admin/domains/orders','error='.rawurlencode($e->getMessage()));}
     }
 
@@ -396,6 +401,7 @@ final class DomainController
                 $this->db->prepare("UPDATE domain_registrations SET status='failed',locked_at=NULL,last_error=:reason,action_status='Failed',action_message=:reason,updated_at=:now WHERE id=:id")->execute([':reason'=>substr($reason,0,1000),':now'=>$now,':id'=>$id]);
             }else throw new \RuntimeException('Geçersiz uzlaştırma kararı.');
             $this->db->commit();
+            $actor=Auth::user();SecurityAudit::record($this->db,'domain.registration_reconciled',isset($actor['id'])?(int)$actor['id']:null,['resource_id'=>$id,'action'=>$decision]);
             $this->go('/admin/domains/orders','notice='.rawurlencode('Domain siparişi uzlaştırıldı. Verdiğiniz karar kaydedildi.'));
         }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();$this->go('/admin/domains/orders','error='.rawurlencode($e->getMessage()));}
     }
