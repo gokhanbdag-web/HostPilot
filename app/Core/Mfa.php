@@ -126,8 +126,8 @@ final class Mfa
             }
             $step = self::matchingStep($secret, $code, $timestamp);
             if ($step === null) return null;
-            $update = $db->prepare('UPDATE admin_mfa SET last_used_step = :step, updated_at = UTC_TIMESTAMP() WHERE user_id = :user_id AND enabled_at IS NOT NULL AND last_used_step < :step');
-            $update->execute([':step' => $step, ':user_id' => $userId]);
+            $update = $db->prepare('UPDATE admin_mfa SET last_used_step = :new_step, updated_at = UTC_TIMESTAMP() WHERE user_id = :user_id AND enabled_at IS NOT NULL AND last_used_step < :previous_step');
+            $update->execute([':new_step' => $step, ':previous_step' => $step, ':user_id' => $userId]);
             return $update->rowCount() === 1 ? 'totp' : null;
         }
         $hash = self::recoveryCodeHash($code);
