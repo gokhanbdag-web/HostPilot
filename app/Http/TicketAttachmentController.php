@@ -72,6 +72,7 @@ final class TicketAttachmentController
         readfile($file);
     }
 
+    public static function cleanupStored(array $paths):void{foreach($paths as $path)if(is_string($path)&&is_file($path))@unlink($path);}
     public static function allowedMime(string $mime):bool{return isset(self::TYPES[$mime]);}
     public static function maxBytes():int{return self::MAX_BYTES;}
 }
