@@ -128,7 +128,7 @@ final class PrivacyController
                 $file=$attachmentDir.DIRECTORY_SEPARATOR.$storedName;
                 if(is_file($file)&&!@unlink($file))throw new RuntimeException('Destek eki silinemedi. Dosya izinlerini kontrol edip tekrar deneyin.');
             }
-            $this->db->prepare("UPDATE ticket_messages SET message='[İçerik silindi - KVKK]',updated_at=COALESCE(updated_at,created_at) WHERE ticket_id IN (SELECT id FROM tickets WHERE user_id=:uid)")->execute([':uid'=>$uid]);
+            $this->db->prepare("UPDATE ticket_messages SET message='[İçerik silindi - KVKK]' WHERE ticket_id IN (SELECT id FROM tickets WHERE user_id=:uid)")->execute([':uid'=>$uid]);
             $this->db->prepare("UPDATE tickets SET subject='[İçerik silindi - KVKK]',status='closed',updated_at=UTC_TIMESTAMP() WHERE user_id=:uid")->execute([':uid'=>$uid]);
             $this->db->prepare('DELETE FROM ticket_attachments WHERE ticket_id IN (SELECT id FROM tickets WHERE user_id=:uid)')->execute([':uid'=>$uid]);
             $this->db->prepare("UPDATE services SET domain=NULL,remote_domain=NULL,remote_identifier=NULL,remote_username=NULL,remote_password_enc=NULL,provisioning_error=NULL,updated_at=UTC_TIMESTAMP() WHERE user_id=:uid")->execute([':uid'=>$uid]);
