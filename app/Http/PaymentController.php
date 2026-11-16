@@ -295,7 +295,9 @@ final class PaymentController
             'ok_url'=>$this->absolute('/payment/return'),'fail_url'=>$this->absolute('/payment/return')
         ],$key,$salt);
         $result=GatewayTransport::postForm('https://www.paytr.com/odeme/api/get-token',$payload);
-        if(($result['status']??'')!=='success')throw new \RuntimeException((string)($result['reason']??'PayTR iframe token üretilemedi.'));
+        $providerStatus=strtolower((string)($result['status']??''));
+        if(in_array($providerStatus,['failed','failure','error'],true))throw new \RuntimeException((string)($result['reason']??'PayTR iframe token üretilemedi.'));
+        if($providerStatus!=='success')throw new GatewayTransportException('PayTR yanıtı ödeme oturumunun durumunu doğrulamıyor.');
         try{
             if(empty($result['token']))throw new \RuntimeException('PayTR başarılı yanıtında ödeme formu anahtarı bulunamadı.');
             $this->updateTransaction($txId,['request_reference'=>$merchantOid]);
@@ -327,7 +329,9 @@ final class PaymentController
         ];
         $path='/payment/iyzipos/checkoutform/initialize/auth/ecom';
         $result=GatewayTransport::postJson($base.$path,$path,$body,$api,$secret);
-        if(($result['status']??'')!=='success')throw new \RuntimeException((string)($result['errorMessage']??'iyzico ödeme formu oluşturulamadı.'));
+        $providerStatus=strtolower((string)($result['status']??''));
+        if(in_array($providerStatus,['failed','failure','error'],true))throw new \RuntimeException((string)($result['errorMessage']??'iyzico ödeme formu oluşturulamadı.'));
+        if($providerStatus!=='success')throw new GatewayTransportException('iyzico yanıtı ödeme oturumunun durumunu doğrulamıyor.');
         try{
             if(empty($result['token']))throw new \RuntimeException('iyzico başarılı yanıtında ödeme formu anahtarı bulunamadı.');
             $token=(string)$result['token'];$this->updateTransaction($txId,['request_reference'=>$token]);
