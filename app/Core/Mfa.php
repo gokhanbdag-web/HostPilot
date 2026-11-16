@@ -102,8 +102,9 @@ final class Mfa
     {
         // Before the admin-confirmed migration is applied, preserve password-only login
         // so an administrator can enter the panel and run the controlled upgrade.
-        $table = $db->query("SHOW TABLES LIKE 'admin_mfa'");
-        if ($table === false || $table->fetchColumn() === false) return false;
+        $table = $db->prepare('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table_name');
+        $table->execute([':table_name' => 'admin_mfa']);
+        if ((int)$table->fetchColumn() !== 1) return false;
         $statement = $db->prepare('SELECT 1 FROM admin_mfa WHERE user_id = :user_id AND enabled_at IS NOT NULL LIMIT 1');
         $statement->execute([':user_id' => $userId]);
         return (bool)$statement->fetchColumn();
