@@ -28,24 +28,24 @@ final class ClientController
                 $authVersion=(int)($challenge['auth_version']??0);
                 $code=trim((string)($_POST['code']??''));
                 if($userId>0&&!Auth::consumeMfaAttempt()){
-                    $factor=\HostPilot\\Core\\CustomerMfa::verifyCode($this->db,$userId,$code,$this->applicationKey);
+                    $factor=\HostPilot\Core\CustomerMfa::verifyCode($this->db,$userId,$code,$this->applicationKey);
                     if($factor!==null){
                         $q=$this->db->prepare("SELECT id,name,email,role,status,auth_version FROM users WHERE id=:id AND auth_version=:version AND status='active' AND role='customer' LIMIT 1");
                         $q->execute([':id'=>$userId,':version'=>$authVersion]);$customer=$q->fetch(PDO::FETCH_ASSOC);
                         if(is_array($customer)){
-                            if($factor==='recovery')\HostPilot\\Core\\SecurityAudit::record($this->db,'auth.customer_mfa_recovery_used',$userId);
-                            \HostPilot\\Core\\SecurityAudit::record($this->db,'auth.customer_mfa_challenge_succeeded',$userId);
+                            if($factor==='recovery')\HostPilot\Core\SecurityAudit::record($this->db,'auth.customer_mfa_recovery_used',$userId);
+                            \HostPilot\Core\SecurityAudit::record($this->db,'auth.customer_mfa_challenge_succeeded',$userId);
                             Auth::completeLogin($this->db,$customer);
                             $this->go('/client');
                         }
                     }
                 }
-                \HostPilot\\Core\\SecurityAudit::record($this->db,'auth.customer_mfa_challenge_failed',$userId>0?$userId:null);
+                \HostPilot\Core\SecurityAudit::record($this->db,'auth.customer_mfa_challenge_failed',$userId>0?$userId:null);
                 $error='Doğrulama kodu geçersiz, süresi dolmuş veya daha önce kullanılmış.';
             }else{
                 $customer=Auth::verifyCredentials($this->db,trim((string)($_POST['email']??'')),(string)($_POST['password']??''));
                 if(is_array($customer)&&($customer['role']??'')==='customer'){
-                    if(\HostPilot\\Core\\CustomerMfa::isEnabled($this->db,(int)$customer['id'])){
+                    if(\HostPilot\Core\CustomerMfa::isEnabled($this->db,(int)$customer['id'])){
                         session_regenerate_id(true);unset($_SESSION['hostpilot_csrf']);
                         $_SESSION['hostpilot_customer_mfa_challenge']=['user_id'=>(int)$customer['id'],'auth_version'=>(int)($customer['auth_version']??1),'expires_at'=>time()+300];
                         $challenge=$_SESSION['hostpilot_customer_mfa_challenge'];
