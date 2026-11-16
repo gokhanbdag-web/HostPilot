@@ -85,8 +85,9 @@ $request = static function (string $url, string $cookie, string $method='GET', a
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true, CURLOPT_MAXREDIRS=>4,
         CURLOPT_COOKIEJAR=>$cookie, CURLOPT_COOKIEFILE=>$cookie, CURLOPT_CONNECTTIMEOUT=>5, CURLOPT_TIMEOUT=>15,
-        CURLOPT_CUSTOMREQUEST=>$method,
+        CURLOPT_POST=>$method==='POST',
         CURLOPT_POSTFIELDS=>$method==='POST' ? http_build_query($data) : null,
+        CURLOPT_HTTPGET=>$method==='GET',
         CURLOPT_HTTPHEADER=>$method==='POST' ? ['Content-Type: application/x-www-form-urlencoded'] : [],
     ]);
     $body = curl_exec($ch);
@@ -103,7 +104,10 @@ $login = static function (string $route, string $email, string $cookie) use ($re
     $page=$request($route,$cookie);
     $token=$getToken($page['body']);
     $result=$request($route,$cookie,'POST',['_token'=>$token,'email'=>$email,'password'=>$password]);
-    $assert($result['status']===200 && (str_contains($result['body'],'HOST') || str_contains($result['body'],'Müşteri')), 'HTTP login for '.$email);
+    if ($result['status']!==200 || (!str_contains($result['body'],'HOST') && !str_contains($result['body'],'Müşteri'))) {
+        throw new RuntimeException('HTTP login failed for '.$email.'; status='.$result['status'].'; body='.substr(strip_tags($result['body']),0,500));
+    }
+    $assert(true, 'HTTP login for '.$email);
 };
 $cookieA = sys_get_temp_dir().'/hp-http-a-'.getmypid().'.cookie';
 $cookieB = sys_get_temp_dir().'/hp-http-b-'.getmypid().'.cookie';
