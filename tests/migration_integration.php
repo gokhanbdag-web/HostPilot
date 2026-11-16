@@ -145,6 +145,32 @@ $legacy->exec("CREATE TABLE migrations (
     migration VARCHAR(190) NOT NULL, batch INT UNSIGNED NOT NULL, applied_at DATETIME NOT NULL,
     UNIQUE KEY uq_migrations_name (migration)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+$legacy->exec("CREATE TABLE tickets (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    ticket_number VARCHAR(24) NOT NULL,
+    user_id BIGINT UNSIGNED NOT NULL,
+    department VARCHAR(80) NOT NULL DEFAULT 'General Support',
+    subject VARCHAR(190) NOT NULL,
+    priority VARCHAR(20) NOT NULL DEFAULT 'normal',
+    status VARCHAR(24) NOT NULL DEFAULT 'open',
+    last_reply_at DATETIME NULL,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    UNIQUE KEY uq_tickets_number (ticket_number),
+    KEY idx_tickets_user_status (user_id,status),
+    CONSTRAINT fk_tickets_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+$legacy->exec("CREATE TABLE ticket_messages (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    ticket_id BIGINT UNSIGNED NOT NULL,
+    user_id BIGINT UNSIGNED NOT NULL,
+    message LONGTEXT NOT NULL,
+    is_staff TINYINT(1) NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL,
+    KEY idx_ticket_messages_ticket (ticket_id,created_at),
+    CONSTRAINT fk_ticket_messages_ticket FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE,
+    CONSTRAINT fk_ticket_messages_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 $seedUser = $legacy->prepare("INSERT INTO users (name,first_name,last_name,email,username,password_hash,role,status,created_at,updated_at) VALUES ('Ada Lovelace',NULL,NULL,:email,:username,'test-hash','admin','active',UTC_TIMESTAMP(),UTC_TIMESTAMP())");
 $seedUser->execute([':email' => 'ada@example.test', ':username' => 'ada-admin']);
 
@@ -156,7 +182,7 @@ require_once dirname(__DIR__) . '/app/Core/AdminProfileMigration.php';
 \HostPilot\Core\AdminProfileMigration::migrate($legacy);
 
 $schemaSignature = static function (PDO $connection): array {
-    $tables = $connection->query("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE' AND TABLE_NAME NOT IN ('users','migrations','staff_permissions','staff_departments','email_verification_tokens','security_audit_logs','admin_mfa','admin_mfa_recovery_codes','privacy_requests') ORDER BY TABLE_NAME")->fetchAll(PDO::FETCH_COLUMN);
+    $tables = $connection->query("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE' AND TABLE_NAME NOT IN ('users','migrations','staff_permissions','staff_departments','email_verification_tokens','security_audit_logs','admin_mfa','admin_mfa_recovery_codes','privacy_requests','ticket_attachments') ORDER BY TABLE_NAME")->fetchAll(PDO::FETCH_COLUMN);
     $signature = [];
     foreach ($tables as $table) {
         $columns = $connection->prepare("SELECT COLUMN_NAME,COLUMN_TYPE,IS_NULLABLE,COLUMN_DEFAULT,EXTRA,COLUMN_KEY,ORDINAL_POSITION FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=:table_name ORDER BY ORDINAL_POSITION");
