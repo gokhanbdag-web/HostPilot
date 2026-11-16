@@ -28,7 +28,7 @@ final class TicketAttachmentController
                 if($error===UPLOAD_ERR_NO_FILE)continue;
                 if($error!==UPLOAD_ERR_OK)throw new RuntimeException('Dosya yüklenemedi. PHP yükleme hatası: '.$error);
                 if($size<1||$size>self::MAX_BYTES||!is_uploaded_file($tmp))throw new RuntimeException('Dosya boş, geçersiz veya 5 MB sınırını aşıyor.');
-                $finfo=new \\finfo(FILEINFO_MIME_TYPE);$mime=(string)$finfo->file($tmp);
+                $finfo=new \finfo(FILEINFO_MIME_TYPE);$mime=(string)$finfo->file($tmp);
                 if(!isset(self::TYPES[$mime]))throw new RuntimeException('Yalnızca PDF, JPG, PNG ve TXT dosyaları kabul edilir.');
                 if($mime==='text/plain'&&preg_match('/[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F]/', (string)file_get_contents($tmp,false,null,0,4096)))throw new RuntimeException('Metin dosyası geçerli düz metin değil.');
                 $ext=self::TYPES[$mime];$stored=bin2hex(random_bytes(24)).'.'.$ext;$path=$dir.'/'.$stored;
