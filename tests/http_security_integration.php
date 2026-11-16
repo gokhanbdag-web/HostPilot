@@ -223,6 +223,28 @@ try {
         && ($refundAuditMetadata['action']??'')==='refund_confirmed',
         'admin can record a verified external refund for an uncredited review capture without changing invoice balance');
 
+    $pdo->prepare("INSERT INTO payment_transactions(invoice_id,user_id,gateway,idempotency_key,status,currency,amount,request_reference,response_code,safe_message,created_at,updated_at) VALUES(:invoice,:user,'paytr',:key,'review','TRY',100,'HTTP-B-REVIEW-APPLY','overpayment_review','Provider payment awaiting manual confirmation',UTC_TIMESTAMP(),UTC_TIMESTAMP())")
+        ->execute([':invoice'=>$invoiceB,':user'=>$b,':key'=>hash('sha256','http-b-review-payment-apply')]);
+    $reviewApplyId=(int)$pdo->lastInsertId();
+    $reviewPage=$request('/admin/payment-transactions',$cookieAdmin);
+    $reviewToken=$getToken($reviewPage['body']);
+    $r=$request('/admin/payment-transactions/reconcile',$cookieAdmin,'POST',[
+        '_token'=>$reviewToken,'payment_transaction_id'=>$reviewApplyId,'decision'=>'payment_confirmed',
+        'provider_reference'=>'CI-PROVIDER-PAYMENT-100','reason'=>'CI verified payment capture in provider dashboard',
+        'password'=>$password,'confirm_external_action'=>'1'
+    ]);
+    $applyStatus=$pdo->prepare('SELECT status FROM payment_transactions WHERE id=:id');$applyStatus->execute([':id'=>$reviewApplyId]);
+    $applyInvoice=$pdo->prepare('SELECT amount_paid,status FROM invoices WHERE id=:id');$applyInvoice->execute([':id'=>$invoiceB]);$applyInvoiceRow=$applyInvoice->fetch(PDO::FETCH_ASSOC);
+    $applyRecord=$pdo->prepare("SELECT decision,provider_reference,amount FROM payment_reconciliations WHERE payment_transaction_id=:id");$applyRecord->execute([':id'=>$reviewApplyId]);$applyRecordRow=$applyRecord->fetch(PDO::FETCH_ASSOC);
+    $applyAudit=$pdo->prepare("SELECT metadata_json FROM security_audit_logs WHERE user_id=:actor AND event_key='payment.transaction_reconciled' ORDER BY id DESC LIMIT 1");$applyAudit->execute([':actor'=>$admin]);$applyAuditMetadata=json_decode((string)$applyAudit->fetchColumn(),true);
+    $assert(($applyStatus->fetchColumn()??'')==='success'
+        && ($applyRecordRow['decision']??'')==='payment_confirmed'
+        && ($applyRecordRow['provider_reference']??'')==='CI-PROVIDER-PAYMENT-100'
+        && (float)($applyInvoiceRow['amount_paid']??0)===100.0
+        && ($applyInvoiceRow['status']??'')==='paid'
+        && ($applyAuditMetadata['action']??'')==='payment_confirmed',
+        'admin can reconcile a provider-confirmed capture through the normal invoice settlement workflow');
+
     $r=$request('/admin/database-restore',$cookieAdmin);
     $assert($r['status']===403,'ordinary admin cannot access destructive database restore screen');
     $r=$request('/admin/database-restore',$cookieSuper);
