@@ -206,3 +206,9 @@ The email outbox idempotency key is scoped to the domain registration, reminder 
 ## Daily domain expiry synchronization
 
 The authenticated `/cron/domain-expiry-sync` worker synchronizes active domain expiry dates and registrar auto-renew flags using ResellerClub's read-only domain-details endpoint. It processes at most 10 domains per invocation. Each domain is refreshed at most once per 24 hours after a successful sync; failed lookups are retried after one hour. Registrar request errors are recorded in `registrar_sync_error` and never overwrite the last known-good expiry date. The worker skips domains with pending or processing nameserver operations and uses the existing row lock to avoid collisions with domain lifecycle queues. Configure this command in the hosting control panel to run once per minute; the worker's per-run limit keeps API usage bounded. Migration `20261112_0017_domain_expiry_sync_queue` adds retry tracking and an index.
+
+
+
+## iyzico Checkout Form result verification
+
+After the browser returns the Checkout Form token, HostPilot retrieves the payment result server-to-server from the configured iyzico API origin. It validates the HMAC-SHA256 response signature and compares the payment ID, currency, paid price, price, basket ID, and conversation ID with the stored payment attempt and invoice. Only a signed SUCCESS response with matching transaction data and fraudStatus=1 settles the invoice. fraudStatus=0 remains pending for risk review. A claimed success with an invalid signature, mismatched amount/currency/identifiers, or unknown fraud status is retained for manual review rather than being marked failed. A signed FAILURE is marked failed. CI uses fixed synthetic response vectors; it does not make live or sandbox merchant requests.
