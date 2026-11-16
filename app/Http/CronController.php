@@ -3,6 +3,7 @@ declare(strict_types=1);
 namespace HostPilot\Http;
 
 use HostPilot\Core\Auth;
+use HostPilot\Core\CronAuthenticator;
 use HostPilot\Core\EmailService;
 use HostPilot\Core\SecretVault;
 use HostPilot\Hosting\CpanelWhmAdapter;
@@ -253,11 +254,7 @@ final class CronController
 
     public function runEmailQueue():void
     {
-        $provided='';
-        if(preg_match('/Bearer\\s+(.+)/i',(string)($_SERVER['HTTP_AUTHORIZATION']??''),$m))$provided=trim($m[1]);
-        if($provided===''&&isset($_GET['token']))$provided=(string)$_GET['token'];
-        $expected=hash_hmac('sha256','HostPilot email cron v1',$this->applicationKey);
-        if($this->applicationKey===''||$provided===''||!hash_equals($expected,$provided)){http_response_code(403);echo 'Forbidden';return;}
+        if(!CronAuthenticator::isAuthorized($this->applicationKey,'HostPilot email cron v1',$_SERVER)){http_response_code(403);echo 'Forbidden';return;}
         header('Content-Type: application/json; charset=utf-8');
         try{
             $reminders=$this->queueDomainExpiryReminders();
@@ -321,11 +318,7 @@ final class CronController
 
     public function runProvisioning():void
     {
-        $provided='';
-        if(preg_match('/Bearer\s+(.+)/i',(string)($_SERVER['HTTP_AUTHORIZATION']??''),$m))$provided=trim($m[1]);
-        if($provided===''&&isset($_GET['token']))$provided=(string)$_GET['token'];
-        $expected=hash_hmac('sha256','HostPilot provisioning cron v1',$this->applicationKey);
-        if($this->applicationKey===''||$provided===''||!hash_equals($expected,$provided)){http_response_code(403);echo 'Forbidden';return;}
+        if(!CronAuthenticator::isAuthorized($this->applicationKey,'HostPilot provisioning cron v1',$_SERVER)){http_response_code(403);echo 'Forbidden';return;}
         header('Content-Type: application/json; charset=utf-8');
         $jobId=0;$job=null;$service=null;$server=null;$remoteCallStarted=false;
         $this->runBillingAutomation();
