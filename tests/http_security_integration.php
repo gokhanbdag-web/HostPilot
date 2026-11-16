@@ -264,6 +264,9 @@ try {
     ]);
     $assert(str_contains($customerReplay['body'],'daha önce kullanılmış')&&!str_contains($customerReplay['body'],'MÜŞTERİ ALANI'),
         'customer TOTP code cannot be replayed in a later login challenge');
+    $customerMfaState->execute([':id'=>$a]);$customerReplayState=$customerMfaState->fetch(PDO::FETCH_ASSOC);
+    $assert(is_array($customerReplayState)&&(int)$customerReplayState['last_used_step']===$customerTotpStep,
+        'replayed customer TOTP does not advance the already-consumed authenticator time step');
     $customerRecoveryLogin=$request('/client/login',$cookieA,'POST',[
         '_token'=>$getToken($customerReplay['body']),'code'=>$customerRecoveryCodes[0],
     ]);
