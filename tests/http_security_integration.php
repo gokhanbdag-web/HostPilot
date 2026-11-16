@@ -202,7 +202,7 @@ try {
     $permissionAudit->execute([':actor'=>$admin,':target'=>'%"target_user_id":'.$financeStaff.'%']);
     $assert($r['status']===200 && count($savedPermissionList)===count($assignablePermissions)
         && count(array_intersect($assignablePermissions,$savedPermissionList))===count($assignablePermissions)
-        && (int)$permissionAudit->fetchColumn()===1,
+        && (int)($permissionAuditMetadata['target_user_id']??0)===$financeStaff,
         'admin can assign the complete safe staff catalog and permission changes are audited');
     $login('/admin/login','http-finance@example.test',$cookieFinance);
 
