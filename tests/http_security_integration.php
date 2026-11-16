@@ -105,7 +105,7 @@ $login = static function (string $route, string $email, string $cookie) use ($re
     $token=$getToken($page['body']);
     $result=$request($route,$cookie,'POST',['_token'=>$token,'email'=>$email,'password'=>$password]);
     if ($result['status']!==200 || (!str_contains($result['body'],'HOST') && !str_contains($result['body'],'Müşteri'))) {
-        throw new RuntimeException('HTTP login failed for '.$email.'; status='.$result['status'].'; body='.substr(strip_tags($result['body']),0,500));
+        throw new RuntimeException('HTTP login failed for '.$email.'; status='.$result['status'].'; body='.substr(strip_tags($result['body']),0,500).'; server-log='.(is_file($serverLog)?substr((string)file_get_contents($serverLog),-4000):'missing'));
     }
     $assert(true, 'HTTP login for '.$email);
 };
