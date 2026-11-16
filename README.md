@@ -78,3 +78,8 @@ All scheduled worker endpoints (`/cron/provision`, `/cron/email`, `/cron/domains
 ### Staff permission management
 
 The staff permission form is generated from the central authorization catalog. It exposes only scoped, assignable modules: dashboard, customers, reports, support, catalog, orders, invoices, payment transaction viewing, domain order/renewal viewing, server inventory viewing, and hosting service viewing. Gateway credentials, server/service mutations, registrar credentials, automation tokens, privacy erasure, staff administration, software updates, and database upgrades remain administrator-only. Staff dashboard navigation follows the same permission registry, and permission changes are written to the security audit log.
+
+
+### Staff permission catalog and scoped module access
+
+Staff permissions are generated from the central authorization registry and limited to explicit least-privilege modules: dashboard, customers, reports, support, catalog, orders, invoices, payment transaction viewing, domain order/renewal viewing, server inventory viewing, and hosting service viewing. Sensitive controls such as payment gateway settings, server/service mutations, registrar credentials, automation workers, privacy erasure, staff administration, software updates, and database upgrades remain administrator-only. The dashboard hides modules that a staff account has not been granted. Staff permission changes are recorded in the security audit log.
