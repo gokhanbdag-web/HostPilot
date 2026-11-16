@@ -155,6 +155,22 @@ try {
     $assert($r['status']===403,'support staff without finance permission cannot change payment gateway settings');
     $r=$request('/admin/payment-transactions',$cookieStaff);
     $assert($r['status']===403,'support staff without finance permission cannot view payment transaction records');
+    foreach (['/admin/servers','/admin/services','/admin/settings','/admin/email-queue','/admin/automation','/admin/updates','/admin/products','/admin/orders','/admin/invoices','/admin/database-upgrade','/admin/privacy'] as $restrictedRoute) {
+        $r=$request($restrictedRoute,$cookieStaff);
+        $assert($r['status']===403,'support-only staff cannot access '.$restrictedRoute);
+    }
+    foreach ([
+        ['/admin/servers/save',['_token'=>$packageToken,'name'=>'attacker']],
+        ['/admin/services/terminate',['_token'=>$packageToken,'service_id'=>'1','confirm_domain'=>'example.test']],
+        ['/admin/settings',['_token'=>$packageToken,'action'=>'save','host'=>'attacker.test']],
+        ['/admin/automation',['_token'=>$packageToken,'billing_grace_days'=>'1']],
+        ['/admin/database-upgrade',['_token'=>$packageToken,'confirm_upgrade'=>'1']],
+        ['/admin/privacy',['_token'=>$packageToken,'action'=>'export']],
+    ] as [$restrictedRoute,$payload]) {
+        $r=$request($restrictedRoute,$cookieStaff,'POST',$payload);
+        $assert($r['status']===403,'support-only staff cannot POST '.$restrictedRoute);
+    }
+
 
 
     $r=$request('/client/services',$cookieA);
