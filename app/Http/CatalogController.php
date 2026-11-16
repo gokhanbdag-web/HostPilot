@@ -146,7 +146,7 @@ final class CatalogController
         echo '</div><small>FATURA DETAYI</small><h1>#'.$this->e((string)$invoice['invoice_number']).'</h1><p><b>'.$this->e($this->invoiceStatus((string)$invoice['status'])).'</b> · Sipariş #'.$this->e((string)$invoice['order_number']).'</p>';
         if(is_array($activePayment)){
             $activeLabel=$activePayment['status']==='review'?'İncelemede':'Bekliyor';
-            $activeGateway=$activePayment['gateway']==='paytr'?'PayTR':'iyzico';
+            $activeGateway=['paytr'=>'PayTR','iyzico'=>'iyzico','manual'=>'Manuel ödeme'][$activePayment['gateway']]??'Ödeme sağlayıcısı';
             $activeCopy=$activePayment['status']==='review'?'Ödeme sağlayıcısının sonucu doğrulanana kadar yeni ödeme başlatılamaz. İşlem destek ekibi tarafından kontrol ediliyor.':'Ödeme sağlayıcısından sonuç bekleniyor. Aynı fatura için ikinci bir ödeme başlatılmaz.';
             echo '<section class="notice invoice-payment-status"><b>Ödeme işlemi: '.$this->e($activeLabel).' · '.$this->e($activeGateway).'</b><p>'.$this->e($activeCopy).'</p><a class="button payment-refresh" href="'.$this->url('/client/invoices/'.$invoiceId).'">Durumu yenile</a></section>';
         }
