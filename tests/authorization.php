@@ -31,5 +31,5 @@ foreach ($cases as [$name, $path, $method, $user, $expected]) {
 
 $_SERVER['REQUEST_URI']='/hostpilot/admin';
 $_SERVER['REQUEST_METHOD']='GET';
-if (!Authorization::allowsCurrentRequest($admin,null,'/hostpilot')) throw new RuntimeException('Subdirectory-aware current request authorization failed.');
+if (!\\HostPilot\\Core\\Authorization::allowsCurrentRequest($admin,null,'/hostpilot')) throw new RuntimeException('Subdirectory-aware current request authorization failed.');
 echo "PASS subdirectory-aware current request authorization".PHP_EOL;
