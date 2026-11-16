@@ -368,14 +368,22 @@ final class PaymentController
             $base=$v['iyzico_test_mode']==='1'?'https://sandbox-api.iyzipay.com':'https://api.iyzipay.com';
             $path='/payment/iyzipos/checkoutform/auth/ecom/detail';
             $result=GatewayTransport::postJson($base.$path,$path,['locale'=>'tr','conversationId'=>$tx['idempotency_key'],'token'=>$token],$api,$secret);
-            $paid=(float)($result['paidPrice']??0);$expected=(float)$tx['amount'];$currency=(string)($result['currency']??'');
-            $sigData=implode(':',[(string)($result['paymentStatus']??''),(string)($result['paymentId']??''),$currency,(string)($result['basketId']??''),(string)($result['conversationId']??''),$this->normalizeMoney($result['paidPrice']??''),$this->normalizeMoney($result['price']??''),$token]);
-            $signature=(string)($result['signature']??'');$signatureOk=$signature!==''&&hash_equals(hash_hmac('sha256',$sigData,$secret),$signature);
-            $responseMatches=($result['status']??'')==='success'&&$currency===(string)$tx['currency']&&abs($paid-$expected)<0.005&&abs((float)($result['price']??0)-$expected)<0.005&&(string)($result['basketId']??'')===(string)$tx['invoice_number']&&(string)($result['conversationId']??'')===(string)$tx['idempotency_key']&&$signatureOk;
-            $ok=$responseMatches&&($result['paymentStatus']??'')==='SUCCESS'&&(int)($result['fraudStatus']??-1)===1;
-            if($ok)$this->settle($tx,'success',(string)($result['paymentId']??$token),'iyzico retrieve and signature verified');
-            elseif($responseMatches&&($result['paymentStatus']??'')==='SUCCESS'&&(int)($result['fraudStatus']??-1)===0)$this->updateTransaction((int)$tx['id'],['status'=>'pending','gateway_transaction_id'=>(string)($result['paymentId']??''),'response_code'=>'fraud_review','safe_message'=>'iyzico risk incelemesi bekleniyor']);
-            else $this->updateTransaction((int)$tx['id'],['status'=>'failed','gateway_transaction_id'=>(string)($result['paymentId']??''),'response_code'=>(string)($result['errorCode']??$result['paymentStatus']??'not_approved'),'safe_message'=>'iyzico sonucu doğrulanamadı veya ödeme onaylanmadı']);
+            $assessment=IyzicoSignature::assess($result,[
+                'currency'=>(string)$tx['currency'],
+                'amount'=>(float)$tx['amount'],
+                'invoice_number'=>(string)$tx['invoice_number'],
+                'idempotency_key'=>(string)$tx['idempotency_key']
+            ],$token,$secret);
+            $gatewayId=(string)($result['paymentId']??$token);
+            if($assessment['decision']==='success'){
+                $this->settle($tx,'success',$gatewayId,$assessment['message']);
+            }elseif($assessment['decision']==='pending'){
+                $this->updateTransaction((int)$tx['id'],['status'=>'pending','gateway_transaction_id'=>$gatewayId,'response_code'=>$assessment['code'],'safe_message'=>$assessment['message']]);
+            }elseif($assessment['decision']==='review'){
+                $this->updateTransaction((int)$tx['id'],['status'=>'review','gateway_transaction_id'=>$gatewayId,'response_code'=>$assessment['code'],'safe_message'=>$assessment['message']]);
+            }else{
+                $this->updateTransaction((int)$tx['id'],['status'=>'failed','gateway_transaction_id'=>$gatewayId,'response_code'=>$assessment['code'],'safe_message'=>$assessment['message']]);
+            }
             $this->redirect('/client/invoices');
         }catch(Throwable $e){error_log('[HostPilot] iyzico callback: '.$e->getMessage());http_response_code(502);echo 'Ödeme sonucu sağlayıcıdan doğrulanamadı. Lütfen daha sonra faturalarınızı kontrol edin.';}
     }
