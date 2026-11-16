@@ -148,3 +148,5 @@ A feature is complete only when UI, data model, permissions, validation, failure
 - [x] Stage 2: administrator/staff TOTP MFA with encrypted secrets, replay protection, one-time hashed recovery codes, password re-authentication, audit events, and shared-host-compatible setup (PR #10 merged; controlled live migration remains pending).
 
 - [x] Stage 2: customer JSON data export with field allowlisting, authenticated account-erasure requests, administrator review queue, audit events, and versioned migration (PR pending; erasure is not automatic and financial/legal records require review).
+
+- [x] Stage 2: private support-ticket attachments with MIME allowlist, size/count limits, randomized storage, integrity checks, and owner/department-authorized downloads (PR pending; apply migration through admin upgrade).
