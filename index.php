@@ -97,7 +97,7 @@ if ($requestPath === '/admin/security/mfa' && in_array($method, ['GET','POST'], 
 if ($requestPath === '/admin/security/attachments' && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\TicketAttachmentController($pdo,$basePath,HOSTPILOT_STORAGE))->adminScannerSettings(); exit; }
 
 if ($requestPath === '/admin/database-restore' && in_array($method, ['GET','POST'], true)) {
-    (new \\HostPilot\\Http\\DatabaseRestoreController($pdo,$basePath,HOSTPILOT_STORAGE))->index();
+    (new \HostPilot\Http\DatabaseRestoreController($pdo,$basePath,HOSTPILOT_STORAGE))->index();
     exit;
 }
 
