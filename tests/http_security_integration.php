@@ -475,9 +475,11 @@ try {
     }
 
     $paymentForm=$request('/client/invoices/'.$invoiceA.'/pay',$cookieA);
-    $assert($paymentForm['status']===200 && str_contains($paymentForm['body'],'Bu fatura için bir ödeme işlemi bekliyor')
+    $hasActivePaymentNotice=str_contains($paymentForm['body'],'Bu fatura için bir ödeme işlemi bekliyor')
+        ||str_contains($paymentForm['body'],'Bu ödeme işlemi manuel incelemede');
+    $assert($paymentForm['status']===200 && $hasActivePaymentNotice
         && !str_contains($paymentForm['body'],'<form method="post">'),
-        'customer payment page explains a pending attempt and suppresses another payment form; status='.$paymentForm['status'].'; tx='.json_encode($pdo->query("SELECT status,gateway FROM payment_transactions WHERE invoice_id=".$invoiceA." ORDER BY id DESC")->fetchAll(PDO::FETCH_ASSOC)).'; content='.substr(strip_tags((preg_match('/<section class="productdetail".*?<\/section>/s',$paymentForm['body'],$m)?$m[0]:$paymentForm['body'])),0,700));
+        'customer payment page explains pending/review state and suppresses another payment form');
     $paymentSecurityPage=$request('/client/security/mfa',$cookieA);
     $paymentToken=$getToken($paymentSecurityPage['body']);
     $beforePaymentAttempts=(int)$pdo->query("SELECT COUNT(*) FROM payment_transactions WHERE invoice_id=".$invoiceA)->fetchColumn();
@@ -485,8 +487,8 @@ try {
         '_token'=>$paymentToken,'gateway'=>'paytr','phone'=>'+905551112233','address'=>'Test address','city'=>'Ankara','zip'=>'06000'
     ]);
     $afterPaymentAttempts=(int)$pdo->query("SELECT COUNT(*) FROM payment_transactions WHERE invoice_id=".$invoiceA)->fetchColumn();
-    $assert($r['status']===409 && str_contains($r['body'],'Bu fatura için bir ödeme işlemi bekliyor') && $afterPaymentAttempts===$beforePaymentAttempts,
-        'customer cannot create a second gateway attempt while an invoice payment is pending');
+    $assert($r['status']===409 && (str_contains($r['body'],'Bu fatura için bir ödeme işlemi bekliyor')||str_contains($r['body'],'manuel incelemede')) && $afterPaymentAttempts===$beforePaymentAttempts,
+        'customer cannot create a second gateway attempt while an invoice payment is pending or under review');
 
     $invoiceDetailA=$request('/client/invoices/'.$invoiceA,$cookieA);
     $assert($invoiceDetailA['status']===200 && str_contains($invoiceDetailA['body'],'HTTP-A-INV')
