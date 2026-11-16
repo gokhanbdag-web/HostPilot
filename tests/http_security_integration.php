@@ -493,7 +493,7 @@ try {
     $invoiceListA=$request('/client/invoices',$cookieA);
     $assert($invoiceListA['status']===200 && str_contains($invoiceListA['body'],'Ödeme bekliyor')
         && !str_contains($invoiceListA['body'],'/client/invoices/'.$invoiceA.'/pay'),
-        'customer invoice list shows active payment state and suppresses duplicate pay action; status='.$invoiceListA['status'].'; body='.substr(strip_tags($invoiceListA['body']),0,1200));
+        'customer invoice list shows active payment state and suppresses duplicate pay action; status='.$invoiceListA['status'].'; body='.substr(strip_tags(preg_replace('/<style\\b[^>]*>.*?<\\/style>/s','',$invoiceListA['body'])),0,1800));
 
     $invoiceDetailA=$request('/client/invoices/'.$invoiceA,$cookieA);
     $assert($invoiceDetailA['status']===200 && str_contains($invoiceDetailA['body'],'HTTP-A-INV')
