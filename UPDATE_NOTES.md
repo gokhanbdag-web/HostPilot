@@ -52,3 +52,11 @@ Yeni sürümlerde bu dosyaya tarihli başlık altında kullanıcıya görünen d
 - Tutarın kuruş cinsinden gönderimi, TL para birimi, sepet JSON/Base64 biçimi, merchant token HMAC, sandbox bayrakları ve dönüş URL'leri için sabit sözleşme testleri eklendi.
 - Sıfır tutar ve boş sepetle ödeme başlatılması engellendi.
 - Testler sentetik merchant bilgileri kullanır; gerçek PayTR hesabına veya ödeme API'sine istek göndermez.
+
+## 2026-11-16 · 2026.11.16.17
+
+- Ödeme HTTP taşıma katmanı yalnızca PayTR token ve iyzico Checkout Form API HTTPS uç noktalarını kabul edecek şekilde sınırlandı.
+- URL şeması, host, port, kimlik bilgileri, query/fragment ve iyzico imza yolu doğrulanıyor.
+- cURL ve cURL bulunmayan PHP stream bağlantılarında HTTP yönlendirmeleri kapatıldı; TLS sertifika/hostname doğrulaması zorunlu tutuldu.
+- Sağlayıcı yanıtları 1 MiB ile sınırlandı; her iki taşıma yolu da sınırı aşan yanıtları reddediyor.
+- Yeni güvenlik politika testleri CI'ya eklendi; gerçek merchant/sandbox isteği gönderilmedi.
