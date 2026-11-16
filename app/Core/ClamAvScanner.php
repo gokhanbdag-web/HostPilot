@@ -17,14 +17,14 @@ final class ClamAvScanner
     public static function isAllowedEndpoint(string $endpoint):bool
     {
         $endpoint=trim($endpoint);
-        if($endpoint===''||strlen($endpoint)>240||str_contains($endpoint,'..'))return false;
+        if($endpoint===''||strlen($endpoint)>240||str_contains($endpoint,'..')||preg_match('/[\\s\\x00]/',$endpoint)||str_contains($endpoint,'?')||str_contains($endpoint,'#'))return false;
         if(str_starts_with($endpoint,'unix://')){
             $path=substr($endpoint,7);
             return $path!==''&&str_starts_with($path,'/')&&!str_contains($path,"\0");
         }
         if(!str_starts_with($endpoint,'tcp://'))return false;
         $parts=parse_url($endpoint);
-        if(!is_array($parts)||!isset($parts['host'],$parts['port']))return false;
+        if(!is_array($parts)||!isset($parts['host'],$parts['port'])||isset($parts['user'])||isset($parts['pass'])||isset($parts['path'])||isset($parts['query'])||isset($parts['fragment']))return false;
         $host=strtolower(trim((string)$parts['host'],'[]'));
         return in_array($host,['127.0.0.1','localhost','::1'],true)&&(int)$parts['port']>0&&(int)$parts['port']<=65535;
     }
