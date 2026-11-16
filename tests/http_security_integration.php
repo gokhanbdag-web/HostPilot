@@ -54,6 +54,23 @@ $orderB = (int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO services(user_id,product_id,order_id,domain,status,billing_cycle,amount,created_at,updated_at) VALUES(:user,:product,:order_id,:domain,'active','monthly',100,UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':user'=>$b, ':product'=>$product, ':order_id'=>$orderB, ':domain'=>'private-customer-b.example']);
 $pdo->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,status,currency,subtotal,tax_total,total,amount_paid,issued_at,created_at,updated_at) VALUES('HTTP-B-INV',:order_id,:user,'unpaid','TRY',100,0,100,0,UTC_TIMESTAMP(),UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':order_id'=>$orderB, ':user'=>$b]);
 $invoiceB = (int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,status,currency,subtotal,tax_total,total,amount_paid,issued_at,created_at,updated_at) VALUES('HTTP-A-INV',:order_id,:user,'unpaid','TRY',100,0,100,0,UTC_TIMESTAMP(),UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':order_id'=>$orderA, ':user'=>$a]);
+$invoiceA = (int)$pdo->lastInsertId();
+require_once $root . '/app/Core/SecretVault.php';
+$testVault = new \HostPilot\Core\SecretVault(str_repeat('h', 64));
+$paymentSettings = [
+    'paytr_enabled'=>'1',
+    'paytr_test_mode'=>'1',
+    'paytr_merchant_id'=>'ci-merchant',
+    'paytr_merchant_key'=>$testVault->encrypt('ci-merchant-key'),
+    'paytr_merchant_salt'=>$testVault->encrypt('ci-merchant-salt'),
+];
+foreach ($paymentSettings as $settingKey=>$settingValue) {
+    $pdo->prepare("INSERT INTO settings(setting_group,setting_key,setting_value,is_secret,updated_at) VALUES('payment',:key,:value,:secret,UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value),is_secret=VALUES(is_secret)")
+        ->execute([':key'=>$settingKey,':value'=>$settingValue,':secret'=>str_contains($settingKey,'key')||str_contains($settingKey,'salt')?1:0]);
+}
+$pdo->prepare("INSERT INTO payment_transactions(invoice_id,user_id,gateway,idempotency_key,status,currency,amount,request_reference,created_at,updated_at) VALUES(:invoice,:user,'paytr',:key,'pending','TRY',100,'HTTP-EXISTING-PENDING',UTC_TIMESTAMP(),UTC_TIMESTAMP())")
+    ->execute([':invoice'=>$invoiceA,':user'=>$a,':key'=>hash('sha256','http-existing-pending-payment')]);
 $pdo->prepare("INSERT INTO domain_registrations(user_id,order_id,invoice_id,domain_name,years,registrar_payload_enc,idempotency_key,status,available_at,created_at,updated_at) VALUES(:user,:order_id,:invoice_id,'private-customer-b-domain.example',1,'{}',:key,'awaiting_payment',UTC_TIMESTAMP(),UTC_TIMESTAMP(),UTC_TIMESTAMP())")
     ->execute([':user'=>$b, ':order_id'=>$orderB, ':invoice_id'=>$invoiceB, ':key'=>hash('sha256','http-test-domain-b')]);
 $domainB = (int)$pdo->lastInsertId();
@@ -67,7 +84,7 @@ $storage = $root . '/storage';
 if (!is_dir($storage) && !mkdir($storage, 0700, true) && !is_dir($storage)) throw new RuntimeException('Cannot create test storage.');
 $config = [
     'database' => ['host'=>$host, 'port'=>$port, 'database'=>$name, 'username'=>$dbUser, 'password'=>$dbPass, 'charset'=>'utf8mb4'],
-    'app' => ['base_path'=>'', 'base_url'=>'http://127.0.0.1:8091', 'key'=>str_repeat('h',64)],
+    'app' => ['base_path'=>'', 'base_url'=>'https://127.0.0.1:8091', 'key'=>str_repeat('h',64)],
 ];
 file_put_contents($storage . '/config.php', '<?php return ' . var_export($config, true) . ';');
 file_put_contents($storage . '/installed.lock', "http-security-test\n");
@@ -130,6 +147,16 @@ try {
     $login('/client/login','http-a@example.test',$cookieA);
     $login('/client/login','http-b@example.test',$cookieB);
     $login('/admin/login','http-staff@example.test',$cookieStaff);
+
+    $paymentForm=$request('/client/invoices/'.$invoiceA.'/pay',$cookieA);
+    $paymentToken=$getToken($paymentForm['body']);
+    $beforePaymentAttempts=(int)$pdo->query("SELECT COUNT(*) FROM payment_transactions WHERE invoice_id=".$invoiceA)->fetchColumn();
+    $r=$request('/client/invoices/'.$invoiceA.'/pay',$cookieA,'POST',[
+        '_token'=>$paymentToken,'gateway'=>'paytr','phone'=>'+905551112233','address'=>'Test address','city'=>'Ankara','zip'=>'06000'
+    ]);
+    $afterPaymentAttempts=(int)$pdo->query("SELECT COUNT(*) FROM payment_transactions WHERE invoice_id=".$invoiceA)->fetchColumn();
+    $assert($r['status']===409 && str_contains($r['body'],'bekleyen bir ödeme işlemi') && $afterPaymentAttempts===$beforePaymentAttempts,
+        'customer cannot create a second gateway attempt while an invoice payment is pending');
 
     $r=$request('/client/tickets/'.$ticketB,$cookieA);
     $assert($r['status']===404 && !str_contains($r['body'],'Private customer B message'),'customer A cannot read customer B ticket over HTTP');

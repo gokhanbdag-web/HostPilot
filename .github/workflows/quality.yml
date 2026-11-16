@@ -33,6 +33,8 @@ jobs:
         run: php tests/migration_runner.php
       - name: Test demo data opt-in policy
         run: php tests/demo_seeder_opt_in.php
+      - name: Test payment idempotency policy
+        run: php tests/payment_idempotency_policy.php
       - name: Test authentication session policy
         run: php tests/auth_session_security.php
       - name: Test login rate limiting
