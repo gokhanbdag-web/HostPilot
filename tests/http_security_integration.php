@@ -42,6 +42,7 @@ $a = $makeUser('HTTP Customer A', 'http-a@example.test', 'http-customer-a', 'cus
 $b = $makeUser('HTTP Customer B', 'http-b@example.test', 'http-customer-b', 'customer');
 $staff = $makeUser('HTTP Staff', 'http-staff@example.test', 'http-staff', 'staff');
 $admin = $makeUser('HTTP Admin', 'http-admin@example.test', 'http-admin', 'admin');
+$financeStaff = $makeUser('HTTP Finance Staff', 'http-finance@example.test', 'http-finance', 'staff');
 $c = $makeUser('HTTP Erasure Customer', 'http-c@example.test', 'http-customer', 'customer');
 $pdo->prepare("INSERT INTO staff_permissions(user_id,permission,created_at) VALUES(:id,'support.view',UTC_TIMESTAMP())")->execute([':id'=>$staff]);
 $pdo->prepare("INSERT INTO staff_permissions(user_id,permission,created_at) VALUES(:id,'dashboard.view',UTC_TIMESTAMP())")->execute([':id'=>$staff]);
@@ -177,6 +178,7 @@ $cookieA = sys_get_temp_dir().'/hp-http-a-'.getmypid().'.cookie';
 $cookieB = sys_get_temp_dir().'/hp-http-b-'.getmypid().'.cookie';
 $cookieStaff = sys_get_temp_dir().'/hp-http-staff-'.getmypid().'.cookie';
 $cookieAdmin = sys_get_temp_dir().'/hp-http-admin-'.getmypid().'.cookie';
+$cookieFinance = sys_get_temp_dir().'/hp-http-finance-'.getmypid().'.cookie';
 $cookieCron = sys_get_temp_dir().'/hp-http-cron-'.getmypid().'.cookie';
 try {
     for ($i=0;$i<20;$i++) { $probe=@fsockopen('127.0.0.1',8091,$errno,$errstr,0.2); if($probe){fclose($probe);break;} usleep(100000); }
@@ -184,6 +186,25 @@ try {
     $login('/client/login','http-b@example.test',$cookieB);
     $login('/admin/login','http-staff@example.test',$cookieStaff);
     $login('/admin/login','http-admin@example.test',$cookieAdmin);
+
+    $staffPermissionForm=$request('/admin/staff',$cookieAdmin);
+    $staffPermissionToken=$getToken($staffPermissionForm['body']);
+    $assignablePermissions=['dashboard.view','payments.view','servers.view','services.view','domains.orders.view','domains.operations.view'];
+    $r=$request('/admin/staff/save',$cookieAdmin,'POST',[
+        '_token'=>$staffPermissionToken,
+        'user_id'=>$financeStaff,
+        'permissions'=>array_merge($assignablePermissions,['payments.manage','servers.manage','domains.registrar.manage','privacy.requests.manage','automation.manage']),
+        'departments'=>['Billing'],
+    ]);
+    $savedPermissions=$pdo->prepare('SELECT permission FROM staff_permissions WHERE user_id=:id ORDER BY permission');
+    $savedPermissions->execute([':id'=>$financeStaff]);$savedPermissionList=$savedPermissions->fetchAll(PDO::FETCH_COLUMN);
+    $permissionAudit=$pdo->prepare("SELECT COUNT(*) FROM security_audit_logs WHERE user_id=:actor AND event_key='staff.permissions_updated' AND metadata_json LIKE :target");
+    $permissionAudit->execute([':actor'=>$admin,':target'=>'%"target_user_id":'.$financeStaff.'%']);
+    $assert($r['status']===200 && count($savedPermissionList)===count($assignablePermissions)
+        && count(array_intersect($assignablePermissions,$savedPermissionList))===count($assignablePermissions)
+        && (int)$permissionAudit->fetchColumn()===1,
+        'admin can assign the complete safe staff catalog and permission changes are audited');
+    $login('/admin/login','http-finance@example.test',$cookieFinance);
 
     $cronKey=str_repeat('h',64);
     $cronCases=[
@@ -304,6 +325,29 @@ try {
     $r=$request('/cron/domain-expiry-sync',$cookieCron,'GET',[],['X-HostPilot-Cron-Token: '.str_repeat('0',64)]);
     $assert($r['status']===403,'cron worker rejects an invalid dedicated token header over HTTP');
 
+    $r=$request('/admin/payment-transactions',$cookieStaff);
+    $assert($r['status']===403,'support-only staff cannot view payment transactions');
+    $r=$request('/admin/payment-transactions',$cookieFinance);
+    $assert($r['status']===200 && str_contains($r['body'],'HTTP-EXISTING-PENDING'),'finance staff can view payment transactions with payments.view');
+    $r=$request('/admin/payments',$cookieFinance);
+    $assert($r['status']===403,'payments.view does not grant payment gateway settings access');
+    $r=$request('/admin/servers',$cookieFinance);
+    $assert($r['status']===200,'staff with servers.view can view server inventory');
+    $r=$request('/admin/services',$cookieFinance);
+    $assert($r['status']===200,'staff with services.view can view hosting services');
+    $r=$request('/admin/domains/orders',$cookieFinance);
+    $assert($r['status']===200,'staff with domains.orders.view can view domain orders');
+    $r=$request('/admin/domains/renewals',$cookieFinance);
+    $assert($r['status']===200,'staff with domains.operations.view can view domain renewals');
+    $r=$request('/admin/domains/registrar',$cookieFinance);
+    $assert($r['status']===403,'domain read permissions do not grant registrar credential settings');
+    $r=$request('/admin/staff',$cookieFinance);
+    $assert($r['status']===403,'staff cannot manage staff permissions');
+    $r=$request('/admin',$cookieFinance);
+    $assert($r['status']===200 && str_contains($r['body'],'/admin/payment-transactions') && str_contains($r['body'],'/admin/servers')
+        && !str_contains($r['body'],'/admin/payments') && !str_contains($r['body'],'/admin/domains/registrar'),
+        'staff dashboard navigation shows only assigned modules');
+
     $r=$request('/admin',$cookieA);
     $assert($r['status']===403,'customer cannot access admin route over HTTP');
 
@@ -328,7 +372,7 @@ try {
 } finally {
     proc_terminate($process);
     proc_close($process);
-    foreach ([$cookieA,$cookieB,$cookieStaff,$cookieAdmin,$cookieCron,$serverLog] as $path) if (is_file($path)) @unlink($path);
+    foreach ([$cookieA,$cookieB,$cookieStaff,$cookieAdmin,$cookieFinance,$cookieCron,$serverLog] as $path) if (is_file($path)) @unlink($path);
     @unlink($storage . '/config.php');
     @unlink($storage . '/installed.lock');
     if (is_file($attachmentDir . '/' . $stored)) @unlink($attachmentDir . '/' . $stored);
