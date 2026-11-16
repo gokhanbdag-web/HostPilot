@@ -125,6 +125,7 @@ $passwordReset = new \HostPilot\Http\PasswordResetController($pdo, $basePath, (s
 if ($requestPath === '/admin/forgot-password' && in_array($method, ['GET','POST'], true)) { $passwordReset->request(); exit; }
 if ($requestPath === '/admin/reset-password' && in_array($method, ['GET','POST'], true)) { $passwordReset->reset(); exit; }
 if ($requestPath === '/client/login' && in_array($method, ['GET', 'POST'], true)) { $client->login(); exit; }
+if ($requestPath === '/client/security/mfa' && in_array($method, ['GET','POST'], true)) { (new \\HostPilot\\Http\\CustomerMfaController($pdo, $basePath, (string)($config['app']['key'] ?? '')))->index(); exit; }
 if ($requestPath === '/client/register' && in_array($method, ['GET', 'POST'], true)) { $client->register(); exit; }
 if ($requestPath === '/client/verify-email' && in_array($method, ['GET','POST'], true)) { $client->verifyEmail(); exit; }
 if ($requestPath === '/client/resend-verification' && in_array($method, ['GET','POST'], true)) { $client->resendVerification(); exit; }
