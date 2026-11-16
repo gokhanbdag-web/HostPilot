@@ -10,7 +10,7 @@
 - PDO with prepared statements.
 - Browser-based installer; root and subdirectory deployment.
 - HTTPS required for production payment, login, API credentials, and callbacks.
-- PHP 8.3+ initial baseline, with compatibility tests for newer supported branches as the hosting ecosystem permits.
+- PHP 8.2+ supported minimum; CI runs syntax, policy, migration, HTTP integration, and browser-installer checks on PHP 8.2 and 8.3 with MySQL 8.0 and MariaDB 10.11.
 - The installer must check PHP version, required extensions, database connectivity, writable paths, HTTPS state, and URL/subdirectory detection.
 
 ## 2. Architectural style
