@@ -66,7 +66,7 @@ $pdo->exec("INSERT INTO users (name,email,username,password_hash,role,status,cre
 
 $directory = dirname(__DIR__) . '/database/migrations';
 $files = MigrationRunner::discover($directory);
-if (count($files) !== 28) throw new RuntimeException('Expected 28 SQL migrations; discovered ' . count($files) . '.');
+if (count($files) !== 29) throw new RuntimeException('Expected 29 SQL migrations; discovered ' . count($files) . '.');
 
 // Simulate interruption after the first DDL statement; the migration must safely retry.
 $firstSql = file_get_contents($files[0]['path']);
