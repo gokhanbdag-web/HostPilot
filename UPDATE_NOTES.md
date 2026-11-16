@@ -37,3 +37,11 @@ Yeni sürümlerde bu dosyaya tarihli başlık altında kullanıcıya görünen d
 - PayTR callback HMAC ve iyzico IYZWSv2 istek imzası için sabit protokol vektörleri CI testlerine eklendi.
 - HTTP entegrasyon testine farklı tahsilat tutarlı imzalı PayTR başarı bildirimi senaryosu eklendi.
 - Gerçek PayTR/iyzico sandbox kabulü merchant hesabı ve test kimlik bilgileri gerektirdiğinden bu sürümde doğrulanmış sayılmaz.
+
+## 2026-11-16 · 2026.11.16.15
+
+- iyzico Checkout Form retrieve yanıtı imza doğrulaması ve işlem/fatura eşleşmesi ayrı bir test edilebilir politika sınıfına taşındı.
+- İmzalı SUCCESS yanıtında tutar, para birimi, sepet veya konuşma kimliği uyuşmazlığı artık otomatik başarısız sayılmıyor; manuel incelemeye alınıyor.
+- Eksik/geçersiz imza ve tanınmayan risk durumu manuel incelemeye yönlendiriliyor; fraudStatus=0 risk incelemesinde bekliyor.
+- Sabit HMAC vektörü ve başarı/başarısızlık, fraud ve uyuşmazlık senaryoları CI'ya eklendi.
+- Gerçek iyzico sandbox çağrısı bu sürümde yapılmadı; testler sahte/sabit protokol yanıtları kullanır.
