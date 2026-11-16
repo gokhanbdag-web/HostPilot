@@ -73,3 +73,13 @@ When eligible, HostPilot anonymizes the customer profile, replaces the login ide
 ### Cron worker authentication
 
 All scheduled worker endpoints (`/cron/provision`, `/cron/email`, `/cron/domains`, `/cron/domain-renewals`, and `/cron/domain-expiry-sync`) accept their purpose-scoped HMAC token only through the `Authorization: Bearer` header. Apache/FastCGI's forwarded Authorization header and the dedicated `X-HostPilot-Cron-Token` header are also supported. Tokens in URL query strings are rejected. The root `.htaccess` forwards the Authorization header to PHP; generated cPanel cron commands use the Bearer header. If the application key changes, regenerate the commands from Admin → Automation.
+
+
+### Staff permission management
+
+The staff permission form is generated from the central authorization catalog. It exposes only scoped, assignable modules: dashboard, customers, reports, support, catalog, orders, invoices, payment transaction viewing, domain order/renewal viewing, server inventory viewing, and hosting service viewing. Gateway credentials, server/service mutations, registrar credentials, automation tokens, privacy erasure, staff administration, software updates, and database upgrades remain administrator-only. Staff dashboard navigation follows the same permission registry, and permission changes are written to the security audit log.
+
+
+### Staff permission catalog and scoped module access
+
+Staff permissions are generated from the central authorization registry and limited to explicit least-privilege modules: dashboard, customers, reports, support, catalog, orders, invoices, payment transaction viewing, domain order/renewal viewing, server inventory viewing, and hosting service viewing. Sensitive controls such as payment gateway settings, server/service mutations, registrar credentials, automation workers, privacy erasure, staff administration, software updates, and database upgrades remain administrator-only. The dashboard hides modules that a staff account has not been granted. Staff permission changes are recorded in the security audit log.

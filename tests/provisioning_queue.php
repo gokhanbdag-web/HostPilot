@@ -12,7 +12,7 @@ $checks=[
     'customer service ownership lock'=>str_contains($client,'WHERE id=:id AND user_id=:user FOR UPDATE'),
     'customer domain submission enqueues job'=>str_contains($client,"INSERT INTO provisioning_jobs"),
     'paid services await domain input'=>str_contains($payment,"'waiting_input'"),
-    'worker bearer authorization'=>str_contains($worker,'HTTP_AUTHORIZATION'),
+    'worker bearer authorization'=>str_contains($worker,'CronAuthenticator::isAuthorized')&&!str_contains($worker,'$_GET[\'token\']'),
     'worker avoids blind retry after remote call'=>str_contains($worker,"\$jobStatus=\$ambiguous?'needs_review'")&&str_contains($worker,"suspension_source='review'"),
     'worker supports all three hosting panels'=>str_contains($worker,'new CpanelWhmAdapter')&&str_contains($worker,'new DirectAdminAdapter')&&str_contains($worker,'new PleskXmlAdapter'),
     'worker route registered'=>str_contains($routes,"'/cron/provision'"),

@@ -3,6 +3,7 @@ declare(strict_types=1);
 namespace HostPilot\Http;
 
 use HostPilot\Core\Auth;
+use HostPilot\Core\Authorization;
 use HostPilot\Core\SecretVault;
 use HostPilot\Hosting\CpanelWhmAdapter;
 use HostPilot\Hosting\DirectAdminAdapter;
@@ -226,7 +227,11 @@ final class ServerController
     private function log(int $service,int $server,string $action,string $status,string $message):void
     {try{$q=$this->db->prepare("INSERT INTO provisioning_logs(service_id,server_id,action,status,message,created_at) VALUES(:service,:server,:action,:status,:message,:created)");$q->execute([':service'=>$service,':server'=>$server?:null,':action'=>$action,':status'=>$status,':message'=>$message,':created'=>gmdate('Y-m-d H:i:s')]);}catch(Throwable $e){error_log('[HostPilot] Provisioning audit log failed: '.$e->getMessage());}}
     private function allowed():bool
-    {$u=Auth::user();if(!$u){$this->go('/admin/login');return false;}if(!in_array($u['role']??'', ['super_admin','admin'],true)){http_response_code(403);echo 'Bu işlem için yönetici yetkisi gerekir.';return false;}return true;}
+    {
+        $u=Auth::user();if(!$u){$this->go('/admin/login');return false;}
+        if(!Authorization::allowsCurrentRequest($u,$this->db,$this->basePath)){http_response_code(403);echo 'Bu işlem için yetkiniz yok.';return false;}
+        return true;
+    }
     private function csrf():bool{return Auth::verifyCsrf($_POST['_token']??null);}
     private function start(string $title,string $active):void
     {

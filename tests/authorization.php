@@ -19,6 +19,8 @@ $cases = [
     ['login route remains public', '/admin/login', 'GET', null, true],
     ['customer cannot access admin MFA management', '/admin/security/mfa', 'GET', $customer, false],
     ['staff can manage own MFA without an unrelated permission', '/admin/security/mfa', 'GET', $staff, true],
+    ['staff can always log out', '/admin/logout', 'POST', $staff, true],
+    ['staff cannot change payment gateway settings without explicit admin-only permission', '/admin/payments', 'GET', $staff, false],
     ['customer cannot post to admin MFA management', '/admin/security/mfa', 'POST', $customer, false],
 ];
 foreach ($cases as [$name, $path, $method, $user, $expected]) {
@@ -26,3 +28,8 @@ foreach ($cases as [$name, $path, $method, $user, $expected]) {
     if ($actual !== $expected) throw new RuntimeException('Authorization test failed: ' . $name);
     echo 'PASS ' . $name . PHP_EOL;
 }
+
+$_SERVER['REQUEST_URI']='/hostpilot/admin';
+$_SERVER['REQUEST_METHOD']='GET';
+if (!\HostPilot\Core\Authorization::allowsCurrentRequest($admin,null,'/hostpilot')) throw new RuntimeException('Subdirectory-aware current request authorization failed.');
+echo "PASS subdirectory-aware current request authorization".PHP_EOL;

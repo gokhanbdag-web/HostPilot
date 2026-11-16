@@ -21,6 +21,7 @@ final class SecurityAudit
         'auth.mfa_disabled',
         'auth.mfa_challenge_succeeded',
         'auth.mfa_challenge_failed',
+        'staff.permissions_updated',
         'auth.mfa_recovery_used',
         'auth.mfa_recovery_rotated',
         'privacy.exported',
@@ -80,7 +81,8 @@ final class SecurityAudit
             $safe['role'] = $metadata['role'];
         }
         if (isset($metadata['request_id']) && is_int($metadata['request_id']) && $metadata['request_id'] > 0) $safe['request_id'] = $metadata['request_id'];
-        if (isset($metadata['action']) && is_string($metadata['action']) && in_array($metadata['action'], ['export','under_review','approved','declined','completed'], true)) $safe['action'] = $metadata['action'];
+        if (isset($metadata['target_user_id']) && is_int($metadata['target_user_id']) && $metadata['target_user_id'] > 0) $safe['target_user_id'] = $metadata['target_user_id'];
+        if (isset($metadata['action']) && is_string($metadata['action']) && in_array($metadata['action'], ['export','under_review','approved','declined','completed','updated'], true)) $safe['action'] = $metadata['action'];
         return $safe;
     }
 }

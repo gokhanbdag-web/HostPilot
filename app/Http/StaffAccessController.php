@@ -4,22 +4,13 @@ declare(strict_types=1);
 namespace HostPilot\Http;
 
 use HostPilot\Core\Auth;
+use HostPilot\Core\Authorization;
+use HostPilot\Core\SecurityAudit;
 use PDO;
 use Throwable;
 
 final class StaffAccessController
 {
-    private const PERMISSIONS = [
-        'dashboard.view' => 'Kontrol panelini görüntüleme',
-        'customers.view' => 'Müşterileri görüntüleme',
-        'reports.view' => 'Raporları görüntüleme',
-        'support.view' => 'Destek taleplerini görüntüleme',
-        'support.reply' => 'Destek taleplerine yanıt verme',
-        'catalog.manage' => 'Ürün ve paketleri yönetme',
-        'orders.view' => 'Siparişleri görüntüleme',
-        'invoices.view' => 'Faturaları görüntüleme',
-    ];
-
     private const DEPARTMENTS = ['General Support', 'Billing', 'Technical Support', 'Sales'];
 
     public function __construct(private readonly PDO $db, private readonly string $basePath = '') {}
@@ -46,9 +37,12 @@ final class StaffAccessController
         foreach ($staff as $member) {
             $id = (int)$member['id'];
             echo '<section class="card"><h2>' . $this->e((string)$member['name']) . '</h2><p>' . $this->e((string)$member['email']) . ' · ' . $this->e((string)$member['status']) . '</p><form method="post" action="' . $this->url('/admin/staff/save') . '"><input type="hidden" name="_token" value="' . $this->e(Auth::csrfToken()) . '"><input type="hidden" name="user_id" value="' . $id . '"><h3>Modül izinleri</h3><div class="checks">';
-            foreach (self::PERMISSIONS as $key => $label) {
-                $checked = in_array($key, $permissions[$id] ?? [], true) ? ' checked' : '';
-                echo '<label><input type="checkbox" name="permissions[]" value="' . $this->e($key) . '"' . $checked . '> ' . $this->e($label) . '</label>';
+            foreach (Authorization::staffPermissionGroups() as $group => $groupPermissions) {
+                echo '<h4>' . $this->e($group) . '</h4>';
+                foreach ($groupPermissions as $key => $label) {
+                    $checked = in_array($key, $permissions[$id] ?? [], true) ? ' checked' : '';
+                    echo '<label><input type="checkbox" name="permissions[]" value="' . $this->e($key) . '"' . $checked . '> ' . $this->e($label) . '</label>';
+                }
             }
             echo '</div><h3>Destek departmanları</h3><div class="checks">';
             foreach (self::DEPARTMENTS as $department) {
@@ -85,7 +79,7 @@ final class StaffAccessController
         }
 
         $permissions = array_values(array_unique(array_intersect(
-            array_keys(self::PERMISSIONS),
+            array_keys(Authorization::staffPermissionCatalog()),
             array_map('strval', (array)($_POST['permissions'] ?? []))
         )));
         $departments = array_values(array_unique(array_intersect(
@@ -103,6 +97,7 @@ final class StaffAccessController
             $insertDepartment = $this->db->prepare('INSERT INTO staff_departments(user_id,department,created_at) VALUES(:id,:department,:created)');
             foreach ($departments as $department) $insertDepartment->execute([':id' => $userId, ':department' => $department, ':created' => gmdate('Y-m-d H:i:s')]);
             $this->db->commit();
+            SecurityAudit::record($this->db,'staff.permissions_updated',(int)$actor['id'],['target_user_id'=>$userId,'action'=>'updated']);
         } catch (Throwable $exception) {
             if ($this->db->inTransaction()) $this->db->rollBack();
             error_log('[HostPilot] Staff permission save failed: ' . $exception->getMessage());
