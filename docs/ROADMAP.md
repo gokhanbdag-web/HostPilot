@@ -54,8 +54,8 @@
 - [x] PayTR iFrame token flow and HMAC-verified callback (merchant sandbox/live testing pending).
 - [x] iyzico Checkout Form initialize/retrieve with IYZWSv2 request signing and response signature validation (merchant sandbox/live testing pending).
 - [x] Administrator payment transaction history view.
-- [ ] Reconciliation UI and automated duplicate-notification integration tests.
-- [ ] Invoice email and customer invoice portal.
+- [x] Reconciliation UI and automated duplicate-notification integration tests (admin reconciliation plus stale-attempt and duplicate PayTR callback HTTP coverage).
+- [x] Invoice email and customer invoice portal (idempotent invoice email events; customer-owned invoice details, line items, payment history, online payment link, and browser print-to-PDF view).
 - [x] Native SMTP settings with encrypted credentials, TLS certificate verification, administrator test-send, and customer package-change notifications.
 - [x] Versioned email outbox with idempotent queueing, bounded locked worker, exponential retry, stale-send review, and admin retry screen.
 - [x] Invoice-created/paid/overdue, payment-failed, hosting provisioned/suspended/reactivated, and support ticket creation/reply email events queued with their related workflows.
