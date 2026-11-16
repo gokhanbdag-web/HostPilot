@@ -323,5 +323,5 @@ final class PaymentController
     private function redirect(string $path):never{header('Location: '.$this->url($path));exit;}
     private function redirectExternal(string $url):never
     {$host=strtolower((string)(parse_url($url,PHP_URL_HOST)??''));if(parse_url($url,PHP_URL_SCHEME)!=='https'||!($host==='api.iyzipay.com'||$host==='sandbox-api.iyzipay.com'||str_ends_with($host,'.iyzipay.com')))throw new \RuntimeException('Ödeme sağlayıcısının dönüş adresi geçersiz.');header('Location: '.$url);exit;}
-    private function e(string $s):string{return htmlspecialchars($s,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');}
+    private function e(string $s):string{return \HostPilot\Core\Html::escape($s);}
 }
