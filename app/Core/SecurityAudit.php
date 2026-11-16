@@ -112,7 +112,7 @@ final class SecurityAudit
     {
         $safe = [];
         if (isset($metadata['role']) && is_string($metadata['role'])
-            && in_array($metadata['role'], ['super_admin', 'admin', 'staff', 'client'], true)) {
+            && in_array($metadata['role'], ['super_admin', 'admin', 'staff', 'client', 'customer'], true)) {
             $safe['role'] = $metadata['role'];
         }
         if (isset($metadata['request_id']) && is_int($metadata['request_id']) && $metadata['request_id'] > 0) $safe['request_id'] = $metadata['request_id'];
