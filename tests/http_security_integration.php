@@ -490,6 +490,7 @@ try {
     $assert($r['status']===409 && (str_contains($r['body'],'Bu fatura için bir ödeme işlemi bekliyor')||str_contains($r['body'],'manuel incelemede')) && $afterPaymentAttempts===$beforePaymentAttempts,
         'customer cannot create a second gateway attempt while an invoice payment is pending or under review');
 
+    $pdo->prepare("UPDATE payment_transactions SET status='pending',created_at=UTC_TIMESTAMP()+INTERVAL 1 HOUR WHERE invoice_id=:invoice AND status IN ('pending','review')")->execute([':invoice'=>$invoiceA]);
     $invoiceListA=$request('/client/invoices',$cookieA);
     $assert($invoiceListA['status']===200 && str_contains($invoiceListA['body'],'Ödeme bekliyor')
         && !str_contains($invoiceListA['body'],'/client/invoices/'.$invoiceA.'/pay'),
