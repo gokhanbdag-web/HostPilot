@@ -5,6 +5,52 @@ namespace HostPilot\Core;
 
 final class Authorization
 {
+    public static function staffPermissionGroups(): array
+    {
+        return [
+            'Genel' => [
+                'dashboard.view' => 'Kontrol panelini görüntüleme',
+            ],
+            'Müşteriler ve raporlar' => [
+                'customers.view' => 'Müşterileri görüntüleme',
+                'reports.view' => 'Raporları görüntüleme',
+            ],
+            'Destek' => [
+                'support.view' => 'Destek taleplerini ve eklerini görüntüleme',
+                'support.reply' => 'Destek taleplerine yanıt verme',
+            ],
+            'Mağaza ve finans' => [
+                'catalog.manage' => 'Ürün ve paketleri yönetme',
+                'orders.view' => 'Siparişleri görüntüleme',
+                'invoices.view' => 'Faturaları görüntüleme',
+                'payments.view' => 'Ödeme hareketlerini görüntüleme',
+            ],
+            'Domain işlemleri' => [
+                'domains.orders.view' => 'Domain siparişlerini görüntüleme',
+                'domains.operations.view' => 'Domain yenileme ve işlem durumlarını görüntüleme',
+            ],
+            'Altyapı' => [
+                'servers.view' => 'Sunucu bağlantılarını görüntüleme',
+                'services.view' => 'Hosting hizmetlerini görüntüleme',
+            ],
+        ];
+    }
+
+    public static function staffPermissionCatalog(): array
+    {
+        $catalog=[];
+        foreach(self::staffPermissionGroups() as $permissions)$catalog+=$permissions;
+        return $catalog;
+    }
+
+    public static function allowsCurrentRequest(?array $user, ?\\PDO $db, string $basePath=''): bool
+    {
+        $path=(string)(parse_url((string)($_SERVER['REQUEST_URI']??'/'),PHP_URL_PATH)?:'/');
+        $base=rtrim($basePath,'/');
+        if($base!==''&&($path===$base||str_starts_with($path,$base.'/')))$path=substr($path,strlen($base))?:'/';
+        return self::allowsAdminRequest($path,(string)($_SERVER['REQUEST_METHOD']??'GET'),$user,$db);
+    }
+
     public static function isAdminPath(string $path): bool
     {
         return $path === '/admin' || str_starts_with($path, '/admin/');
@@ -26,7 +72,7 @@ final class Authorization
         $role = (string)$user['role'];
         if (in_array($role, ['super_admin', 'admin'], true)) return true;
         // MFA is self-service for privileged operators, never for customer accounts.
-        if ($permission === 'security.mfa.manage' && $role === 'staff') return true;
+        if (in_array($permission, ['security.mfa.manage','admin.logout'], true) && $role === 'staff') return true;
         if ($role !== 'staff' || $db === null) return false;
         try {
             $statement = $db->prepare('SELECT 1 FROM staff_permissions WHERE user_id = :user_id AND permission = :permission LIMIT 1');
