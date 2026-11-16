@@ -12,14 +12,18 @@ concurrency:
   cancel-in-progress: true
 jobs:
   php-and-deployment-safety:
-    name: PHP syntax and deployment safety
+    name: PHP syntax and deployment safety (PHP ${{ matrix.php-version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php-version: ['8.2', '8.3']
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
+          php-version: ${{ matrix.php-version }}
           extensions: curl, openssl, pdo, pdo_mysql
           coverage: none
       - name: Verify PHP syntax
@@ -76,7 +80,7 @@ jobs:
           echo "No tracked runtime configuration or installation lock found."
 
   migration-runner-tests:
-    name: SQL migration integration (${{ matrix.database }})
+    name: SQL migration integration (${{ matrix.database }}, PHP ${{ matrix.php-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -85,8 +89,16 @@ jobs:
         include:
           - database: mysql-8.0
             image: mysql:8.0
+            php-version: '8.2'
+          - database: mysql-8.0
+            image: mysql:8.0
+            php-version: '8.3'
           - database: mariadb-10.11
             image: mariadb:10.11
+            php-version: '8.2'
+          - database: mariadb-10.11
+            image: mariadb:10.11
+            php-version: '8.3'
     services:
       database:
         image: ${{ matrix.image }}
@@ -103,7 +115,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
+          php-version: ${{ matrix.php-version }}
           extensions: curl, pdo, pdo_mysql
           coverage: none
       - name: Lint and run parser tests
