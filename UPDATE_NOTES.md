@@ -21,3 +21,11 @@ Yeni sürümlerde bu dosyaya tarihli başlık altında kullanıcıya görünen d
 - Fatura detayında yalnızca ilgili müşteriye ait ödeme geçmişi listelenir; sağlayıcı işlem referansları ve dahili hata mesajları gösterilmez.
 - Fatura sayfasına tarayıcı yazdırma / PDF olarak kaydetme görünümü eklendi; bu özellik yasal e-fatura/e-arşiv belgesi üretimi değildir.
 - Müşteri A'nın müşteri B faturasını görüntüleyemediğini doğrulayan HTTP IDOR testi eklendi.
+
+## 2026-11-16 · 2026.11.16.13
+
+- Müşteriler, hesap güvenliği sayfasından isteğe bağlı TOTP iki aşamalı doğrulamayı etkinleştirebilir veya kapatabilir.
+- Müşteri girişinde MFA etkinse parola doğrulamasından sonra 5 dakika geçerli ikinci faktör adımı istenir.
+- TOTP sırları uygulama anahtarıyla şifrelenir; 10 tek kullanımlık kurtarma kodu yalnızca SHA-256 özetiyle saklanır.
+- Kurtarma kodları bir kez kullanılabilir; TOTP zaman adımı tekrar kullanımına karşı korunur. Kod yenileme ve MFA kapatma işlemleri parola ve ikinci faktör doğrulaması ister.
+- MFA işlemleri güvenlik denetim kaydına alınır; MFA etkinleştirilmemiş müşteri hesaplarında parola ile giriş değişmeden devam eder.
