@@ -29,3 +29,11 @@ Yeni sürümlerde bu dosyaya tarihli başlık altında kullanıcıya görünen d
 - TOTP sırları uygulama anahtarıyla şifrelenir; 10 tek kullanımlık kurtarma kodu yalnızca SHA-256 özetiyle saklanır.
 - Kurtarma kodları bir kez kullanılabilir; TOTP zaman adımı tekrar kullanımına karşı korunur. Kod yenileme ve MFA kapatma işlemleri parola ve ikinci faktör doğrulaması ister.
 - MFA işlemleri güvenlik denetim kaydına alınır; MFA etkinleştirilmemiş müşteri hesaplarında parola ile giriş değişmeden devam eder.
+
+## 2026-11-16 · 2026.11.16.14
+
+- PayTR imzalı başarılı callback tutarı, beklenen tahsilat tutarından farklıysa artık başarısız sayılmaz; manuel incelemeye alınır.
+- Tutar uyuşmazlığı olan doğrulanmış callback faturaya otomatik bakiye yazmaz; yönetici sağlayıcı panelinden gerçek tahsilatı ve olası iadeyi mutabakat ekranında değerlendirir.
+- PayTR callback HMAC ve iyzico IYZWSv2 istek imzası için sabit protokol vektörleri CI testlerine eklendi.
+- HTTP entegrasyon testine farklı tahsilat tutarlı imzalı PayTR başarı bildirimi senaryosu eklendi.
+- Gerçek PayTR/iyzico sandbox kabulü merchant hesabı ve test kimlik bilgileri gerektirdiğinden bu sürümde doğrulanmış sayılmaz.
