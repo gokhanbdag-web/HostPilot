@@ -89,6 +89,13 @@ $staleInvoice = (int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO payment_transactions(invoice_id,user_id,gateway,idempotency_key,status,currency,amount,request_reference,created_at,updated_at) VALUES(:invoice,:user,'paytr',:key,'pending','TRY',100,'HTTP-STALE-PENDING',UTC_TIMESTAMP()-INTERVAL 45 MINUTE,UTC_TIMESTAMP()-INTERVAL 45 MINUTE)")
     ->execute([':invoice'=>$staleInvoice,':user'=>$a,':key'=>hash('sha256','http-stale-pending-payment')]);
 $stalePaymentId = (int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO orders(order_number,user_id,status,currency,subtotal,tax_total,total,created_at,updated_at) VALUES('HTTP-DUPLICATE-ORDER',:user,'pending','TRY',100,0,100,UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':user'=>$a]);
+$duplicateOrder = (int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,status,currency,subtotal,tax_total,total,amount_paid,issued_at,created_at,updated_at) VALUES('HTTP-DUPLICATE-INV',:order_id,:user,'unpaid','TRY',100,0,100,0,UTC_TIMESTAMP(),UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':order_id'=>$duplicateOrder,':user'=>$a]);
+$duplicateInvoice = (int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO payment_transactions(invoice_id,user_id,gateway,idempotency_key,status,currency,amount,request_reference,created_at,updated_at) VALUES(:invoice,:user,'paytr',:key,'pending','TRY',100,'HTTP-DUPLICATE-SUCCESS',UTC_TIMESTAMP(),UTC_TIMESTAMP())")
+    ->execute([':invoice'=>$duplicateInvoice,':user'=>$a,':key'=>hash('sha256','http-duplicate-success-payment')]);
+$duplicatePaymentId = (int)$pdo->lastInsertId();
 $domainSettings=[
     'enabled'=>'1',
     'environment'=>'sandbox',
@@ -225,6 +232,18 @@ try {
     $assert($r['status']===200 && $r['body']==='OK' && ($staleFinal->fetchColumn()??'')==='cancelled'
         && (float)($staleInvoiceRow['amount_paid']??-1)===0.0 && ($staleInvoiceRow['status']??'')==='unpaid',
         'late verified provider callback cannot settle an attempt explicitly closed after no-capture verification');
+
+    // The same valid success notification can be delivered more than once by a gateway.
+    $duplicateOid='HTTP-DUPLICATE-SUCCESS';$duplicateStatus='success';$duplicateAmount='10000';
+    $duplicateHash=base64_encode(hash_hmac('sha256',$duplicateOid.'ci-merchant-salt'.$duplicateStatus.$duplicateAmount,'ci-merchant-key',true));
+    $firstCallback=$request('/payment/paytr/callback',$cookieCron,'POST',['merchant_oid'=>$duplicateOid,'status'=>$duplicateStatus,'total_amount'=>$duplicateAmount,'hash'=>$duplicateHash]);
+    $secondCallback=$request('/payment/paytr/callback',$cookieCron,'POST',['merchant_oid'=>$duplicateOid,'status'=>$duplicateStatus,'total_amount'=>$duplicateAmount,'hash'=>$duplicateHash]);
+    $duplicateInvoiceState=$pdo->prepare('SELECT amount_paid,status FROM invoices WHERE id=:id');$duplicateInvoiceState->execute([':id'=>$duplicateInvoice]);$duplicateInvoiceRow=$duplicateInvoiceState->fetch(PDO::FETCH_ASSOC);
+    $duplicateFinal=$pdo->prepare('SELECT status,gateway_transaction_id FROM payment_transactions WHERE id=:id');$duplicateFinal->execute([':id'=>$duplicatePaymentId]);$duplicateFinalRow=$duplicateFinal->fetch(PDO::FETCH_ASSOC);
+    $assert($firstCallback['status']===200 && $firstCallback['body']==='OK' && $secondCallback['status']===200 && $secondCallback['body']==='OK'
+        && (float)($duplicateInvoiceRow['amount_paid']??-1)===100.0 && ($duplicateInvoiceRow['status']??'')==='paid'
+        && ($duplicateFinalRow['status']??'')==='success' && ($duplicateFinalRow['gateway_transaction_id']??'')===$duplicateOid,
+        'replayed valid PayTR success callback is acknowledged twice but credits the invoice exactly once');
 
     $r=$request('/admin/payment-transactions/reconcile',$cookieA,'POST',[
         'payment_transaction_id'=>$reviewPaymentId,'decision'=>'refund_confirmed','provider_reference'=>'CI-CUSTOMER-FORBIDDEN',
