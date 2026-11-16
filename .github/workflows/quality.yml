@@ -47,6 +47,8 @@ jobs:
         run: php tests/security_audit.php
       - name: Test centralized admin authorization
         run: php tests/authorization.php
+      - name: Test staff permission catalog
+        run: php tests/staff_permission_catalog.php
       - name: Test customer privacy policy
         run: php tests/privacy_policy.php
       - name: Test IDOR access boundaries
