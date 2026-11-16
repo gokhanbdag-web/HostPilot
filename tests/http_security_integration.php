@@ -57,7 +57,7 @@ $invoiceB = (int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,status,currency,subtotal,tax_total,total,amount_paid,issued_at,created_at,updated_at) VALUES('HTTP-A-INV',:order_id,:user,'unpaid','TRY',100,0,100,0,UTC_TIMESTAMP(),UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':order_id'=>$orderA, ':user'=>$a]);
 $invoiceA = (int)$pdo->lastInsertId();
 require_once $root . '/app/Core/SecretVault.php';
-$testVault = new \\HostPilot\\Core\\SecretVault(str_repeat('h', 64));
+$testVault = new \HostPilot\Core\SecretVault(str_repeat('h', 64));
 $paymentSettings = [
     'paytr_enabled'=>'1',
     'paytr_test_mode'=>'1',
