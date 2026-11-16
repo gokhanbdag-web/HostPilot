@@ -337,4 +337,4 @@ if ((int)$subDb->query('SELECT COUNT(*) FROM migrations')->fetchColumn() !== 26)
 cleanupInstallFiles($storage);
 @unlink($subdirectory . '/index.php');
 @rmdir($subdirectory);
-echo 'Subdirectory browser installer passed: base-path configuration and 25 SQL migrations.' . PHP_EOL;
+echo 'Subdirectory browser installer passed: base-path configuration and 26 SQL migrations.' . PHP_EOL;
