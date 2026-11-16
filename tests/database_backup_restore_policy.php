@@ -11,7 +11,7 @@ if(Authorization::permissionFor('/admin/database-restore','GET')!=='database.res
 $source=file_get_contents(dirname(__DIR__).'/app/Http/DatabaseRestoreController.php');
 if(!is_string($source))throw new RuntimeException('Database restore controller is missing.');
 $required=[
-    '($actor[\\'role\\']??\\'\\')!==\\'super_admin\\'',
+    '($actor[\'role\']??\'\')!==\'super_admin\'',
     "Auth::verifyCredentials",
     "Auth::verifyCsrf",
     "DatabaseBackup::create",
