@@ -18,6 +18,19 @@ $pdo = new PDO(sprintf('mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4', $host,
     PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC, PDO::ATTR_EMULATE_PREPARES => false,
 ]);
 $now = gmdate('Y-m-d H:i:s');
+// The migration harness starts from a deliberately minimal legacy users table.
+// Restore the baseline columns/tables required by the actual HTTP application.
+$hasLastLogin = $pdo->query("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='last_login_at'")->fetchColumn();
+if ((int)$hasLastLogin === 0) $pdo->exec('ALTER TABLE users ADD COLUMN last_login_at DATETIME NULL');
+$pdo->exec("CREATE TABLE IF NOT EXISTS settings (
+    setting_group VARCHAR(80) NOT NULL,
+    setting_key VARCHAR(120) NOT NULL,
+    setting_value LONGTEXT NULL,
+    is_secret TINYINT(1) NOT NULL DEFAULT 0,
+    updated_at DATETIME NOT NULL,
+    PRIMARY KEY (setting_group, setting_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+$pdo->prepare("INSERT INTO settings(setting_group,setting_key,setting_value,is_secret,updated_at) VALUES('demo','seed_version','1',0,UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE setting_value='1'")->execute();
 $password = 'HostPilot-HTTP-Test-Password-2026!';
 $hash = password_hash($password, PASSWORD_DEFAULT);
 $insertUser = $pdo->prepare("INSERT INTO users(name,email,username,password_hash,role,status,created_at,updated_at) VALUES(:name,:email,:username,:hash,:role,'active',:created,:updated)");
