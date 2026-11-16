@@ -182,7 +182,7 @@ if (statusCode($mfaHeaders) !== 200 || !str_contains($mfaPage, 'Durum: Kapalı')
     'action' => 'start',
     'password' => 'Test-Installer-Password-2026!',
 ]);
-if (statusCode($startHeaders) !== 200 || !preg_match('/<div class="secret">([^<]+)<\\/div>/', $startPage, $secretMatch)) {
+if (statusCode($startHeaders) !== 200 || !preg_match('/<div class="secret">([^<]+)<\/div>/', $startPage, $secretMatch)) {
     throw new RuntimeException('MFA enrollment did not issue a manual authenticator secret.');
 }
 $totpSecret = html_entity_decode($secretMatch[1], ENT_QUOTES | ENT_HTML5, 'UTF-8');
@@ -194,7 +194,7 @@ if (!is_string($enrollmentCode)) throw new RuntimeException('Unable to generate 
     'password' => 'Test-Installer-Password-2026!',
     'code' => $enrollmentCode,
 ]);
-if (statusCode($enabledHeaders) !== 200 || !str_contains($enabledPage, 'Kurtarma kodlarınız') || !preg_match('/<pre class="codes">([^<]+)<\\/pre>/', $enabledPage, $codesMatch)) {
+if (statusCode($enabledHeaders) !== 200 || !str_contains($enabledPage, 'Kurtarma kodlarınız') || !preg_match('/<pre class="codes">([^<]+)<\/pre>/', $enabledPage, $codesMatch)) {
     throw new RuntimeException('MFA enrollment did not verify the authenticator and display recovery codes.');
 }
 $recoveryCodes = preg_split('/\\s+/', trim(html_entity_decode($codesMatch[1], ENT_QUOTES | ENT_HTML5, 'UTF-8'))) ?: [];
