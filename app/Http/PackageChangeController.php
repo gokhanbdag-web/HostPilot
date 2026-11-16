@@ -120,6 +120,6 @@ final class PackageChangeController
     private function start():void{echo '<!doctype html><html lang="tr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Paket yükseltme · HostPilot</title><style>body{margin:0;background:#0a1020;color:#e8edf7;font:15px system-ui}*{box-sizing:border-box}main{max-width:850px;margin:35px auto;padding:20px}section{background:#111c2f;border:1px solid #2b3c56;border-radius:14px;padding:25px;margin-top:18px}p{color:#aabbd2;line-height:1.6}a{color:#a9c0ff}select{display:block;width:100%;max-width:520px;padding:12px;margin:14px 0;background:#091321;color:#fff;border:1px solid #344760;border-radius:8px}button{padding:12px 18px;border:0;border-radius:8px;background:#5579ef;color:white;font-weight:700}</style></head><body>';}
     private function end():void{echo '</body></html>';}
     private function url(string $p):string{return htmlspecialchars(rtrim($this->basePath,'/').$p,ENT_QUOTES,'UTF-8');}
-    private function e(string $v):string{return htmlspecialchars($v,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');}
+    private function e(string $v):string{return \HostPilot\Core\Html::escape($v);}
     private function go(string $p,string $query=''):never{$location=rtrim($this->basePath,'/').$p;if($query!==''){parse_str($query,$params);if($params)$location.=(str_contains($location,'?')?'&':'?').http_build_query($params);}header('Location: '.$location);exit;}
 }

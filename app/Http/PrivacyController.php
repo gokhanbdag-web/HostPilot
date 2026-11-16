@@ -86,5 +86,5 @@ final class PrivacyController
     private function msg(string $s,string $c):void{if($s!=='')echo '<div class="'.$c.'">'.$this->e($s).'</div>';}
     private function url(string $p):string{return htmlspecialchars(rtrim($this->basePath,'/').$p,ENT_QUOTES,'UTF-8');}
     private function go(string $p):never{header('Location: '.$this->url($p));exit;}
-    private function e(string $s):string{return htmlspecialchars($s,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');}
+    private function e(string $s):string{return \HostPilot\Core\Html::escape($s);}
 }
