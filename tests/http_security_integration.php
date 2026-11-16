@@ -143,6 +143,18 @@ try {
     $assert(!str_contains($r['body'],'private-customer-b-domain.example'),'customer A domain list excludes customer B domain');
     $r=$request('/client/domains/sync',$cookieA,'POST',['domain_id'=>(string)$domainB,'_token'=>'']);
     $assert($r['status']===419,'domain mutation rejects missing CSRF token');
+    // A valid CSRF token must not let customer A mutate customer B's active domain.
+    $pdo->prepare("UPDATE domain_registrations SET status='active',registrar_order_id='HTTP-REMOTE-B' WHERE id=:id")->execute([':id'=>$domainB]);
+    $domainForm=$request('/client/tickets/new',$cookieA);
+    $domainToken=$getToken($domainForm['body']);
+    $r=$request('/client/domains/nameservers',$cookieA,'POST',[
+        '_token'=>$domainToken,'domain_id'=>(string)$domainB,'nameservers'=>"ns1.example.net\nns2.example.net"
+    ]);
+    $domainAfter=$pdo->prepare('SELECT pending_nameservers_enc,nameserver_status FROM domain_registrations WHERE id=:id');
+    $domainAfter->execute([':id'=>$domainB]);
+    $domainState=$domainAfter->fetch(PDO::FETCH_ASSOC);
+    $assert($r['status']===200 && empty($domainState['pending_nameservers_enc']) && empty($domainState['nameserver_status']),
+        'customer A cannot mutate customer B domain even with valid CSRF token');
     $r=$request('/admin',$cookieA);
     $assert($r['status']===403,'customer cannot access admin route over HTTP');
 
