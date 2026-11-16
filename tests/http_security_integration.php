@@ -290,7 +290,7 @@ try {
 
     $domainSyncToken=hash_hmac('sha256','HostPilot domain sync cron v1',$cronKey);
     $r=$request('/cron/domain-expiry-sync',$cookieCron,'GET',[],['X-HostPilot-Cron-Token: '.$domainSyncToken]);
-    $assert($r['status']===200 && str_contains($r['body'],'"ok":true'),'cron worker accepts a valid dedicated token header over HTTP');
+    $assert($r['status']===200 && str_contains($r['body'],'"ok":true'),'cron worker accepts a valid dedicated token header over HTTP; status='.$r['status'].'; body='.substr(strip_tags($r['body']),0,400));
     $r=$request('/cron/domain-expiry-sync',$cookieCron,'GET',[],['X-HostPilot-Cron-Token: '.str_repeat('0',64)]);
     $assert($r['status']===403,'cron worker rejects an invalid dedicated token header over HTTP');
 
