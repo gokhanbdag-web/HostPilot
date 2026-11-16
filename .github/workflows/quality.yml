@@ -35,6 +35,8 @@ jobs:
         run: php tests/demo_seeder_opt_in.php
       - name: Test payment idempotency policy
         run: php tests/payment_idempotency_policy.php
+      - name: Test hosting transport SSRF policy
+        run: php tests/hosting_transport_ssrf.php
       - name: Test authentication session policy
         run: php tests/auth_session_security.php
       - name: Test login rate limiting
