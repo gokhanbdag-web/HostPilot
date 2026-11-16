@@ -248,7 +248,8 @@ if ($newCookie !== '') $cookie = $newCookie;
     'code' => $recoveryCodes[0],
 ]);
 if (statusCode($replayedRecoveryHeaders) !== 200 || !str_contains($replayedRecovery, 'daha önce kullanılmış')) throw new RuntimeException('A consumed recovery code was accepted a second time.');
-$nextStepCode = \HostPilot\Core\Mfa::codeAt($totpSecret, (intdiv(time(), 30) + 1) * 30);
+$testStep = max(intdiv(time(), 30), (int)$mfaState['last_used_step'] + 1);
+$nextStepCode = \HostPilot\Core\Mfa::codeAt($totpSecret, $testStep * 30);
 [$totpLogin, $totpLoginHeaders] = httpRequest($base . 'admin/login', 'POST', $cookie, [
     '_token' => csrfFromHtml($replayedRecovery),
     'code' => (string)$nextStepCode,
