@@ -284,5 +284,5 @@ final class AdminController
     }
     private function url(string $path):string { return htmlspecialchars(rtrim($this->basePath,'/').$path,ENT_QUOTES,'UTF-8'); }
     private function redirect(string $path):never { header('Location: '.$this->url($path)); exit; }
-    private function e(string $value):string { return htmlspecialchars($value,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8'); }
+    private function e(string $value):string { return \HostPilot\Core\Html::escape($value); }
 }
