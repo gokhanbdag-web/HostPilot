@@ -62,3 +62,9 @@ Deployment safeguards:
 - Keep the live `storage/` directory and database untouched during code deployments.
 - Verify the deployment result and `/health` after each release; a green CI check alone is not proof that production deployment succeeded.
 - Keep server credentials and webhook secrets in server-side secret storage, never in repository files.
+
+### Customer privacy erasure workflow
+
+Customer account-erasure requests require password confirmation and an administrator approval. An approved request can be completed from `/admin/privacy`; the completion action rechecks service, provisioning, domain, renewal, payment and invoice blockers under a database transaction. Active services, unresolved registrar operations, pending/review payment attempts, unpaid or partially paid invoices, pending orders, and pending package changes prevent completion.
+
+When eligible, HostPilot anonymizes the customer profile, replaces the login identifiers, rotates the password hash, increments `auth_version` to revoke existing sessions, removes password-reset/email-verification tokens and queued email for the old address, redacts support tickets/messages and deletes private ticket attachment files. Terminal hosting/domain records have stored credentials and contact payloads cleared. Paid invoices and successful payment evidence are deliberately retained for applicable statutory/accounting retention; the account row remains as an anonymized foreign-key anchor. This workflow is an application data-minimization control, not a substitute for a jurisdiction-specific legal retention schedule or registrar-side contact update.

@@ -41,6 +41,8 @@ $makeUser = static function (string $display, string $email, string $username, s
 $a = $makeUser('HTTP Customer A', 'http-a@example.test', 'http-customer-a', 'customer');
 $b = $makeUser('HTTP Customer B', 'http-b@example.test', 'http-customer-b', 'customer');
 $staff = $makeUser('HTTP Staff', 'http-staff@example.test', 'http-staff', 'staff');
+$admin = $makeUser('HTTP Admin', 'http-admin@example.test', 'http-admin', 'admin');
+$c = $makeUser('HTTP Erasure Customer', 'http-c@example.test', 'http-customer', 'customer');
 $pdo->prepare("INSERT INTO staff_permissions(user_id,permission,created_at) VALUES(:id,'support.view',UTC_TIMESTAMP())")->execute([':id'=>$staff]);
 $pdo->prepare("INSERT INTO staff_permissions(user_id,permission,created_at) VALUES(:id,'dashboard.view',UTC_TIMESTAMP())")->execute([':id'=>$staff]);
 $pdo->prepare("INSERT INTO staff_departments(user_id,department,created_at) VALUES(:id,'General Support',UTC_TIMESTAMP())")->execute([':id'=>$staff]);
@@ -56,6 +58,12 @@ $pdo->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,status,curre
 $invoiceB = (int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,status,currency,subtotal,tax_total,total,amount_paid,issued_at,created_at,updated_at) VALUES('HTTP-A-INV',:order_id,:user,'unpaid','TRY',100,0,100,0,UTC_TIMESTAMP(),UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':order_id'=>$orderA, ':user'=>$a]);
 $invoiceA = (int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO orders(order_number,user_id,status,currency,subtotal,tax_total,total,created_at,updated_at) VALUES('HTTP-C-ORDER',:user,'paid','TRY',50,0,50,UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':user'=>$c]);
+$orderC = (int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,status,currency,subtotal,tax_total,total,amount_paid,issued_at,created_at,updated_at) VALUES('HTTP-C-INV',:order_id,:user,'paid','TRY',50,0,50,50,UTC_TIMESTAMP(),UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':order_id'=>$orderC, ':user'=>$c]);
+$invoiceC = (int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO payment_transactions(invoice_id,user_id,gateway,idempotency_key,status,currency,amount,request_reference,created_at,updated_at) VALUES(:invoice,:user,'manual',:key,'success','TRY',50,'HTTP-C-PAID',UTC_TIMESTAMP(),UTC_TIMESTAMP())")
+    ->execute([':invoice'=>$invoiceC,':user'=>$c,':key'=>hash('sha256','http-c-paid-payment')]);
 require_once $root . '/app/Core/SecretVault.php';
 $testVault = new \HostPilot\Core\SecretVault(str_repeat('h', 64));
 $paymentSettings = [
@@ -90,6 +98,16 @@ file_put_contents($storage . '/config.php', '<?php return ' . var_export($config
 file_put_contents($storage . '/installed.lock', "http-security-test\n");
 @chmod($storage . '/config.php', 0600);
 @chmod($storage . '/installed.lock', 0600);
+$pdo->prepare("INSERT INTO tickets(ticket_number,user_id,department,subject,priority,status,last_reply_at,created_at,updated_at) VALUES('HTTP-C-TICKET',:user,'General Support','Customer C private subject','normal','open',UTC_TIMESTAMP(),UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':user'=>$c]);
+$ticketC = (int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO ticket_messages(ticket_id,user_id,message,is_staff,created_at) VALUES(:ticket,:user,'Customer C private message',0,UTC_TIMESTAMP())")->execute([':ticket'=>$ticketC, ':user'=>$c]);
+$messageC = (int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO privacy_requests(user_id,request_type,status,request_details,created_at,updated_at) VALUES(:user,'erasure','approved','Approved by CI fixture.',UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':user'=>$b]);
+$privacyB = (int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO privacy_requests(user_id,request_type,status,request_details,created_at,updated_at) VALUES(:user,'erasure','approved','Approved by CI fixture.',UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':user'=>$c]);
+$privacyC = (int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO email_outbox(idempotency_key,event_type,recipient,subject,body,status,available_at,created_at,updated_at) VALUES(:key,'general','http-c@example.test','Private notice','Personal email content','pending',UTC_TIMESTAMP(),UTC_TIMESTAMP(),UTC_TIMESTAMP())")
+    ->execute([':key'=>hash('sha256','http-c-outbox')]);
 $attachmentDir = $storage . '/private/ticket-attachments';
 if (!is_dir($attachmentDir) && !mkdir($attachmentDir, 0700, true) && !is_dir($attachmentDir)) throw new RuntimeException('Cannot create attachment fixture directory.');
 $stored = bin2hex(random_bytes(24)) . '.txt';
@@ -98,6 +116,12 @@ file_put_contents($attachmentDir . '/' . $stored, $fileContent);
 $pdo->prepare("INSERT INTO ticket_attachments(ticket_id,message_id,user_id,original_name,stored_name,mime_type,file_size,sha256,created_at) VALUES(:ticket,:message,:user,'private-b.txt',:stored,'text/plain',:size,:sha,UTC_TIMESTAMP())")
     ->execute([':ticket'=>$ticketB, ':message'=>$messageB, ':user'=>$b, ':stored'=>$stored, ':size'=>strlen($fileContent), ':sha'=>hash('sha256',$fileContent)]);
 $attachmentB = (int)$pdo->lastInsertId();
+$storedC = bin2hex(random_bytes(24)) . '.txt';
+$fileContentC = 'private attachment for erasure customer';
+file_put_contents($attachmentDir . '/' . $storedC, $fileContentC);
+$pdo->prepare("INSERT INTO ticket_attachments(ticket_id,message_id,user_id,original_name,stored_name,mime_type,file_size,sha256,created_at) VALUES(:ticket,:message,:user,'private-c.txt',:stored,'text/plain',:size,:sha,UTC_TIMESTAMP())")
+    ->execute([':ticket'=>$ticketC, ':message'=>$messageC, ':user'=>$c, ':stored'=>$storedC, ':size'=>strlen($fileContentC), ':sha'=>hash('sha256',$fileContentC)]);
+$attachmentC = (int)$pdo->lastInsertId();
 
 $serverLog = sys_get_temp_dir() . '/hostpilot-http-security-' . getmypid() . '.log';
 $command = [PHP_BINARY, '-S', '127.0.0.1:8091', '-t', $root];
@@ -142,11 +166,13 @@ $login = static function (string $route, string $email, string $cookie) use ($re
 $cookieA = sys_get_temp_dir().'/hp-http-a-'.getmypid().'.cookie';
 $cookieB = sys_get_temp_dir().'/hp-http-b-'.getmypid().'.cookie';
 $cookieStaff = sys_get_temp_dir().'/hp-http-staff-'.getmypid().'.cookie';
+$cookieAdmin = sys_get_temp_dir().'/hp-http-admin-'.getmypid().'.cookie';
 try {
     for ($i=0;$i<20;$i++) { $probe=@fsockopen('127.0.0.1',8091,$errno,$errstr,0.2); if($probe){fclose($probe);break;} usleep(100000); }
     $login('/client/login','http-a@example.test',$cookieA);
     $login('/client/login','http-b@example.test',$cookieB);
     $login('/admin/login','http-staff@example.test',$cookieStaff);
+    $login('/admin/login','http-admin@example.test',$cookieAdmin);
 
     $paymentForm=$request('/client/invoices/'.$invoiceA.'/pay',$cookieA);
     $paymentToken=$getToken($paymentForm['body']);
@@ -218,6 +244,35 @@ try {
     $domainState=$domainAfter->fetch(PDO::FETCH_ASSOC);
     $assert($r['status']===200 && empty($domainState['pending_nameservers_enc']) && empty($domainState['nameserver_status']),
         'customer A cannot mutate customer B domain even with valid CSRF token');
+    $privacyForm=$request('/admin/privacy',$cookieAdmin);
+    $privacyToken=$getToken($privacyForm['body']);
+    $r=$request('/admin/privacy',$cookieAdmin,'POST',['_token'=>$privacyToken,'action'=>'complete','request_id'=>$privacyB]);
+    $privacyBStatus=$pdo->prepare('SELECT status FROM privacy_requests WHERE id=:id');
+    $privacyBStatus->execute([':id'=>$privacyB]);$privacyBCurrent=(string)$privacyBStatus->fetchColumn();
+    $privacyBodyText=strip_tags((string)preg_replace('#<style[^>]*>.*?</style>#s','',$r['body']));
+    $assert($r['status']===200 && str_contains($privacyBodyText,'Aktif veya sonlandırılmamış hizmetler var') && $privacyBCurrent==='approved',
+        'erasure completion is blocked while customer has an active hosting service; HTTP '.$r['status'].'; request='.$privacyBCurrent.'; body='.substr($privacyBodyText,0,600));
+
+    $r=$request('/admin/privacy',$cookieAdmin,'POST',['_token'=>$privacyToken,'action'=>'complete','request_id'=>$privacyC]);
+    $erased=$pdo->prepare('SELECT name,email,username,status,auth_version FROM users WHERE id=:id');
+    $erased->execute([':id'=>$c]);$erasedUser=$erased->fetch(PDO::FETCH_ASSOC);
+    $requestStatus=$pdo->prepare('SELECT status FROM privacy_requests WHERE id=:id');$requestStatus->execute([':id'=>$privacyC]);
+    $redacted=$pdo->prepare('SELECT subject FROM tickets WHERE id=:id');$redacted->execute([':id'=>$ticketC]);
+    $redactedMessage=$pdo->prepare('SELECT message FROM ticket_messages WHERE id=:id');$redactedMessage->execute([':id'=>$messageC]);
+    $remainingAttachments=$pdo->prepare('SELECT COUNT(*) FROM ticket_attachments WHERE ticket_id=:id');$remainingAttachments->execute([':id'=>$ticketC]);
+    $remainingOutbox=(int)$pdo->query("SELECT COUNT(*) FROM email_outbox WHERE recipient='http-c@example.test'")->fetchColumn();
+    $retainedInvoice=$pdo->prepare('SELECT COUNT(*) FROM invoices WHERE id=:id AND user_id=:user AND status=\'paid\'');$retainedInvoice->execute([':id'=>$invoiceC,':user'=>$c]);
+    $retainedPayment=$pdo->prepare('SELECT COUNT(*) FROM payment_transactions WHERE invoice_id=:id AND status=\'success\'');$retainedPayment->execute([':id'=>$invoiceC]);
+    $assert($r['status']===200 && str_contains($r['body'],'Hesap anonimleştirildi') && ($erasedUser['status']??'')==='deleted'
+        && ($erasedUser['email']??'')==='deleted-user-'.$c.'@privacy.invalid' && ($erasedUser['username']??'')==='deleted_user_'.$c
+        && (int)($erasedUser['auth_version']??0)>1 && $requestStatus->fetchColumn()==='completed',
+        'approved erasure anonymizes the account, revokes sessions and completes the request');
+    $assert($redacted->fetchColumn()==='[İçerik silindi - KVKK]' && $redactedMessage->fetchColumn()==='[İçerik silindi - KVKK]'
+        && (int)$remainingAttachments->fetchColumn()===0 && !is_file($attachmentDir.'/'.$storedC) && $remainingOutbox===0,
+        'erasure redacts support content and deletes private attachments and queued email');
+    $assert((int)$retainedInvoice->fetchColumn()===1 && (int)$retainedPayment->fetchColumn()===1,
+        'paid invoice and successful payment evidence remain for statutory retention');
+
     $r=$request('/admin',$cookieA);
     $assert($r['status']===403,'customer cannot access admin route over HTTP');
 
@@ -242,10 +297,11 @@ try {
 } finally {
     proc_terminate($process);
     proc_close($process);
-    foreach ([$cookieA,$cookieB,$cookieStaff,$serverLog] as $path) if (is_file($path)) @unlink($path);
+    foreach ([$cookieA,$cookieB,$cookieStaff,$cookieAdmin,$serverLog] as $path) if (is_file($path)) @unlink($path);
     @unlink($storage . '/config.php');
     @unlink($storage . '/installed.lock');
     if (is_file($attachmentDir . '/' . $stored)) @unlink($attachmentDir . '/' . $stored);
+    if (isset($storedC) && is_file($attachmentDir . '/' . $storedC)) @unlink($attachmentDir . '/' . $storedC);
     @rmdir($attachmentDir);
     @rmdir(dirname($attachmentDir));
     $rateDir = $storage . '/auth-rate-limits';
