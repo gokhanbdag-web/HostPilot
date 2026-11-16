@@ -4,6 +4,7 @@ namespace HostPilot\Http;
 use HostPilot\Core\Auth;
 use HostPilot\Core\SecurityAudit;
 use PDO;
+use RuntimeException;
 use Throwable;
 
 final class PrivacyController
