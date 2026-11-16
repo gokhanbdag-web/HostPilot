@@ -2,6 +2,7 @@
 declare(strict_types=1);
 namespace HostPilot\Http;
 use HostPilot\Core\Auth;
+use HostPilot\Core\Authorization;
 use HostPilot\Core\EmailService;
 use PDO;
 use Throwable;
@@ -85,7 +86,7 @@ final class AdminController
         ];
         if (in_array(($user['role'] ?? ''), ['admin','super_admin'], true)) { $items[]=['Personel Yetkileri','/admin/staff','♙']; $items[]=['Oturum Güvenliği','/admin/security/sessions','⌑']; }
         $items[]=['İki Aşamalı Doğrulama','/admin/security/mfa','◈'];
-        if(($user['role']??'')==='staff') $items=array_values(array_filter($items,static fn($item)=>$item[1]!=='/admin/payments'&&$item[1]!=='/admin/payment-transactions'&&$item[1]!=='/admin/servers'&&$item[1]!=='/admin/services'&&$item[1]!=='/admin/updates'&&$item[1]!=='/admin/database-upgrade'));
+        if(($user['role']??'')==='staff') $items=array_values(array_filter($items,fn($item)=>Authorization::allowsAdminRequest($item[1],'GET',$user,$this->db)));
         foreach($items as $item) echo '<a class="nav-item'.($item[1]==='/admin'?' active':'').'" href="'.$this->url($item[1]).'"><span>'.$item[2].'</span>'.$this->e($item[0]).'</a>';
         echo '</aside><main class="main"><header class="topbar"><div><small>YÖNETİM / GENEL BAKIŞ</small><h1>Kontrol merkezi</h1></div><div class="user">'.$this->e((string)$user['name']).'<form method="post" action="'.$this->url('/admin/logout').'"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><button class="logout">Çıkış</button></form></div></header>';
         echo '<section class="welcome"><div><div class="eyebrow">İŞLETME ÖZETİ</div><h2>Hoş geldiniz, '.$this->e((string)$user['name']).'</h2><p>İşletmenizin temel göstergeleri tek ekranda.</p></div><span class="date">'.date('d.m.Y').'</span></section>';
