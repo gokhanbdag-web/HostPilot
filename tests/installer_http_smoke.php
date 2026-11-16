@@ -321,11 +321,11 @@ $firstStatements = \HostPilot\Core\MigrationRunner::splitStatements($firstMigrat
 $partial->exec($firstStatements[0]);
 cleanupInstallFiles($storage);
 [$partialCookie, $partialDb] = installBrowserApp($admin, $host, $port, $user, $password, $partialDatabase, $base, 'ci-partial', 'ci-partial@example.test', '');
-if ((int)$partialDb->query('SELECT COUNT(*) FROM migrations')->fetchColumn() !== 24) {
+if ((int)$partialDb->query('SELECT COUNT(*) FROM migrations')->fetchColumn() !== 25) {
     throw new RuntimeException('Installer did not recover from a partially-created schema.');
 }
 cleanupInstallFiles($storage);
-echo 'Partial-install retry passed: installer completed all 24 migrations after an interrupted first DDL.' . PHP_EOL;
+echo 'Partial-install retry passed: installer completed all 25 migrations after an interrupted first DDL.' . PHP_EOL;
 
 // Verify root/subdirectory-aware browser installation independently.
 $subdirectory = $root . '/ci-subdir';
