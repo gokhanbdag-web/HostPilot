@@ -42,6 +42,7 @@ $pdo->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,status,curre
 $invoiceB = (int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO domain_registrations(user_id,order_id,invoice_id,domain_name,years,registrar_payload_enc,idempotency_key,status,available_at,created_at,updated_at) VALUES(:user,:order_id,:invoice_id,'private-customer-b-domain.example',1,'{}',:key,'awaiting_payment',UTC_TIMESTAMP(),UTC_TIMESTAMP(),UTC_TIMESTAMP())")
     ->execute([':user'=>$b, ':order_id'=>$orderB, ':invoice_id'=>$invoiceB, ':key'=>hash('sha256','http-test-domain-b')]);
+$domainB = (int)$pdo->lastInsertId();
 
 $pdo->prepare("INSERT INTO tickets(ticket_number,user_id,department,subject,priority,status,last_reply_at,created_at,updated_at) VALUES('HTTP-B-TICKET',:user,'Sales','Private customer B ticket','normal','open',UTC_TIMESTAMP(),UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':user'=>$b]);
 $ticketB = (int)$pdo->lastInsertId();
@@ -122,7 +123,7 @@ try {
     $assert(!str_contains($r['body'],'private-customer-b.example'),'customer A service list excludes customer B service');
     $r=$request('/client/domains',$cookieA);
     $assert(!str_contains($r['body'],'private-customer-b-domain.example'),'customer A domain list excludes customer B domain');
-    $r=$request('/client/domains/sync',$cookieA,'POST',['domain_id'=>(string)$invoiceB,'_token'=>'']);
+    $r=$request('/client/domains/sync',$cookieA,'POST',['domain_id'=>(string)$domainB,'_token'=>'']);
     $assert($r['status']===419,'domain mutation rejects missing CSRF token');
     $r=$request('/admin',$cookieA);
     $assert($r['status']===403,'customer cannot access admin route over HTTP');
@@ -154,4 +155,7 @@ try {
     if (is_file($attachmentDir . '/' . $stored)) @unlink($attachmentDir . '/' . $stored);
     @rmdir($attachmentDir);
     @rmdir(dirname($attachmentDir));
+    $rateDir = $storage . '/auth-rate-limits';
+    foreach (glob($rateDir . '/*') ?: [] as $rateFile) if (is_file($rateFile)) @unlink($rateFile);
+    @rmdir($rateDir);
 }
