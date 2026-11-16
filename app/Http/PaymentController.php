@@ -88,6 +88,23 @@ final class PaymentController
             if(!in_array($gateway,$enabled,true)){http_response_code(422);echo 'Bu ödeme yöntemi etkin değil.';return;}
             $txId=0;
             try{
+                // Serialize every payment start for this invoice before checking or creating an attempt.
+                $this->db->beginTransaction();
+                $invoiceLock=$this->db->prepare('SELECT * FROM invoices WHERE id=:id AND user_id=:uid LIMIT 1 FOR UPDATE');
+                $invoiceLock->execute([':id'=>$invoiceId,':uid'=>$user['id']]);
+                $lockedInvoice=$invoiceLock->fetch();
+                if(!$lockedInvoice){$this->db->commit();http_response_code(404);echo 'Fatura bulunamadı.';return;}
+                $invoice=$lockedInvoice;
+                if($invoice['status']==='paid'){$this->db->commit();$this->redirect('/client/invoices');}
+                if(in_array($invoice['status'],['cancelled','refunded'],true)){$this->db->commit();http_response_code(409);echo 'İptal edilmiş veya iade edilmiş fatura için ödeme alınamaz.';return;}
+                $active=$this->db->prepare("SELECT id,status FROM payment_transactions WHERE invoice_id=:invoice AND status IN ('pending','review') ORDER BY id DESC LIMIT 1 FOR UPDATE");
+                $active->execute([':invoice'=>$invoiceId]);
+                if($active->fetch()){
+                    $this->db->commit();
+                    http_response_code(409);
+                    $this->paymentPage($invoice,$enabled,'Bu fatura için zaten bekleyen bir ödeme işlemi var. Sonuç netleşmeden yeni bir ödeme başlatılamaz. Lütfen destek ekibiyle iletişime geçin.');
+                    return;
+                }
                 $amount=round((float)$invoice['total']-(float)$invoice['amount_paid'],2);
                 if($amount<=0)throw new \RuntimeException('Ödenecek tutar bulunamadı.');
                 $ref='HPP'.gmdate('ymdHis').strtoupper(bin2hex(random_bytes(5)));
@@ -95,10 +112,18 @@ final class PaymentController
                 $ins=$this->db->prepare("INSERT INTO payment_transactions(invoice_id,user_id,gateway,idempotency_key,status,currency,amount,request_reference,created_at,updated_at) VALUES(:invoice,:user,:gateway,:key,'pending',:currency,:amount,:reference,:created,:updated)");
                 $ins->execute([':invoice'=>$invoiceId,':user'=>$user['id'],':gateway'=>$gateway,':key'=>bin2hex(random_bytes(24)),':currency'=>$invoice['currency'],':amount'=>$amount,':reference'=>$ref,':created'=>$now,':updated'=>$now]);
                 $txId=(int)$this->db->lastInsertId();
+                $this->db->commit();
                 if($gateway==='paytr')$this->startPaytr($txId,$ref,$invoice,$user,$amount,$v);
                 else $this->startIyzico($txId,$ref,$invoice,$user,$amount,$v);
                 return;
-            }catch(Throwable $e){if($txId>0)$this->updateTransaction($txId,['status'=>'failed','response_code'=>'init_failed','safe_message'=>'Ödeme oturumu başlatılamadı']);error_log('[HostPilot] Payment initialization: '.$e->getMessage());http_response_code(502);$this->paymentPage($invoice,$enabled,'Ödeme başlatılamadı. Bilgileri kontrol edip tekrar deneyin.');return;}
+            }catch(Throwable $e){
+                if($this->db->inTransaction())$this->db->rollBack();
+                if($txId>0)$this->updateTransaction($txId,['status'=>'failed','response_code'=>'init_failed','safe_message'=>'Ödeme oturumu başlatılamadı']);
+                error_log('[HostPilot] Payment initialization: '.$e->getMessage());
+                http_response_code(502);
+                $this->paymentPage($invoice,$enabled,'Ödeme başlatılamadı. Bilgileri kontrol edip tekrar deneyin.');
+                return;
+            }
         }
         $this->paymentPage($invoice,$enabled,'');
     }
@@ -229,7 +254,15 @@ final class PaymentController
             $lock=$this->db->prepare('SELECT * FROM payment_transactions WHERE id=:id FOR UPDATE');$lock->execute([':id'=>$tx['id']]);$current=$lock->fetch();
             if(!$current||$current['status']==='success'){$this->db->commit();return;}
             $inv=$this->db->prepare('SELECT * FROM invoices WHERE id=:id FOR UPDATE');$inv->execute([':id'=>$tx['invoice_id']]);$invoice=$inv->fetch();
-            if(!$invoice||(float)$tx['amount']>((float)$invoice['total']-(float)$invoice['amount_paid']+0.005))throw new \RuntimeException('Tahsilat tutarı fatura bakiyesini aşıyor.');
+            $remaining=$invoice?round((float)$invoice['total']-(float)$invoice['amount_paid'],2):0.0;
+            if(!$invoice||round((float)$tx['amount'],2)>$remaining+0.005){
+                // The provider may already have captured a duplicate attempt. Acknowledge the callback,
+                // retain a visible manual-reconciliation state, and never silently lose the capture.
+                $review=$this->db->prepare("UPDATE payment_transactions SET status='review',response_code='overpayment_review',safe_message=:message,updated_at=:updated WHERE id=:id");
+                $review->execute([':message'=>'Sağlayıcı ödemeyi onayladı ancak fatura bakiyesi yetersiz. Manuel iade / mutabakat gerekiyor.',':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$tx['id']]);
+                $this->db->commit();
+                return;
+            }
             $newPaid=round((float)$invoice['amount_paid']+(float)$tx['amount'],2);$newStatus=$newPaid+0.005>=(float)$invoice['total']?'paid':'partially_paid';$now=gmdate('Y-m-d H:i:s');
             $u=$this->db->prepare('UPDATE invoices SET amount_paid=:paid,status=:status,paid_at=:paid_at,updated_at=:updated WHERE id=:id');
             $u->execute([':paid'=>$newPaid,':status'=>$newStatus,':paid_at'=>$newStatus==='paid'?$now:null,':updated'=>$now,':id'=>$invoice['id']]);
