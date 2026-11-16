@@ -281,7 +281,7 @@ try {
         '_token'=>$getToken($customerSecurityPage['body']),'action'=>'disable','password'=>$password,'code'=>$customerRecoveryCodes[1],
     ]);
     $customerMfaState->execute([':id'=>$a]);
-    $assert($customerDisable['status']===200&&str_contains($customerDisable['body'],'diğer oturumlar güvenlik amacıyla sonlandırıldı')
+    $assert($customerDisable['status']===200&&str_contains($customerDisable['body'],'İki aşamalı doğrulama kapatıldı')
         &&$customerMfaState->fetch(PDO::FETCH_ASSOC)===false,
         'customer can disable MFA only with password plus an unused recovery code');
     $assert((int)$pdo->query("SELECT COUNT(*) FROM security_audit_logs WHERE user_id=".(int)$a." AND event_key LIKE 'auth.customer_mfa_%'")->fetchColumn()>=4,
