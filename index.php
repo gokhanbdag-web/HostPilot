@@ -105,12 +105,12 @@ if ($requestPath === '/admin/database-upgrade' && in_array($method, ['GET', 'POS
     exit;
 }
 
-// Demo data is optional and non-blocking. Never seed while maintenance mode is active.
-if (!is_file($maintenanceFile)) {
+// Demo data is strictly opt-in during installation; never create sample business records by default.
+if (!is_file($maintenanceFile) && !empty($config['app']['demo_data_enabled'])) {
     try {
         \HostPilot\Core\DemoSeeder::seed($pdo);
     } catch (Throwable $exception) {
-        error_log('[HostPilot] Demo seed skipped: ' . $exception->getMessage());
+        error_log('[HostPilot] Opt-in demo seed skipped: ' . $exception->getMessage());
     }
 }
 
