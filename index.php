@@ -134,8 +134,8 @@ $packageChanges = new \HostPilot\Http\PackageChangeController($pdo, $basePath, (
 if ($requestPath === '/client/services/change' && $method === 'GET') { $packageChanges->index(); exit; }
 if ($requestPath === '/client/services/change' && $method === 'POST') { $packageChanges->create(); exit; }
 if ($requestPath === '/client/services/change/cancel' && $method === 'POST') { $packageChanges->cancelScheduled(); exit; }
-if ($requestPath === '/client/tickets/attachment' || preg_match('#^/client/tickets/attachment/([0-9]+)$#D', $requestPath, $attachmentMatch)) { if ($method === 'GET' && isset($attachmentMatch[1])) { (new \\HostPilot\\Http\\TicketAttachmentController($pdo,$basePath,HOSTPILOT_STORAGE))->download((int)$attachmentMatch[1],false); exit; } http_response_code(404); exit; }
-if (preg_match('#^/admin/tickets/attachment/([0-9]+)$#D', $requestPath, $attachmentMatch) && $method === 'GET') { (new \\HostPilot\\Http\\TicketAttachmentController($pdo,$basePath,HOSTPILOT_STORAGE))->download((int)$attachmentMatch[1],true); exit; }
+if ($requestPath === '/client/tickets/attachment' || preg_match('#^/client/tickets/attachment/([0-9]+)$#D', $requestPath, $attachmentMatch)) { if ($method === 'GET' && isset($attachmentMatch[1])) { (new \HostPilot\Http\TicketAttachmentController($pdo,$basePath,HOSTPILOT_STORAGE))->download((int)$attachmentMatch[1],false); exit; } http_response_code(404); exit; }
+if (preg_match('#^/admin/tickets/attachment/([0-9]+)$#D', $requestPath, $attachmentMatch) && $method === 'GET') { (new \HostPilot\Http\TicketAttachmentController($pdo,$basePath,HOSTPILOT_STORAGE))->download((int)$attachmentMatch[1],true); exit; }
 if ($requestPath === '/client/tickets' && $method === 'GET') { $client->tickets(); exit; }
 if ($requestPath === '/client/tickets/new' && in_array($method, ['GET', 'POST'], true)) { $client->newTicket(); exit; }
 if (preg_match('#^/client/tickets/([0-9]+)$#', $requestPath, $ticketMatch) && in_array($method, ['GET', 'POST'], true)) { $client->viewTicket((int)$ticketMatch[1]); exit; }
