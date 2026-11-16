@@ -57,9 +57,23 @@ final class PaymentController
         $this->pageEnd();
     }
 
+    private function flagStalePendingAttempts(?int $invoiceId=null):int
+    {
+        // A timeout is ambiguous: never release the invoice for another charge automatically.
+        // Move old sessions to manual review so an administrator can verify provider-side state.
+        $now=gmdate('Y-m-d H:i:s');
+        $cutoff=(new \\DateTimeImmutable('now',new \\DateTimeZone('UTC')))->modify('-30 minutes')->format('Y-m-d H:i:s');
+        $sql="UPDATE payment_transactions SET status='review',response_code='stale_pending_review',safe_message='Ödeme oturumu 30 dakikadan uzun süredir sonuçlanmadı. Sağlayıcı panelinde kontrol edilmelidir.',updated_at=:updated WHERE status='pending' AND created_at<=:cutoff";
+        $params=[':updated'=>$now,':cutoff'=>$cutoff];
+        if($invoiceId!==null){$sql.=' AND invoice_id=:invoice_id';$params[':invoice_id']=$invoiceId;}
+        $statement=$this->db->prepare($sql);$statement->execute($params);
+        return $statement->rowCount();
+    }
+
     public function adminTransactions():void
     {
         if(!$this->isStaff()){http_response_code(403);echo 'Yetkisiz erişim.';return;}
+        $this->flagStalePendingAttempts();
         $rows=$this->db->query("SELECT pt.id,pt.invoice_id,pt.gateway,pt.gateway_transaction_id,pt.status,pt.currency,pt.amount,pt.response_code,pt.safe_message,pt.created_at,i.invoice_number,u.name,u.email
             FROM payment_transactions pt JOIN invoices i ON i.id=pt.invoice_id JOIN users u ON u.id=pt.user_id
             ORDER BY pt.created_at DESC LIMIT 500")->fetchAll();
@@ -82,8 +96,8 @@ final class PaymentController
                 echo '<label>Sağlayıcı işlem / iade referansı<input name="provider_reference" required maxlength="190" autocomplete="off"></label>';
                 echo '<label>İşlem açıklaması<input name="reason" required maxlength="500"></label>';
                 echo '<label>Super admin / admin parolası<input type="password" name="password" required maxlength="4096" autocomplete="current-password"></label>';
-                echo '<label><input type="checkbox" name="confirm_external_action" value="1" required> Sağlayıcı panelinde ilgili tahsilat / tam iade işlemini doğruladım.</label>';
-                echo '<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="submit" name="decision" value="payment_confirmed">Tahsilatı faturaya işle</button><button type="submit" name="decision" value="refund_confirmed">Tam iadenin yapıldığını kaydet</button></div></form></td></tr>';
+                echo '<label><input type="checkbox" name="confirm_external_action" value="1" required> Sağlayıcı panelinde seçtiğim sonucu doğruladım; bu işlem sağlayıcıya otomatik istek göndermez.</label>';
+                echo '<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="submit" name="decision" value="payment_confirmed">Tahsilatı faturaya işle</button><button type="submit" name="decision" value="refund_confirmed">Tam iadenin yapıldığını kaydet</button><button type="submit" name="decision" value="no_capture_confirmed">Tahsilat olmadığını doğrula ve kapat</button></div></form></td></tr>';
             }
         }
         echo '</tbody></table></div></section></main></div>';$this->pageEnd();
@@ -99,7 +113,7 @@ final class PaymentController
         $decision=(string)($_POST['decision']??'');
         $reference=trim((string)($_POST['provider_reference']??''));
         $reason=trim((string)($_POST['reason']??''));
-        if($id<1||!in_array($decision,['payment_confirmed','refund_confirmed'],true)||$reference===''||strlen($reference)>190||$reason===''||strlen($reason)>500||(string)($_POST['confirm_external_action']??'')!=='1'){
+        if($id<1||!in_array($decision,['payment_confirmed','refund_confirmed','no_capture_confirmed'],true)||$reference===''||strlen($reference)>190||$reason===''||strlen($reason)>500||(string)($_POST['confirm_external_action']??'')!=='1'){
             $this->flashReconcileError('Mutabakat alanları eksik veya geçersiz.');$this->redirect('/admin/payment-transactions');
         }
         $verified=Auth::verifyCredentials($this->db,(string)($actor['email']??''),(string)($_POST['password']??''));
@@ -121,7 +135,7 @@ final class PaymentController
                 SecurityAudit::record($this->db,'payment.transaction_reconciled',(int)$actor['id'],['resource_id'=>$id,'action'=>'payment_confirmed']);
                 $this->logPaymentReconciliation('PAYMENT_CONFIRMED',$id,(int)$actor['id'],$reference);
                 $_SESSION['hostpilot_payment_reconcile_notice']='Sağlayıcı tahsilatı doğrulandı ve fatura bakiyesine işlendi.';
-            }else{
+            }elseif($decision==='refund_confirmed'){
                 $this->db->beginTransaction();
                 $lock=$this->db->prepare('SELECT * FROM payment_transactions WHERE id=:id FOR UPDATE');$lock->execute([':id'=>$id]);$current=$lock->fetch();
                 if(!$current||$current['status']!=='review')throw new \RuntimeException('İşlem başka bir oturum tarafından güncellenmiş.');
@@ -136,6 +150,21 @@ final class PaymentController
                 SecurityAudit::record($this->db,'payment.manual_refund_confirmed',(int)$actor['id'],['resource_id'=>$id,'action'=>'refund_confirmed']);
                 $this->logPaymentReconciliation('REFUND_CONFIRMED',$id,(int)$actor['id'],$reference);
                 $_SESSION['hostpilot_payment_reconcile_notice']='Sağlayıcı panelinde tamamlanan tam iade kaydedildi. Fatura bakiyesi değiştirilmedi; bu işlem daha önce faturaya işlenmemiş bir tahsilat incelemesiydi.';
+            }else{
+                $this->db->beginTransaction();
+                $lock=$this->db->prepare('SELECT * FROM payment_transactions WHERE id=:id FOR UPDATE');$lock->execute([':id'=>$id]);$current=$lock->fetch();
+                if(!$current||$current['status']!=='review')throw new \\RuntimeException('İşlem başka bir oturum tarafından güncellenmiş.');
+                $exists=$this->db->prepare("SELECT 1 FROM payment_reconciliations WHERE payment_transaction_id=:id AND decision='no_capture_confirmed' LIMIT 1");$exists->execute([':id'=>$id]);
+                if($exists->fetchColumn())throw new \\RuntimeException('Bu işlem için tahsilat olmadığı zaten kaydedilmiş.');
+                $insert=$this->db->prepare("INSERT INTO payment_reconciliations(payment_transaction_id,admin_user_id,decision,provider_reference,amount,currency,reason,created_at) VALUES(:tx,:admin,'no_capture_confirmed',:reference,:amount,:currency,:reason,:created)");
+                $insert->execute([':tx'=>$id,':admin'=>$actor['id'],':reference'=>$reference,':amount'=>$current['amount'],':currency'=>$current['currency'],':reason'=>$reason,':created'=>gmdate('Y-m-d H:i:s')]);
+                $update=$this->db->prepare("UPDATE payment_transactions SET status='cancelled',response_code='manual_no_capture_confirmed',safe_message='Sağlayıcı panelinde tahsilat olmadığı admin tarafından doğrulandı; geç gelen callback tahsilat oluşturamaz.',updated_at=:updated WHERE id=:id AND status='review'");
+                $update->execute([':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$id]);
+                if($update->rowCount()!==1)throw new \\RuntimeException('Ödeme işlemi güvenli biçimde kapatılamadı.');
+                $this->db->commit();
+                SecurityAudit::record($this->db,'payment.no_capture_confirmed',(int)$actor['id'],['resource_id'=>$id,'action'=>'no_capture_confirmed']);
+                $this->logPaymentReconciliation('NO_CAPTURE_CONFIRMED',$id,(int)$actor['id'],$reference);
+                $_SESSION['hostpilot_payment_reconcile_notice']='Sağlayıcıda tahsilat olmadığı doğrulandı ve ödeme oturumu kapatıldı. Geç gelen sağlayıcı bildirimi faturaya tahsilat işleyemez.';
             }
         }catch(Throwable $exception){
             if($this->db->inTransaction())$this->db->rollBack();
@@ -169,6 +198,7 @@ final class PaymentController
         if(!$user||($user['role']??'')!=='customer'){$this->redirect('/client/login');}
         $q=$this->db->prepare('SELECT * FROM invoices WHERE id=:id AND user_id=:uid LIMIT 1');$q->execute([':id'=>$invoiceId,':uid'=>$user['id']]);$invoice=$q->fetch();
         if(!$invoice){http_response_code(404);echo 'Fatura bulunamadı.';return;}
+        $this->flagStalePendingAttempts($invoiceId);
         if($invoice['status']==='paid'){$this->redirect('/client/invoices');}
         if(in_array($invoice['status'],['cancelled','refunded'],true)){http_response_code(409);echo 'İptal edilmiş veya iade edilmiş fatura için ödeme alınamaz.';return;}
         $v=$this->settings();$enabled=[];
@@ -345,7 +375,7 @@ final class PaymentController
         $this->db->beginTransaction();
         try{
             $lock=$this->db->prepare('SELECT * FROM payment_transactions WHERE id=:id FOR UPDATE');$lock->execute([':id'=>$tx['id']]);$current=$lock->fetch();
-            if(!$current||$current['status']==='success'){$this->db->commit();return;}
+            if(!$current||in_array($current['status'],['success','failed','cancelled','refunded'],true)){$this->db->commit();return;}
             if($reconciliation!==null&&$current['status']!=='review')throw new \RuntimeException('Only a reviewed payment can be manually reconciled.');
             $inv=$this->db->prepare('SELECT * FROM invoices WHERE id=:id FOR UPDATE');$inv->execute([':id'=>$tx['invoice_id']]);$invoice=$inv->fetch();
             $remaining=$invoice?round((float)$invoice['total']-(float)$invoice['amount_paid'],2):0.0;
@@ -418,7 +448,7 @@ final class PaymentController
         $allowed=['status','gateway_transaction_id','request_reference','response_code','safe_message'];
         $sets=[];$params=[':id'=>$id];foreach($fields as $k=>$v)if(in_array($k,$allowed,true)){$sets[]=$k.'=:'.$k;$params[':'.$k]=$v;}
         if(!$sets)return;$sets[]='updated_at=:updated';$params[':updated']=gmdate('Y-m-d H:i:s');
-        $where=' WHERE id=:id';if(isset($fields['status'])&&$fields['status']!=='success')$where.=" AND status<>'success'";$q=$this->db->prepare('UPDATE payment_transactions SET '.implode(',',$sets).$where);$q->execute($params);
+        $where=' WHERE id=:id';if(isset($fields['status'])&&$fields['status']!=='success')$where.=" AND status NOT IN ('success','cancelled','refunded','review')";$q=$this->db->prepare('UPDATE payment_transactions SET '.implode(',',$sets).$where);$q->execute($params);
         if(($fields['status']??'')==='failed')SecurityAudit::record($this->db,'payment.transaction_failed',null,['resource_id'=>$id,'action'=>'failed']);
         if(($fields['status']??'')==='failed'){
             $notice=$this->db->prepare('SELECT i.id,i.invoice_number,i.total,i.currency,i.due_at,u.email,u.name FROM payment_transactions t JOIN invoices i ON i.id=t.invoice_id JOIN users u ON u.id=t.user_id WHERE t.id=:id LIMIT 1');
