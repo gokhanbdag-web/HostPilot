@@ -100,7 +100,7 @@ $getToken = static function (string $body): string {
     if (!preg_match('/name="_token"\s+value="([a-f0-9]{64})"/', $body, $m)) throw new RuntimeException('CSRF token not found in form.');
     return $m[1];
 };
-$login = static function (string $route, string $email, string $cookie) use ($request, $getToken, $password, $assert): void {
+$login = static function (string $route, string $email, string $cookie) use ($request, $getToken, $password, $assert, $serverLog): void {
     $page=$request($route,$cookie);
     $token=$getToken($page['body']);
     $result=$request($route,$cookie,'POST',['_token'=>$token,'email'=>$email,'password'=>$password]);
