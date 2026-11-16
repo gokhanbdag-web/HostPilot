@@ -24,7 +24,7 @@ final class Authorization
         $permission = self::permissionFor($path, strtoupper($method));
         if ($permission === null) return false;
         $role = (string)$user['role'];
-        if (in_array($role, ['super_admin', 'admin'], true)) return true;
+        if (in_array($role, ['super_admin', 'admin'], true) || $permission === 'security.mfa.manage') return true;
         if ($role !== 'staff' || $db === null) return false;
         try {
             $statement = $db->prepare('SELECT 1 FROM staff_permissions WHERE user_id = :user_id AND permission = :permission LIMIT 1');
@@ -42,6 +42,7 @@ final class Authorization
 
         if (in_array($path, ['/admin', '/admin/'], true) && $method === 'GET') return 'dashboard.view';
         if ($path === '/admin/security/sessions' && in_array($method, ['GET', 'POST'], true)) return 'security.sessions.manage';
+        if ($path === '/admin/security/mfa' && in_array($method, ['GET', 'POST'], true)) return 'security.mfa.manage';
         if ($path === '/admin/staff' && $method === 'GET') return 'staff.permissions.manage';
         if ($path === '/admin/staff/save' && $method === 'POST') return 'staff.permissions.manage';
         if ($path === '/admin/customers' && $method === 'GET') return 'customers.view';

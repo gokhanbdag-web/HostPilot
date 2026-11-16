@@ -63,7 +63,7 @@ if (MigrationRunner::runPending($pdo, $directory, true) !== []) throw new Runtim
 
 if ((int)$pdo->query("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='email_verified_at'")->fetchColumn() !== 1) throw new RuntimeException('Email verification migration did not add email_verified_at to a legacy users table.');
 if ((int)$pdo->query("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='auth_version'")->fetchColumn() !== 1) throw new RuntimeException('Session security migration did not add auth_version to a legacy users table.');
-$requiredTables = ['product_groups','products','product_pricing','orders','order_items','services','invoices','invoice_items','payment_transactions','servers','provisioning_jobs','service_package_changes','email_outbox','domain_registrations','domain_renewals','password_reset_tokens','staff_permissions','staff_departments','email_verification_tokens','security_audit_logs'];
+$requiredTables = ['product_groups','products','product_pricing','orders','order_items','services','invoices','invoice_items','payment_transactions','servers','provisioning_jobs','service_package_changes','email_outbox','domain_registrations','domain_renewals','password_reset_tokens','staff_permissions','staff_departments','email_verification_tokens','security_audit_logs', 'admin_mfa', 'admin_mfa_recovery_codes'];
 $check = $pdo->prepare('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table_name');
 foreach ($requiredTables as $table) {
     $check->execute([':table_name' => $table]);
@@ -179,7 +179,7 @@ foreach ([$pdo, $legacy] as $connection) {
     }
 }
 $legacyPending = MigrationRunner::pending($legacy, $directory);
-if ($legacyPending !== ['20261115_0002_staff_permissions_departments', '20261115_0003_customer_email_verification', '20261115_0004_user_auth_version', '20261115_0005_security_audit_logs']) {
+if ($legacyPending !== ['20261115_0002_staff_permissions_departments', '20261115_0003_customer_email_verification', '20261115_0004_user_auth_version', '20261115_0005_security_audit_logs', '20261116_0001_admin_mfa']) {
     throw new RuntimeException('SQL runner did not isolate the new staff permission migration on a legacy-upgraded database: ' . json_encode($legacyPending));
 }
 $legacyApplied = MigrationRunner::runPending($legacy, $directory, true);

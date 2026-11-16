@@ -13,19 +13,60 @@ final class AdminController
     public function login(): void
     {
         if (Auth::check() && in_array((Auth::user()['role'] ?? ''), ['super_admin','admin','staff'], true)) $this->redirect('/admin');
+        $challenge = $_SESSION['hostpilot_mfa_challenge'] ?? null;
+        if (!is_array($challenge) || (int)($challenge['expires_at'] ?? 0) < time()) {
+            unset($_SESSION['hostpilot_mfa_challenge']);
+            $challenge = null;
+        }
         $error = '';
         if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
-            if (!Auth::verifyCsrf($_POST['_token'] ?? null)) $error = 'Oturum doğrulaması başarısız.';
-            elseif (Auth::attempt($this->db, trim((string)($_POST['email'] ?? '')), (string)($_POST['password'] ?? ''))) {
-                if (in_array((Auth::user()['role'] ?? ''), ['super_admin','admin','staff'], true)) $this->redirect('/admin');
-                Auth::logout();
-                $error = 'Bu giriş yönetici hesapları içindir.';
-            } else $error = 'E-posta veya parola hatalı ya da hesap etkin değil.';
+            if (!Auth::verifyCsrf($_POST['_token'] ?? null)) {
+                $error = 'Oturum doğrulaması başarısız.';
+            } elseif (is_array($challenge)) {
+                $userId = (int)($challenge['user_id'] ?? 0);
+                $code = trim((string)($_POST['code'] ?? ''));
+                if ($userId > 0 && !Auth::consumeMfaAttempt()) {
+                    $method = \HostPilot\Core\Mfa::verifyCode($this->db, $userId, $code, $this->applicationKey);
+                    if ($method !== null) {
+                        $query = $this->db->prepare("SELECT id,name,email,role,status,auth_version FROM users WHERE id=:id AND status='active' AND role IN ('super_admin','admin','staff') LIMIT 1");
+                        $query->execute([':id' => $userId]);
+                        $user = $query->fetch(PDO::FETCH_ASSOC);
+                        if (is_array($user)) {
+                            if ($method === 'recovery') \HostPilot\Core\SecurityAudit::record($this->db, 'auth.mfa_recovery_used', $userId);
+                            \HostPilot\Core\SecurityAudit::record($this->db, 'auth.mfa_challenge_succeeded', $userId);
+                            Auth::completeLogin($this->db, $user);
+                            $this->redirect('/admin');
+                        }
+                    }
+                }
+                \HostPilot\Core\SecurityAudit::record($this->db, 'auth.mfa_challenge_failed', $userId > 0 ? $userId : null);
+                $error = 'Doğrulama kodu geçersiz, süresi dolmuş veya daha önce kullanılmış.';
+            } else {
+                $user = Auth::verifyCredentials($this->db, trim((string)($_POST['email'] ?? '')), (string)($_POST['password'] ?? ''));
+                if (is_array($user) && in_array((string)$user['role'], ['super_admin','admin','staff'], true)) {
+                    if (\HostPilot\Core\Mfa::isEnabled($this->db, (int)$user['id'])) {
+                        session_regenerate_id(true);
+                        unset($_SESSION['hostpilot_csrf']);
+                        $_SESSION['hostpilot_mfa_challenge'] = ['user_id' => (int)$user['id'], 'expires_at' => time() + 300];
+                        $challenge = $_SESSION['hostpilot_mfa_challenge'];
+                    } else {
+                        Auth::completeLogin($this->db, $user);
+                        $this->redirect('/admin');
+                    }
+                } else {
+                    $error = 'E-posta, kullanıcı adı veya parola hatalı ya da hesap etkin değil.';
+                }
+            }
         }
         $this->startPage('Yönetici girişi');
         echo '<section class="login"><div class="eyebrow">HOSTPILOT CONTROL CENTER</div><h1>Yönetim paneline giriş</h1><p>İşletmenizi tek merkezden yönetin.</p>';
         if ($error !== '') echo '<div class="alert">' . $this->e($error) . '</div>';
-        echo '<form method="post"><input type="hidden" name="_token" value="' . $this->e(Auth::csrfToken()) . '"><label>E-posta veya kullanıcı adı<input type="text" name="email" autocomplete="username" required></label><label>Parola<input type="password" name="password" autocomplete="current-password" required></label><button>Giriş yap</button></form><p><a href="' . $this->url('/admin/forgot-password') . '">Parolamı unuttum</a></p></section>';
+        if (is_array($challenge)) {
+            echo '<p>Parolanız doğrulandı. Devam etmek için authenticator uygulamanızdaki 6 haneli kodu veya tek kullanımlık kurtarma kodlarından birini girin. Bu adım 5 dakika içinde tamamlanmalıdır.</p><form method="post"><input type="hidden" name="_token" value="' . $this->e(Auth::csrfToken()) . '"><label>Doğrulama kodu<input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="32" required autofocus></label><button>Giriş yap</button></form>';
+        } else {
+            echo '<form method="post"><input type="hidden" name="_token" value="' . $this->e(Auth::csrfToken()) . '"><label>E-posta veya kullanıcı adı<input type="text" name="email" autocomplete="username" required></label><label>Parola<input type="password" name="password" autocomplete="current-password" required></label><button>Giriş yap</button></form><p><a href="' . $this->url('/admin/forgot-password') . '">Parolamı unuttum</a></p>';
+        }
+        echo '</section>';
         $this->endPage();
     }
 
@@ -42,6 +83,7 @@ final class AdminController
         $items=[['Genel Bakış','/admin','▦'],['Müşteriler','/admin/customers','♙'],['Ürün & Paketler','/admin/products','▤'],['Siparişler','/admin/orders','⇄'],['Faturalar','/admin/invoices','▧'],['Ödeme Yöntemleri','/admin/payments','₺'],['Ödeme İşlemleri','/admin/payment-transactions','↗'],['Sunucular','/admin/servers','▣'],['Hizmetler','/admin/services','▤'],['Domainler','/admin/domains','◎'],['Destek Talepleri','/admin/tickets','✉'],['Raporlar','/admin/reports','▥'],['Entegrasyonlar','/admin/integrations','⌘'],['Tema & Sayfa Editörü','/admin/themes','✧'],['Ayarlar','/admin/settings','⚙'],['Güncelleme Merkezi','/admin/updates','↻'],['Veritabanı Güncellemeleri','/admin/database-upgrade','⇧']
         ];
         if (in_array(($user['role'] ?? ''), ['admin','super_admin'], true)) { $items[]=['Personel Yetkileri','/admin/staff','♙']; $items[]=['Oturum Güvenliği','/admin/security/sessions','⌑']; }
+        $items[]=['İki Aşamalı Doğrulama','/admin/security/mfa','◈'];
         if(($user['role']??'')==='staff') $items=array_values(array_filter($items,static fn($item)=>$item[1]!=='/admin/payments'&&$item[1]!=='/admin/payment-transactions'&&$item[1]!=='/admin/servers'&&$item[1]!=='/admin/services'&&$item[1]!=='/admin/updates'&&$item[1]!=='/admin/database-upgrade'));
         foreach($items as $item) echo '<a class="nav-item'.($item[1]==='/admin'?' active':'').'" href="'.$this->url($item[1]).'"><span>'.$item[2].'</span>'.$this->e($item[0]).'</a>';
         echo '</aside><main class="main"><header class="topbar"><div><small>YÖNETİM / GENEL BAKIŞ</small><h1>Kontrol merkezi</h1></div><div class="user">'.$this->e((string)$user['name']).'<form method="post" action="'.$this->url('/admin/logout').'"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><button class="logout">Çıkış</button></form></div></header>';

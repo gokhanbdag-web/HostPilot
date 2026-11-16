@@ -98,12 +98,12 @@ function installBrowserApp(PDO $admin, string $host, int $port, string $user, st
         [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true]
     );
     $count = (int)$db->query('SELECT COUNT(*) FROM migrations')->fetchColumn();
-    if ($count !== 24) throw new RuntimeException('Fresh browser install did not apply all 24 migrations; found ' . $count . '.');
+    if ($count !== 25) throw new RuntimeException('Fresh browser install did not apply all 25 migrations; found ' . $count . '.');
     $adminCheck = $db->prepare('SELECT role FROM users WHERE username=:username LIMIT 1');
     $adminCheck->execute([':username' => $username]);
     if ($adminCheck->fetchColumn() !== 'super_admin') throw new RuntimeException('Installer did not create the first super administrator.');
     $adminCheck->closeCursor();
-    foreach (['product_groups','products','orders','services','invoices','payment_transactions','servers','email_outbox','domain_registrations','domain_renewals','password_reset_tokens'] as $table) {
+    foreach (['product_groups','products','orders','services','invoices','payment_transactions','servers','email_outbox','domain_registrations','domain_renewals','password_reset_tokens','admin_mfa','admin_mfa_recovery_codes'] as $table) {
         $check = $db->prepare('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=:table_name');
         $check->execute([':table_name' => $table]);
         if ((int)$check->fetchColumn() !== 1) throw new RuntimeException('Fresh installer schema is missing table ' . $table . '.');
@@ -125,7 +125,7 @@ function cleanupInstallFiles(string $storage): void
 }
 
 [$cookie, $db] = installBrowserApp($admin, $host, $port, $user, $password, $databaseName, $base, 'ci-installer', 'ci-installer@example.test', '');
-echo 'Root browser installer passed: fresh schema, 24 migrations and first administrator.' . PHP_EOL;
+echo 'Root browser installer passed: fresh schema, 25 migrations and first administrator.' . PHP_EOL;
 
 // Simulate a pre-repair installation and verify the authenticated admin upgrade flow.
 $db->exec('ALTER TABLE invoices DROP FOREIGN KEY fk_invoice_service');
@@ -226,4 +226,4 @@ if ((int)$subDb->query('SELECT COUNT(*) FROM migrations')->fetchColumn() !== 24)
 cleanupInstallFiles($storage);
 @unlink($subdirectory . '/index.php');
 @rmdir($subdirectory);
-echo 'Subdirectory browser installer passed: base-path configuration and 24 SQL migrations.' . PHP_EOL;
+echo 'Subdirectory browser installer passed: base-path configuration and 25 SQL migrations.' . PHP_EOL;
