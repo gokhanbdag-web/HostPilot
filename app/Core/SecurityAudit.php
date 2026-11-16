@@ -26,6 +26,7 @@ final class SecurityAudit
         'privacy.exported',
         'privacy.erasure_requested',
         'privacy.request_reviewed',
+        'privacy.erasure_completed',
     ];
 
     public static function record(PDO $db, string $event, ?int $userId = null, array $metadata = []): void
@@ -79,7 +80,7 @@ final class SecurityAudit
             $safe['role'] = $metadata['role'];
         }
         if (isset($metadata['request_id']) && is_int($metadata['request_id']) && $metadata['request_id'] > 0) $safe['request_id'] = $metadata['request_id'];
-        if (isset($metadata['action']) && is_string($metadata['action']) && in_array($metadata['action'], ['export','under_review','declined'], true)) $safe['action'] = $metadata['action'];
+        if (isset($metadata['action']) && is_string($metadata['action']) && in_array($metadata['action'], ['export','under_review','approved','declined','completed'], true)) $safe['action'] = $metadata['action'];
         return $safe;
     }
 }
