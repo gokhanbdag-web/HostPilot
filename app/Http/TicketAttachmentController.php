@@ -52,7 +52,7 @@ final class TicketAttachmentController
     {
         $actor=Auth::user();if(!$actor){http_response_code(401);return;}
         if($admin){
-            if(!in_array(($actor['role']??''),['super_admin','admin','staff'],true)||!\\HostPilot\Core\\Authorization::allowsAdminRequest('/admin/tickets/1','GET',$actor,$this->db)){http_response_code(403);return;}
+            if(!in_array(($actor['role']??''),['super_admin','admin','staff'],true)||!\HostPilot\Core\Authorization::allowsAdminRequest('/admin/tickets/1','GET',$actor,$this->db)){http_response_code(403);return;}
             $q=$this->db->prepare('SELECT a.*,t.department FROM ticket_attachments a JOIN tickets t ON t.id=a.ticket_id WHERE a.id=:id LIMIT 1');$q->execute([':id'=>$attachmentId]);$row=$q->fetch(PDO::FETCH_ASSOC);
             if(!$row){http_response_code(404);return;}
             if(($actor['role']??'')==='staff'){
