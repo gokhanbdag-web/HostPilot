@@ -1,8 +1,8 @@
 <?php
 declare(strict_types=1);
-namespace HostPilot\\Http;
-use HostPilot\\Core\\Auth;
-use HostPilot\\Core\\SecurityAudit;
+namespace HostPilot\Http;
+use HostPilot\Core\Auth;
+use HostPilot\Core\SecurityAudit;
 use PDO;
 use Throwable;
 
