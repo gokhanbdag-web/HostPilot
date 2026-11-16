@@ -16,8 +16,8 @@ $required=[
     "Auth::verifyCsrf",
     "DatabaseBackup::create",
     "DatabaseBackup::restore",
-    "status'=>'restore_running'",
-    "status'=>'restored'",
+    "['status']='restore_running'",
+    "['status']='restored'",
     "emergency_backup",
     "hash_equals",
 ];
