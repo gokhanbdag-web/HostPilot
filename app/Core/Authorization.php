@@ -24,7 +24,9 @@ final class Authorization
         $permission = self::permissionFor($path, strtoupper($method));
         if ($permission === null) return false;
         $role = (string)$user['role'];
-        if (in_array($role, ['super_admin', 'admin'], true) || $permission === 'security.mfa.manage') return true;
+        if (in_array($role, ['super_admin', 'admin'], true)) return true;
+        // MFA is self-service for privileged operators, never for customer accounts.
+        if ($permission === 'security.mfa.manage' && $role === 'staff') return true;
         if ($role !== 'staff' || $db === null) return false;
         try {
             $statement = $db->prepare('SELECT 1 FROM staff_permissions WHERE user_id = :user_id AND permission = :permission LIMIT 1');
