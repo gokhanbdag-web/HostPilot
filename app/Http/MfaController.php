@@ -34,16 +34,16 @@ final class MfaController
                 try {
                     $action = (string)($_POST['action'] ?? '');
                     if ($action === 'start') {
-                        if (Mfa::isEnabled($this->db, $userId)) throw new \RuntimeException('İki aşamalı doğrulama zaten etkin.');
+                        if (Mfa::isEnabled($this->db, $userId)) throw new \DomainException('İki aşamalı doğrulama zaten etkin.');
                         $this->assertCurrentPassword($userId, (string)($_POST['password'] ?? ''));
                         $_SESSION['hostpilot_mfa_pending_secret'] = Mfa::generateSecret();
                         $message = 'Kurulum anahtarı oluşturuldu. Authenticator uygulamanıza ekleyip doğrulama kodunu girin.';
                     } elseif ($action === 'enable') {
                         $secret = (string)($_SESSION['hostpilot_mfa_pending_secret'] ?? '');
-                        if ($secret === '') throw new \RuntimeException('Kurulum oturumu sona ermiş. Yeniden başlatın.');
+                        if ($secret === '') throw new \DomainException('Kurulum oturumu sona ermiş. Yeniden başlatın.');
                         $this->assertCurrentPassword($userId, (string)($_POST['password'] ?? ''));
                         $step = Mfa::matchingStep($secret, trim((string)($_POST['code'] ?? '')));
-                        if ($step === null) throw new \RuntimeException('Doğrulama kodu geçersiz veya süresi dolmuş.');
+                        if ($step === null) throw new \DomainException('Doğrulama kodu geçersiz veya süresi dolmuş.');
                         $codes = Mfa::generateRecoveryCodes();
                         Mfa::enable($this->db, $userId, $secret, $step, $codes, $this->applicationKey);
                         unset($_SESSION['hostpilot_mfa_pending_secret']);
@@ -51,10 +51,10 @@ final class MfaController
                         SecurityAudit::record($this->db, 'auth.mfa_enabled', $userId);
                         $message = 'İki aşamalı doğrulama etkinleştirildi. Kurtarma kodlarını güvenli bir yerde saklayın.';
                     } elseif ($action === 'rotate' || $action === 'disable') {
-                        if (!Mfa::isEnabled($this->db, $userId)) throw new \RuntimeException('İki aşamalı doğrulama etkin değil.');
+                        if (!Mfa::isEnabled($this->db, $userId)) throw new \DomainException('İki aşamalı doğrulama etkin değil.');
                         $this->assertCurrentPassword($userId, (string)($_POST['password'] ?? ''));
                         $method = Mfa::verifyCode($this->db, $userId, trim((string)($_POST['code'] ?? '')), $this->applicationKey);
-                        if ($method === null) throw new \RuntimeException('Doğrulama veya kurtarma kodu geçersiz ya da daha önce kullanılmış.');
+                        if ($method === null) throw new \DomainException('Doğrulama veya kurtarma kodu geçersiz ya da daha önce kullanılmış.');
                         if ($method === 'recovery') SecurityAudit::record($this->db, 'auth.mfa_recovery_used', $userId);
                         if ($action === 'rotate') {
                             $codes = Mfa::generateRecoveryCodes();
@@ -69,11 +69,11 @@ final class MfaController
                             $message = 'İki aşamalı doğrulama kapatıldı. Diğer oturumlar güvenlik amacıyla sonlandırıldı.';
                         }
                     } else {
-                        throw new \RuntimeException('Geçersiz işlem.');
+                        throw new \DomainException('Geçersiz işlem.');
                     }
                 } catch (Throwable $exception) {
-                    $error = $exception instanceof \RuntimeException ? $exception->getMessage() : 'İşlem tamamlanamadı. Lütfen tekrar deneyin.';
-                    if (!$exception instanceof \RuntimeException) error_log('[HostPilot] MFA settings failed: ' . $exception->getMessage());
+                    $error = $exception instanceof \DomainException ? $exception->getMessage() : 'İşlem tamamlanamadı. Lütfen tekrar deneyin.';
+                    if (!($exception instanceof \DomainException)) error_log('[HostPilot] MFA settings failed: ' . $exception->getMessage());
                 }
             }
         }
@@ -104,11 +104,11 @@ final class MfaController
 
     private function assertCurrentPassword(int $userId, string $password): void
     {
-        if ($password === '' || strlen($password) > 4096) throw new \RuntimeException('Mevcut parola doğrulanamadı.');
-        if (Auth::consumeMfaAttempt()) throw new \RuntimeException('Çok fazla güvenlik doğrulaması denendi. Bir süre sonra tekrar deneyin.');
+        if ($password === '' || strlen($password) > 4096) throw new \DomainException('Mevcut parola doğrulanamadı.');
+        if (Auth::consumeMfaAttempt()) throw new \DomainException('Çok fazla güvenlik doğrulaması denendi. Bir süre sonra tekrar deneyin.');
         $query = $this->db->prepare("SELECT password_hash FROM users WHERE id = :id AND status = 'active' AND role IN ('super_admin','admin','staff') LIMIT 1");
         $query->execute([':id' => $userId]);
         $hash = $query->fetchColumn();
-        if (!is_string($hash) || !password_verify($password, $hash)) throw new \RuntimeException('Mevcut parola hatalı.');
+        if (!is_string($hash) || !password_verify($password, $hash)) throw new \DomainException('Mevcut parola hatalı.');
     }
 }
