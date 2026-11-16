@@ -129,3 +129,14 @@ Reference: https://owasp.org/www-project-application-security-verification-stand
 - Password-reset requests are throttled to five per IP per 15-minute window, with file locking, hashed IP keys, and fail-closed behavior when protected storage is unavailable. The existing per-account resend cooldown and generic response remain.
 - Reset pages send Referrer-Policy: no-referrer and Cache-Control: no-store; reset tokens remain single-use, hashed at rest, and expire after 30 minutes.
 - Session revocation is version-based rather than enumerating PHP session files, so it works with ordinary shared hosting and does not require SSH or a custom session handler.
+
+
+## 15. Administrator and staff MFA (Stage 2)
+
+- Admin and staff sign-in can require RFC 6238 TOTP after password verification; password-only login is not completed when MFA is enabled.
+- TOTP secrets are encrypted with the installation application key using the existing AES-256-GCM secret vault. Only ciphertext is stored in the database.
+- TOTP verification accepts a one-step clock window and atomically records the accepted time-step to prevent replay.
+- Ten high-entropy recovery codes are generated at enrollment. Only SHA-256 hashes are stored; each code is consumed atomically once and cannot be reused.
+- Enrollment and disable/recovery-code rotation require the current password. Enrollment is not active until the authenticator code is verified.
+- Disabling MFA revokes other account sessions. MFA challenges expire after five minutes and are rate-limited.
+- Recovery codes are displayed only immediately after generation/rotation and cannot be retrieved later. Store them offline; rotating invalidates all prior codes.
