@@ -8,7 +8,7 @@ if(!is_string($source)||!is_string($routes))throw new RuntimeException('Customer
 $checks=[
     'invoice list joins only the latest active attempt owned by the same invoice'=>str_contains($source,'LEFT JOIN payment_transactions ap')&&str_contains($source,"pt.user_id=i.user_id AND pt.status IN ('pending','review')")&&str_contains($source,'SELECT MAX(pt.id)'),
     'invoice list exposes pending and review labels'=>str_contains($source,"'Ödeme bekliyor'")&&str_contains($source,"'İncelemede'"),
-    'invoice list hides a second pay action while a payment is active'=>str_contains($source,"&& !\$activePayment)"),
+    'invoice list hides a second pay action while a payment is active'=>str_contains($source,"&&!\$activePayment)"),
     'invoice detail queries active attempts scoped to invoice and customer'=>str_contains($source,"WHERE invoice_id=:id AND user_id=:uid AND status IN ('pending','review') ORDER BY id DESC LIMIT 1"),
     'invoice detail uses no-store caching for a fresh status view'=>str_contains($source,"header('Cache-Control: no-store, max-age=0')")&&str_contains($source,"header('Pragma: no-cache')"),
     'invoice detail shows a read-only refresh link without a provider polling action'=>str_contains($source,'Durumu yenile')&&str_contains($source,"'>Durumu yenile</a>"),
