@@ -14,6 +14,7 @@ $detail='https://api.iyzipay.com/payment/iyzipos/checkoutform/auth/ecom/detail';
 $assert(GatewayTransport::validateEndpoint($paytr)['host']==='www.paytr.com','PayTR token endpoint is accepted');
 $assert(GatewayTransport::validateEndpoint($iyzi)['host']==='sandbox-api.iyzipay.com','iyzico sandbox endpoint is accepted');
 $assert(GatewayTransport::validateEndpoint($detail,'/payment/iyzipos/checkoutform/auth/ecom/detail')['path']==='/payment/iyzipos/checkoutform/auth/ecom/detail','iyzico retrieve path must match signed path');
+$assert(GatewayTransport::validateEndpoint('https://sandbox-api.iyzipay.com/payment/iyzipos/checkoutform/auth/ecom/detail')['host']==='sandbox-api.iyzipay.com','iyzico sandbox retrieve endpoint is accepted');
 foreach([
  'http://www.paytr.com/odeme/api/get-token',
  'https://evil.example/odeme/api/get-token',
@@ -24,7 +25,6 @@ foreach([
  'https://www.paytr.com/odeme/api/get-token#fragment',
  'https://127.0.0.1/odeme/api/get-token',
  'https://api.iyzipay.com/payment/iyzipos/checkoutform/initialize/auth/ecom/extra',
- 'https://sandbox-api.iyzipay.com/payment/iyzipos/checkoutform/auth/ecom/detail'
 ] as $url)$assert($rejects(static fn()=>GatewayTransport::validateEndpoint($url)),'unsafe or unapproved provider URL is rejected: '.$url);
 $assert($rejects(static fn()=>GatewayTransport::validateEndpoint($detail,'/payment/iyzipos/checkoutform/initialize/auth/ecom')),'iyzico authorization path cannot differ from requested URL path');
 GatewayTransport::assertResponseSize(0);GatewayTransport::assertResponseSize(1048576);
