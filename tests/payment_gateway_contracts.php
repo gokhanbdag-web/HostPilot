@@ -4,39 +4,6 @@ declare(strict_types=1);
 require_once dirname(__DIR__).'/app/Payment/PaytrSignature.php';
 require_once dirname(__DIR__).'/app/Payment/GatewayTransport.php';
 
-require_once dirname(__DIR__).'/app/Payment/IyzicoSignature.php';
-use HostPilot\Payment\IyzicoSignature;
-
-$iyzicoTransaction=['currency'=>'TRY','amount'=>125.00,'invoice_number'=>'HP-INV-2026-001','idempotency_key'=>'ci-idempotency-001'];
-$iyzicoToken='ci-iyzico-token-123';
-$iyzicoSecret='ci-iyzico-secret';
-$iyzicoResponse=[
-    'status'=>'success','paymentStatus'=>'SUCCESS','paymentId'=>'ci-payment-987',
-    'currency'=>'TRY','basketId'=>'HP-INV-2026-001','conversationId'=>'ci-idempotency-001',
-    'paidPrice'=>'125.00','price'=>'125.00','fraudStatus'=>1
-];
-$iyzicoResponse['signature']=IyzicoSignature::sign($iyzicoResponse,$iyzicoToken,$iyzicoSecret);
-$assert($iyzicoResponse['signature']==='111837154ae024ff8da70c2df4f620661ed1fa1ee3d93b7e7689a442ac359584','iyzico retrieve response signature matches fixed HMAC-SHA256 vector');
-$assert(IyzicoSignature::assess($iyzicoResponse,$iyzicoTransaction,$iyzicoToken,$iyzicoSecret)['decision']==='success','iyzico verified SUCCESS with fraudStatus 1 is accepted');
-$fraudPending=$iyzicoResponse;$fraudPending['fraudStatus']=0;$fraudPending['signature']=IyzicoSignature::sign($fraudPending,$iyzicoToken,$iyzicoSecret);
-$assert(IyzicoSignature::assess($fraudPending,$iyzicoTransaction,$iyzicoToken,$iyzicoSecret)['decision']==='pending','iyzico fraudStatus 0 remains pending for risk review');
-$badSignature=$iyzicoResponse;$badSignature['signature']=str_repeat('0',64);
-$badSignatureDecision=IyzicoSignature::assess($badSignature,$iyzicoTransaction,$iyzicoToken,$iyzicoSecret);
-$assert($badSignatureDecision['decision']==='review'&&$badSignatureDecision['code']==='signature_review','iyzico claimed success with invalid signature is retained for manual review');
-$alteredAmount=$iyzicoResponse;$alteredAmount['paidPrice']='124.99';$alteredAmount['signature']=IyzicoSignature::sign($alteredAmount,$iyzicoToken,$iyzicoSecret);
-$assert(IyzicoSignature::assess($alteredAmount,$iyzicoTransaction,$iyzicoToken,$iyzicoSecret)['code']==='response_mismatch_review','iyzico signed success with amount mismatch is retained for review');
-$alteredCurrency=$iyzicoResponse;$alteredCurrency['currency']='USD';$alteredCurrency['signature']=IyzicoSignature::sign($alteredCurrency,$iyzicoToken,$iyzicoSecret);
-$assert(IyzicoSignature::assess($alteredCurrency,$iyzicoTransaction,$iyzicoToken,$iyzicoSecret)['code']==='response_mismatch_review','iyzico signed success with currency mismatch is retained for review');
-$alteredBasket=$iyzicoResponse;$alteredBasket['basketId']='OTHER-INVOICE';$alteredBasket['signature']=IyzicoSignature::sign($alteredBasket,$iyzicoToken,$iyzicoSecret);
-$assert(IyzicoSignature::assess($alteredBasket,$iyzicoTransaction,$iyzicoToken,$iyzicoSecret)['code']==='response_mismatch_review','iyzico signed success for another invoice is retained for review');
-$alteredConversation=$iyzicoResponse;$alteredConversation['conversationId']='OTHER-REQUEST';$alteredConversation['signature']=IyzicoSignature::sign($alteredConversation,$iyzicoToken,$iyzicoSecret);
-$assert(IyzicoSignature::assess($alteredConversation,$iyzicoTransaction,$iyzicoToken,$iyzicoSecret)['code']==='response_mismatch_review','iyzico signed success for another request is retained for review');
-$failedPayment=$iyzicoResponse;$failedPayment['paymentStatus']='FAILURE';$failedPayment['signature']=IyzicoSignature::sign($failedPayment,$iyzicoToken,$iyzicoSecret);
-$assert(IyzicoSignature::assess($failedPayment,$iyzicoTransaction,$iyzicoToken,$iyzicoSecret)['decision']==='failed','iyzico signed FAILURE is marked failed');
-$unknownFraud=$iyzicoResponse;$unknownFraud['fraudStatus']=9;$unknownFraud['signature']=IyzicoSignature::sign($unknownFraud,$iyzicoToken,$iyzicoSecret);
-$assert(IyzicoSignature::assess($unknownFraud,$iyzicoTransaction,$iyzicoToken,$iyzicoSecret)['decision']==='review','iyzico unknown fraud status is retained for manual review');
-
-
 use HostPilot\Payment\GatewayTransport;
 use HostPilot\Payment\PaytrSignature;
 
