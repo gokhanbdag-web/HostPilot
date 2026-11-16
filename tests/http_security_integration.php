@@ -82,6 +82,13 @@ foreach ($paymentSettings as $settingKey=>$settingValue) {
     $pdo->prepare("INSERT INTO settings(setting_group,setting_key,setting_value,is_secret,updated_at) VALUES('payment',:key,:value,:secret,UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value),is_secret=VALUES(is_secret)")
         ->execute([':key'=>$settingKey,':value'=>$settingValue,':secret'=>str_contains($settingKey,'key')||str_contains($settingKey,'salt')?1:0]);
 }
+$pdo->prepare("INSERT INTO orders(order_number,user_id,status,currency,subtotal,tax_total,total,created_at,updated_at) VALUES('HTTP-STALE-ORDER',:user,'pending','TRY',100,0,100,UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':user'=>$a]);
+$staleOrder = (int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,status,currency,subtotal,tax_total,total,amount_paid,issued_at,created_at,updated_at) VALUES('HTTP-STALE-INV',:order_id,:user,'unpaid','TRY',100,0,100,0,UTC_TIMESTAMP(),UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':order_id'=>$staleOrder,':user'=>$a]);
+$staleInvoice = (int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO payment_transactions(invoice_id,user_id,gateway,idempotency_key,status,currency,amount,request_reference,created_at,updated_at) VALUES(:invoice,:user,'paytr',:key,'pending','TRY',100,'HTTP-STALE-PENDING',UTC_TIMESTAMP()-INTERVAL 45 MINUTE,UTC_TIMESTAMP()-INTERVAL 45 MINUTE)")
+    ->execute([':invoice'=>$staleInvoice,':user'=>$a,':key'=>hash('sha256','http-stale-pending-payment')]);
+$stalePaymentId = (int)$pdo->lastInsertId();
 $domainSettings=[
     'enabled'=>'1',
     'environment'=>'sandbox',
@@ -192,6 +199,32 @@ try {
     $login('/admin/login','http-staff@example.test',$cookieStaff);
     $login('/admin/login','http-admin@example.test',$cookieAdmin);
     $login('/admin/login','http-super@example.test',$cookieSuper);
+
+    // A stale provider session is never auto-retried: it becomes review-only until an admin checks the provider.
+    $staleAdminPage=$request('/admin/payment-transactions',$cookieAdmin);
+    $staleRow=$pdo->prepare('SELECT status,response_code FROM payment_transactions WHERE id=:id');$staleRow->execute([':id'=>$stalePaymentId]);$staleState=$staleRow->fetch(PDO::FETCH_ASSOC);
+    $assert(($staleState['status']??'')==='review' && ($staleState['response_code']??'')==='stale_pending_review'
+        && str_contains($staleAdminPage['body'],'Tahsilat olmadığını doğrula ve kapat'),
+        'payment sessions older than 30 minutes move to admin review instead of being retried automatically');
+    $staleToken=$getToken($staleAdminPage['body']);
+    $r=$request('/admin/payment-transactions/reconcile',$cookieAdmin,'POST',[
+        '_token'=>$staleToken,'payment_transaction_id'=>$stalePaymentId,'decision'=>'no_capture_confirmed',
+        'provider_reference'=>'CI-NO-CAPTURE-CHECK','reason'=>'CI verified no capture and no active session in provider dashboard',
+        'password'=>$password,'confirm_external_action'=>'1'
+    ]);
+    $staleClosed=$pdo->prepare('SELECT status FROM payment_transactions WHERE id=:id');$staleClosed->execute([':id'=>$stalePaymentId]);
+    $staleRecord=$pdo->prepare('SELECT decision,provider_reference FROM payment_reconciliations WHERE payment_transaction_id=:id');$staleRecord->execute([':id'=>$stalePaymentId]);$staleRecordRow=$staleRecord->fetch(PDO::FETCH_ASSOC);
+    $assert(($staleClosed->fetchColumn()??'')==='cancelled' && ($staleRecordRow['decision']??'')==='no_capture_confirmed'
+        && ($staleRecordRow['provider_reference']??'')==='CI-NO-CAPTURE-CHECK',
+        'admin no-capture confirmation closes stale payment attempt and stores reconciliation evidence');
+    $lateOid='HTTP-STALE-PENDING';$lateStatus='success';$lateAmount='10000';
+    $lateHash=base64_encode(hash_hmac('sha256',$lateOid.'ci-merchant-salt'.$lateStatus.$lateAmount,'ci-merchant-key',true));
+    $r=$request('/payment/paytr/callback',$cookieCron,'POST',['merchant_oid'=>$lateOid,'status'=>$lateStatus,'total_amount'=>$lateAmount,'hash'=>$lateHash]);
+    $staleInvoiceState=$pdo->prepare('SELECT amount_paid,status FROM invoices WHERE id=:id');$staleInvoiceState->execute([':id'=>$staleInvoice]);$staleInvoiceRow=$staleInvoiceState->fetch(PDO::FETCH_ASSOC);
+    $staleFinal=$pdo->prepare('SELECT status FROM payment_transactions WHERE id=:id');$staleFinal->execute([':id'=>$stalePaymentId]);
+    $assert($r['status']===200 && $r['body']==='OK' && ($staleFinal->fetchColumn()??'')==='cancelled'
+        && (float)($staleInvoiceRow['amount_paid']??-1)===0.0 && ($staleInvoiceRow['status']??'')==='unpaid',
+        'late verified provider callback cannot settle an attempt explicitly closed after no-capture verification');
 
     $r=$request('/admin/payment-transactions/reconcile',$cookieA,'POST',[
         'payment_transaction_id'=>$reviewPaymentId,'decision'=>'refund_confirmed','provider_reference'=>'CI-CUSTOMER-FORBIDDEN',
