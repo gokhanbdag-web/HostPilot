@@ -129,7 +129,7 @@ require_once dirname(__DIR__) . '/app/Core/AdminProfileMigration.php';
 \HostPilot\Core\AdminProfileMigration::migrate($legacy);
 
 $schemaSignature = static function (PDO $connection): array {
-    $tables = $connection->query("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE' AND TABLE_NAME NOT IN ('users','migrations','staff_permissions','staff_departments','email_verification_tokens','security_audit_logs') ORDER BY TABLE_NAME")->fetchAll(PDO::FETCH_COLUMN);
+    $tables = $connection->query("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE' AND TABLE_NAME NOT IN ('users','migrations','staff_permissions','staff_departments','email_verification_tokens','security_audit_logs','admin_mfa','admin_mfa_recovery_codes') ORDER BY TABLE_NAME")->fetchAll(PDO::FETCH_COLUMN);
     $signature = [];
     foreach ($tables as $table) {
         $columns = $connection->prepare("SELECT COLUMN_NAME,COLUMN_TYPE,IS_NULLABLE,COLUMN_DEFAULT,EXTRA,COLUMN_KEY,ORDINAL_POSITION FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=:table_name ORDER BY ORDINAL_POSITION");
@@ -183,7 +183,7 @@ if ($legacyPending !== ['20261115_0002_staff_permissions_departments', '20261115
     throw new RuntimeException('SQL runner did not isolate the new staff permission migration on a legacy-upgraded database: ' . json_encode($legacyPending));
 }
 $legacyApplied = MigrationRunner::runPending($legacy, $directory, true);
-if ($legacyApplied !== ['20261115_0002_staff_permissions_departments', '20261115_0003_customer_email_verification', '20261115_0004_user_auth_version', '20261115_0005_security_audit_logs']) {
+if ($legacyApplied !== ['20261115_0002_staff_permissions_departments', '20261115_0003_customer_email_verification', '20261115_0004_user_auth_version', '20261115_0005_security_audit_logs', '20261116_0001_admin_mfa']) {
     throw new RuntimeException('SQL runner did not apply only the pending Stage 2 security migrations to a legacy-upgraded database.');
 }
 if (MigrationRunner::pending($legacy, $directory) !== []) {
