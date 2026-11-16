@@ -200,12 +200,14 @@ final class DatabaseBackup
     private static function isValidGzip(string $path):bool
     {
         $handle=@gzopen($path,'rb');if($handle===false)return false;
-        $valid=true;
+        $valid=true;$expandedBytes=0;
         try{
             while(!gzeof($handle)){
                 $chunk=gzread($handle,65536);
                 if($chunk===false){$valid=false;break;}
                 if($chunk==='')break;
+                $expandedBytes+=strlen($chunk);
+                if($expandedBytes>self::MAX_RESTORE_BYTES){$valid=false;break;}
             }
         }catch(Throwable){$valid=false;}
         if(!@gzclose($handle))$valid=false;
