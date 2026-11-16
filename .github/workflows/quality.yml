@@ -43,6 +43,8 @@ jobs:
         run: php tests/payment_idempotency_policy.php
       - name: Test payment gateway protocol contracts
         run: php tests/payment_gateway_contracts.php
+      - name: Test payment gateway transport security
+        run: php tests/payment_gateway_transport_security.php
       - name: Test PayTR initialization request contract
         run: php tests/paytr_initialization_contract.php
       - name: Test iyzico retrieve response verification policy
