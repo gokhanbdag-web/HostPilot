@@ -346,7 +346,7 @@ final class PaymentController
         try{
             $lock=$this->db->prepare('SELECT * FROM payment_transactions WHERE id=:id FOR UPDATE');$lock->execute([':id'=>$tx['id']]);$current=$lock->fetch();
             if(!$current||$current['status']==='success'){$this->db->commit();return;}
-            if($reconciliation!==null&&$current['status']!=='review')throw new \\RuntimeException('Only a reviewed payment can be manually reconciled.');
+            if($reconciliation!==null&&$current['status']!=='review')throw new \RuntimeException('Only a reviewed payment can be manually reconciled.');
             $inv=$this->db->prepare('SELECT * FROM invoices WHERE id=:id FOR UPDATE');$inv->execute([':id'=>$tx['invoice_id']]);$invoice=$inv->fetch();
             $remaining=$invoice?round((float)$invoice['total']-(float)$invoice['amount_paid'],2):0.0;
             if(!$invoice||round((float)$tx['amount'],2)>$remaining+0.005){
