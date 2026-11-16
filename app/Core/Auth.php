@@ -80,7 +80,7 @@ final class Auth
         ];
         $_SESSION['hostpilot_auth_created_at'] = time();
         $_SESSION['hostpilot_auth_last_activity'] = time();
-        unset($_SESSION['hostpilot_csrf'], $_SESSION['hostpilot_mfa_challenge'], $_SESSION['hostpilot_mfa_pending_secret']);
+        unset($_SESSION['hostpilot_csrf'], $_SESSION['hostpilot_mfa_challenge'], $_SESSION['hostpilot_mfa_pending_secret'], $_SESSION['hostpilot_customer_mfa_challenge'], $_SESSION['hostpilot_customer_mfa_pending']);
         self::clearRateLimitBucket();
         $update = $db->prepare('UPDATE users SET last_login_at = UTC_TIMESTAMP() WHERE id = :id');
         $update->execute([':id' => (int)$user['id']]);
@@ -224,7 +224,7 @@ final class Auth
 
     private static function expireSession(): void
     {
-        unset($_SESSION['hostpilot_user'], $_SESSION['hostpilot_auth_created_at'], $_SESSION['hostpilot_auth_last_activity'], $_SESSION['hostpilot_csrf']);
+        unset($_SESSION['hostpilot_user'], $_SESSION['hostpilot_auth_created_at'], $_SESSION['hostpilot_auth_last_activity'], $_SESSION['hostpilot_csrf'], $_SESSION['hostpilot_mfa_challenge'], $_SESSION['hostpilot_mfa_pending_secret'], $_SESSION['hostpilot_customer_mfa_challenge'], $_SESSION['hostpilot_customer_mfa_pending']);
         if (session_status() === PHP_SESSION_ACTIVE) session_regenerate_id(true);
     }
 
