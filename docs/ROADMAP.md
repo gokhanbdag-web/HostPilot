@@ -144,3 +144,5 @@ A feature is complete only when UI, data model, permissions, validation, failure
 
 
 - [x] Stage 2: version-based session revocation after password reset and administrator-triggered sign-out of other sessions; password-reset IP throttling (implementation in review; migration requires authenticated admin application).
+
+- [x] Stage 2: administrator/staff TOTP MFA with encrypted secrets, replay protection, one-time hashed recovery codes, password re-authentication, audit events, and shared-host-compatible setup (PR #10 review and controlled live migration remain pending).
