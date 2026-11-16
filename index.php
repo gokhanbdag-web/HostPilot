@@ -94,6 +94,7 @@ if (\HostPilot\Core\Authorization::isAdminPath($requestPath)
 
 if ($requestPath === '/admin/security/sessions' && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\SessionSecurityController($pdo, $basePath))->index(); exit; }
 if ($requestPath === '/admin/security/mfa' && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\MfaController($pdo, $basePath, (string)($config['app']['key'] ?? '')))->index(); exit; }
+if ($requestPath === '/admin/security/attachments' && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\TicketAttachmentController($pdo,$basePath,HOSTPILOT_STORAGE))->adminScannerSettings(); exit; }
 
 if ($requestPath === '/admin/database-upgrade' && in_array($method, ['GET', 'POST'], true)) {
     (new \HostPilot\Http\DatabaseUpgradeController(

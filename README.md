@@ -88,3 +88,7 @@ Staff permissions are generated from the central authorization registry and limi
 ### Financial, server and domain audit events
 
 The security audit log records payment gateway setting changes, payment settlement/failure/review outcomes, server creation and connection tests, server-product mappings, hosting provisioning/lifecycle/termination actions, registrar setting changes, domain renewal/nameserver requests, manual registrar reconciliations, expiry-sync queue actions, and domain CSV exports. These entries retain only allowlisted event names, actor IDs where available, resource IDs and safe action labels; they do not store API keys, passwords, merchant secrets, customer emails, raw provider payloads, or domain contact data.
+
+### Optional ClamAV scanning for support attachments
+
+Administrators can configure the local ClamAV daemon from Admin → Ek Dosya Güvenliği. Scanning is disabled by default for shared-hosting compatibility. When enabled, PDF/JPEG/PNG/TXT support attachments are streamed to a local ClamAV daemon over a Unix socket or localhost TCP endpoint before they are stored. Infected files and files that cannot be scanned are rejected (fail-closed). The endpoint is restricted to local sockets or loopback TCP; remote hosts are not accepted. Scan outcomes and configuration changes are recorded without storing signatures, credentials, file contents, or personal data. Install and operate ClamAV separately on a server that supports it; this feature does not install the daemon.

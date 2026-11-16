@@ -59,6 +59,8 @@ jobs:
         run: php tests/security_output.php
       - name: Test ticket attachment policy
         run: php tests/ticket_attachments.php
+      - name: Test ClamAV scanner policy
+        run: php tests/clamav_scanner.php
       - name: Prevent Composer dependency
         run: |
           if [ -f composer.json ] || [ -f composer.lock ]; then echo "HostPilot must remain installable without Composer."; exit 1; fi
