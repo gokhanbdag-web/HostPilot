@@ -58,6 +58,9 @@ $orderB = (int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO services(user_id,product_id,order_id,domain,status,billing_cycle,amount,created_at,updated_at) VALUES(:user,:product,:order_id,:domain,'active','monthly',100,UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':user'=>$b, ':product'=>$product, ':order_id'=>$orderB, ':domain'=>'private-customer-b.example']);
 $pdo->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,status,currency,subtotal,tax_total,total,amount_paid,issued_at,created_at,updated_at) VALUES('HTTP-B-INV',:order_id,:user,'unpaid','TRY',100,0,100,0,UTC_TIMESTAMP(),UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':order_id'=>$orderB, ':user'=>$b]);
 $invoiceB = (int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO payment_transactions(invoice_id,user_id,gateway,idempotency_key,status,currency,amount,request_reference,response_code,safe_message,created_at,updated_at) VALUES(:invoice,:user,'paytr',:key,'review','TRY',100,'HTTP-B-REVIEW','overpayment_review','Provider-confirmed duplicate capture awaiting review',UTC_TIMESTAMP(),UTC_TIMESTAMP())")
+    ->execute([':invoice'=>$invoiceB,':user'=>$b,':key'=>hash('sha256','http-b-review-payment')]);
+$reviewPaymentId=(int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,status,currency,subtotal,tax_total,total,amount_paid,issued_at,created_at,updated_at) VALUES('HTTP-A-INV',:order_id,:user,'unpaid','TRY',100,0,100,0,UTC_TIMESTAMP(),UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':order_id'=>$orderA, ':user'=>$a]);
 $invoiceA = (int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO orders(order_number,user_id,status,currency,subtotal,tax_total,total,created_at,updated_at) VALUES('HTTP-C-ORDER',:user,'paid','TRY',50,0,50,UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':user'=>$c]);
@@ -189,6 +192,36 @@ try {
     $login('/admin/login','http-staff@example.test',$cookieStaff);
     $login('/admin/login','http-admin@example.test',$cookieAdmin);
     $login('/admin/login','http-super@example.test',$cookieSuper);
+
+    $r=$request('/admin/payment-transactions/reconcile',$cookieA,'POST',[
+        'payment_transaction_id'=>$reviewPaymentId,'decision'=>'refund_confirmed','provider_reference'=>'CI-CUSTOMER-FORBIDDEN',
+        'reason'=>'customer must not reconcile','password'=>$password,'confirm_external_action'=>'1'
+    ]);
+    $assert($r['status']===403,'customer cannot reconcile reviewed payment over HTTP');
+    $r=$request('/admin/payment-transactions/reconcile',$cookieStaff,'POST',[
+        'payment_transaction_id'=>$reviewPaymentId,'decision'=>'refund_confirmed','provider_reference'=>'CI-STAFF-FORBIDDEN',
+        'reason'=>'support staff must not reconcile','password'=>$password,'confirm_external_action'=>'1'
+    ]);
+    $assert($r['status']===403,'support staff cannot reconcile reviewed payment over HTTP');
+    $reviewPage=$request('/admin/payment-transactions',$cookieAdmin);
+    $reviewToken=$getToken($reviewPage['body']);
+    $r=$request('/admin/payment-transactions/reconcile',$cookieAdmin,'POST',[
+        '_token'=>$reviewToken,'payment_transaction_id'=>$reviewPaymentId,'decision'=>'refund_confirmed',
+        'provider_reference'=>'CI-PROVIDER-REFUND-100','reason'=>'CI verified full refund in provider dashboard',
+        'password'=>$password,'confirm_external_action'=>'1'
+    ]);
+    $reviewStatus=$pdo->prepare('SELECT status FROM payment_transactions WHERE id=:id');$reviewStatus->execute([':id'=>$reviewPaymentId]);
+    $reviewRefund=$pdo->prepare("SELECT decision,provider_reference,amount FROM payment_reconciliations WHERE payment_transaction_id=:id");$reviewRefund->execute([':id'=>$reviewPaymentId]);$reviewRefundRow=$reviewRefund->fetch(PDO::FETCH_ASSOC);
+    $reviewInvoice=$pdo->prepare('SELECT amount_paid,status FROM invoices WHERE id=:id');$reviewInvoice->execute([':id'=>$invoiceB]);$reviewInvoiceRow=$reviewInvoice->fetch(PDO::FETCH_ASSOC);
+    $refundAudit=$pdo->prepare("SELECT metadata_json FROM security_audit_logs WHERE user_id=:actor AND event_key='payment.manual_refund_confirmed' ORDER BY id DESC LIMIT 1");$refundAudit->execute([':actor'=>$admin]);$refundAuditMetadata=json_decode((string)$refundAudit->fetchColumn(),true);
+    $assert(($reviewStatus->fetchColumn()??'')==='refunded'
+        && ($reviewRefundRow['decision']??'')==='refund_confirmed'
+        && ($reviewRefundRow['provider_reference']??'')==='CI-PROVIDER-REFUND-100'
+        && (float)($reviewRefundRow['amount']??0)===100.0
+        && (float)($reviewInvoiceRow['amount_paid']??-1)===0.0
+        && ($reviewInvoiceRow['status']??'')==='unpaid'
+        && ($refundAuditMetadata['action']??'')==='refund_confirmed',
+        'admin can record a verified external refund for an uncredited review capture without changing invoice balance');
 
     $r=$request('/admin/database-restore',$cookieAdmin);
     $assert($r['status']===403,'ordinary admin cannot access destructive database restore screen');
