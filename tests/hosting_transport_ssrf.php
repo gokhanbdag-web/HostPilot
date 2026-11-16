@@ -36,7 +36,7 @@ $assert(HostingTransport::validateBaseUrl('https://panel.example.com:8443/api/')
 $assert($rejects(static fn()=>$resolve->invoke(null, 'localhost')), 'localhost DNS resolution is rejected');
 $source = file_get_contents(__DIR__ . '/../app/Hosting/HostingTransport.php');
 $assert(is_string($source) && str_contains($source, 'CURLOPT_RESOLVE'), 'validated DNS address is pinned for cURL');
-$assert(str_contains($source, 'CURLOPT_PROXY=>\'\''), 'environment outbound proxies are disabled');
+$assert(str_contains($source, "CURLOPT_PROXY=>''"), 'environment outbound proxies are disabled');
 $assert(str_contains($source, 'CURLOPT_FOLLOWLOCATION=>false'), 'HTTP redirects remain disabled');
 $assert(str_contains($source, 'DNS_AAAA'), 'both IPv4 and IPv6 DNS answers are checked');
 echo "HostPilot hosting transport SSRF tests passed.\n";
