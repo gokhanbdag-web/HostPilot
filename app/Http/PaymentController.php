@@ -60,18 +60,108 @@ final class PaymentController
     public function adminTransactions():void
     {
         if(!$this->isStaff()){http_response_code(403);echo 'Yetkisiz erişim.';return;}
-        $rows=$this->db->query("SELECT pt.id,pt.gateway,pt.gateway_transaction_id,pt.status,pt.currency,pt.amount,pt.response_code,pt.safe_message,pt.created_at,i.invoice_number,u.name,u.email
+        $rows=$this->db->query("SELECT pt.id,pt.invoice_id,pt.gateway,pt.gateway_transaction_id,pt.status,pt.currency,pt.amount,pt.response_code,pt.safe_message,pt.created_at,i.invoice_number,u.name,u.email
             FROM payment_transactions pt JOIN invoices i ON i.id=pt.invoice_id JOIN users u ON u.id=pt.user_id
             ORDER BY pt.created_at DESC LIMIT 500")->fetchAll();
+        $notice=(string)($_SESSION['hostpilot_payment_reconcile_notice']??'');$error=(string)($_SESSION['hostpilot_payment_reconcile_error']??'');
+        unset($_SESSION['hostpilot_payment_reconcile_notice'],$_SESSION['hostpilot_payment_reconcile_error']);
+        $canReconcile=in_array((Auth::user()['role']??''),['admin','super_admin'],true);
+        $csrf=Auth::csrfToken();
         $this->pageStart('Ödeme işlemleri');
-        echo '<div class="admin"><aside><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a href="'.$this->url('/admin').'">← Kontrol merkezi</a><a href="'.$this->url('/admin/payments').'">Ödeme ayarları</a><a class="active" href="'.$this->url('/admin/payment-transactions').'">Ödeme işlemleri</a><a href="'.$this->url('/admin/invoices').'">Faturalar</a></aside><main><header><small>FİNANS / İŞLEM KAYITLARI</small><h1>Ödeme işlemleri</h1><p>Sağlayıcı dönüşleri, işlem referansları ve tahsilat durumları. En son 500 işlem gösterilir.</p></header><section class="box"><div style="overflow-x:auto"><table><thead><tr><th>Tarih</th><th>Fatura / Müşteri</th><th>Sağlayıcı</th><th>Tutar</th><th>Durum</th><th>Referans</th></tr></thead><tbody>';
+        echo '<div class="admin"><aside><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a href="'.$this->url('/admin').'">← Kontrol merkezi</a><a href="'.$this->url('/admin/payments').'">Ödeme ayarları</a><a class="active" href="'.$this->url('/admin/payment-transactions').'">Ödeme işlemleri</a><a href="'.$this->url('/admin/invoices').'">Faturalar</a></aside><main><header><small>FİNANS / İŞLEM KAYITLARI</small><h1>Ödeme işlemleri</h1><p>Sağlayıcı dönüşleri, işlem referansları ve tahsilat durumları. En son 500 işlem gösterilir.</p></header>';
+        if($notice!=='')echo '<div class="notice">'.$this->e($notice).'</div>';
+        if($error!=='')echo '<div class="alert">'.$this->e($error).'</div>';
+        echo '<section class="box"><div style="overflow-x:auto"><table><thead><tr><th>Tarih</th><th>Fatura / Müşteri</th><th>Sağlayıcı</th><th>Tutar</th><th>Durum</th><th>Referans</th></tr></thead><tbody>';
         if(!$rows)echo '<tr><td colspan="6">Henüz ödeme işlemi bulunmuyor.</td></tr>';
-        foreach($rows as $v)echo '<tr><td>'.date('d.m.Y H:i',strtotime($v['created_at'])).'</td><td>#'.$this->e($v['invoice_number']).'<small>'.$this->e($v['name']).' · '.$this->e($v['email']).'</small></td><td>'.$this->e(strtoupper($v['gateway'])).'</td><td>'.number_format((float)$v['amount'],2,',','.').' '.$this->e($v['currency']).'</td><td>'.$this->e($this->transactionStatus($v['status'])).'<small>'.$this->e((string)$v['response_code']).'</small></td><td>'.$this->e((string)($v['gateway_transaction_id']??'—')).'<small>'.$this->e((string)($v['safe_message']??'')).'</small></td></tr>';
+        foreach($rows as $v){
+            echo '<tr><td>'.date('d.m.Y H:i',strtotime($v['created_at'])).'</td><td>#'.$this->e($v['invoice_number']).'<small>'.$this->e($v['name']).' · '.$this->e($v['email']).'</small></td><td>'.$this->e(strtoupper($v['gateway'])).'</td><td>'.number_format((float)$v['amount'],2,',','.').' '.$this->e($v['currency']).'</td><td>'.$this->e($this->transactionStatus($v['status'])).'<small>'.$this->e((string)$v['response_code']).'</small></td><td>'.$this->e((string)($v['gateway_transaction_id']??'—')).'<small>'.$this->e((string)($v['safe_message']??'')).'</small></td></tr>';
+            if($canReconcile&&$v['status']==='review'){
+                echo '<tr><td colspan="6"><form method="post" action="'.$this->url('/admin/payment-transactions/reconcile').'" style="display:grid;gap:9px;padding:12px;background:#f6f8fc;border-radius:8px">';
+                echo '<input type="hidden" name="_token" value="'.$this->e($csrf).'"><input type="hidden" name="payment_transaction_id" value="'.(int)$v['id'].'">';
+                echo '<b>Manuel mutabakat · #'.(int)$v['id'].'</b><p>Sağlayıcı panelinden doğrulama yapmadan işlem seçmeyin. Bu ekran sağlayıcıya otomatik iade çağrısı göndermez.</p>';
+                echo '<label>Sağlayıcı işlem / iade referansı<input name="provider_reference" required maxlength="190" autocomplete="off"></label>';
+                echo '<label>İşlem açıklaması<input name="reason" required maxlength="500"></label>';
+                echo '<label>Super admin / admin parolası<input type="password" name="password" required maxlength="4096" autocomplete="current-password"></label>';
+                echo '<label><input type="checkbox" name="confirm_external_action" value="1" required> Sağlayıcı panelinde ilgili tahsilat / tam iade işlemini doğruladım.</label>';
+                echo '<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="submit" name="decision" value="payment_confirmed">Tahsilatı faturaya işle</button><button type="submit" name="decision" value="refund_confirmed">Tam iadenin yapıldığını kaydet</button></div></form></td></tr>';
+            }
+        }
         echo '</tbody></table></div></section></main></div>';$this->pageEnd();
     }
 
+    public function adminReconcile():void
+    {
+        $actor=Auth::user();
+        if(!$actor||!in_array(($actor['role']??''),['admin','super_admin'],true)){http_response_code(403);echo 'Bu işlem yalnızca admin tarafından yapılabilir.';return;}
+        if(($_SERVER['REQUEST_METHOD']??'GET')!=='POST'){$this->redirect('/admin/payment-transactions');}
+        if(!Auth::verifyCsrf($_POST['_token']??null)){$this->flashReconcileError('Güvenlik doğrulaması başarısız.');$this->redirect('/admin/payment-transactions');}
+        $id=(int)($_POST['payment_transaction_id']??0);
+        $decision=(string)($_POST['decision']??'');
+        $reference=trim((string)($_POST['provider_reference']??''));
+        $reason=trim((string)($_POST['reason']??''));
+        if($id<1||!in_array($decision,['payment_confirmed','refund_confirmed'],true)||$reference===''||strlen($reference)>190||$reason===''||strlen($reason)>500||(string)($_POST['confirm_external_action']??'')!=='1'){
+            $this->flashReconcileError('Mutabakat alanları eksik veya geçersiz.');$this->redirect('/admin/payment-transactions');
+        }
+        $verified=Auth::verifyCredentials($this->db,(string)($actor['email']??''),(string)($_POST['password']??''));
+        if(!is_array($verified)||(int)($verified['id']??0)!==(int)$actor['id']||!in_array(($verified['role']??''),['admin','super_admin'],true)){
+            $this->flashReconcileError('Yönetici parolası doğrulanamadı.');$this->redirect('/admin/payment-transactions');
+        }
+        try{
+            $q=$this->db->prepare('SELECT pt.*,i.total AS invoice_total,i.amount_paid AS invoice_amount_paid,i.currency AS invoice_currency,i.invoice_number FROM payment_transactions pt JOIN invoices i ON i.id=pt.invoice_id WHERE pt.id=:id LIMIT 1');
+            $q->execute([':id'=>$id]);$tx=$q->fetch();
+            if(!$tx||$tx['status']!=='review')throw new \RuntimeException('Yalnızca manuel incelemede bekleyen işlemler uzlaştırılabilir.');
+            if($decision==='payment_confirmed'){
+                $remaining=round((float)$tx['invoice_total']-(float)$tx['invoice_amount_paid'],2);
+                if((float)$tx['amount']>$remaining+0.005)throw new \RuntimeException('İşlem tutarı kalan fatura borcunu aşıyor. Bu tahsilat faturaya işlenemez; sağlayıcıdan iade sürecini tamamlayın.');
+                $this->settle($tx,'success',$reference,'Admin tarafından sağlayıcı panelinde doğrulandı',[
+                    'admin_user_id'=>(int)$actor['id'],'decision'=>'payment_confirmed','provider_reference'=>$reference,'reason'=>$reason
+                ]);
+                $check=$this->db->prepare('SELECT status FROM payment_transactions WHERE id=:id');$check->execute([':id'=>$id]);
+                if($check->fetchColumn()!=='success')throw new \RuntimeException('Tahsilat faturaya işlenemedi; işlem incelemede bırakıldı.');
+                SecurityAudit::record($this->db,'payment.transaction_reconciled',(int)$actor['id'],['resource_id'=>$id,'action'=>'payment_confirmed']);
+                $this->logPaymentReconciliation('PAYMENT_CONFIRMED',$id,(int)$actor['id'],$reference);
+                $_SESSION['hostpilot_payment_reconcile_notice']='Sağlayıcı tahsilatı doğrulandı ve fatura bakiyesine işlendi.';
+            }else{
+                $this->db->beginTransaction();
+                $lock=$this->db->prepare('SELECT * FROM payment_transactions WHERE id=:id FOR UPDATE');$lock->execute([':id'=>$id]);$current=$lock->fetch();
+                if(!$current||$current['status']!=='review')throw new \RuntimeException('İşlem başka bir oturum tarafından güncellenmiş.');
+                $exists=$this->db->prepare("SELECT 1 FROM payment_reconciliations WHERE payment_transaction_id=:id AND decision='refund_confirmed' LIMIT 1");$exists->execute([':id'=>$id]);
+                if($exists->fetchColumn())throw new \RuntimeException('Bu işlem için tam iade zaten kaydedilmiş.');
+                $insert=$this->db->prepare("INSERT INTO payment_reconciliations(payment_transaction_id,admin_user_id,decision,provider_reference,amount,currency,reason,created_at) VALUES(:tx,:admin,'refund_confirmed',:reference,:amount,:currency,:reason,:created)");
+                $insert->execute([':tx'=>$id,':admin'=>$actor['id'],':reference'=>$reference,':amount'=>$current['amount'],':currency'=>$current['currency'],':reason'=>$reason,':created'=>gmdate('Y-m-d H:i:s')]);
+                $update=$this->db->prepare("UPDATE payment_transactions SET status='refunded',response_code='manual_refund_confirmed',safe_message='Dış ödeme sağlayıcısında tam iade admin tarafından doğrulandı.',updated_at=:updated WHERE id=:id AND status='review'");
+                $update->execute([':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$id]);
+                if($update->rowCount()!==1)throw new \RuntimeException('İşlem durumu güncellenemedi.');
+                $this->db->commit();
+                SecurityAudit::record($this->db,'payment.manual_refund_confirmed',(int)$actor['id'],['resource_id'=>$id,'action'=>'refund_confirmed']);
+                $this->logPaymentReconciliation('REFUND_CONFIRMED',$id,(int)$actor['id'],$reference);
+                $_SESSION['hostpilot_payment_reconcile_notice']='Sağlayıcı panelinde tamamlanan tam iade kaydedildi. Fatura bakiyesi değiştirilmedi; bu işlem daha önce faturaya işlenmemiş bir tahsilat incelemesiydi.';
+            }
+        }catch(Throwable $exception){
+            if($this->db->inTransaction())$this->db->rollBack();
+            error_log('[HostPilot] Payment reconciliation: '.$exception->getMessage());
+            $this->flashReconcileError($exception->getMessage());
+        }
+        $this->redirect('/admin/payment-transactions');
+    }
+
+    private function flashReconcileError(string $message):void
+    {
+        $_SESSION['hostpilot_payment_reconcile_error']=$message;
+    }
+
+    private function logPaymentReconciliation(string $event,int $transactionId,int $adminId,string $reference):void
+    {
+        $directory=HOSTPILOT_STORAGE.DIRECTORY_SEPARATOR.'logs';
+        if(!is_dir($directory)&&!mkdir($directory,0750,true)&&!is_dir($directory))return;
+        $safeReference=preg_replace('/[^A-Za-z0-9_.:-]/','',(string)$reference)??'';
+        $line='['.gmdate('Y-m-d H:i:s').' UTC] '.$event.' transaction='.$transactionId.' admin='.$adminId.' provider_reference='.$safeReference.PHP_EOL;
+        @file_put_contents($directory.DIRECTORY_SEPARATOR.'payment-reconciliation.log',$line,FILE_APPEND|LOCK_EX);
+        @chmod($directory.DIRECTORY_SEPARATOR.'payment-reconciliation.log',0640);
+    }
+
     private function transactionStatus(string $status):string
-    {return ['pending'=>'Bekliyor','success'=>'Başarılı','failed'=>'Başarısız','review'=>'İncelemede','cancelled'=>'İptal'][strtolower($status)]??$status;}
+    {return ['pending'=>'Bekliyor','success'=>'Başarılı','failed'=>'Başarısız','review'=>'İncelemede','refunded'=>'İade edildi','cancelled'=>'İptal'][strtolower($status)]??$status;}
 
     public function payInvoice(int $invoiceId):void
     {
@@ -249,13 +339,14 @@ final class PaymentController
     public function returnPage():void
     {$this->redirect('/client/invoices');}
 
-    private function settle(array $tx,string $status,string $gatewayId,string $message):void
+    private function settle(array $tx,string $status,string $gatewayId,string $message,?array $reconciliation=null):void
     {
         $packageNotice=null;
         $this->db->beginTransaction();
         try{
             $lock=$this->db->prepare('SELECT * FROM payment_transactions WHERE id=:id FOR UPDATE');$lock->execute([':id'=>$tx['id']]);$current=$lock->fetch();
             if(!$current||$current['status']==='success'){$this->db->commit();return;}
+            if($reconciliation!==null&&$current['status']!=='review')throw new \\RuntimeException('Only a reviewed payment can be manually reconciled.');
             $inv=$this->db->prepare('SELECT * FROM invoices WHERE id=:id FOR UPDATE');$inv->execute([':id'=>$tx['invoice_id']]);$invoice=$inv->fetch();
             $remaining=$invoice?round((float)$invoice['total']-(float)$invoice['amount_paid'],2):0.0;
             if(!$invoice||round((float)$tx['amount'],2)>$remaining+0.005){
@@ -272,6 +363,10 @@ final class PaymentController
             $u->execute([':paid'=>$newPaid,':status'=>$newStatus,':paid_at'=>$newStatus==='paid'?$now:null,':updated'=>$now,':id'=>$invoice['id']]);
             $p=$this->db->prepare("UPDATE payment_transactions SET status='success',gateway_transaction_id=:gateway_id,response_code='success',safe_message=:message,updated_at=:updated WHERE id=:id");
             $p->execute([':gateway_id'=>$gatewayId,':message'=>$message,':updated'=>$now,':id'=>$tx['id']]);
+            if($reconciliation!==null){
+                $record=$this->db->prepare("INSERT INTO payment_reconciliations(payment_transaction_id,admin_user_id,decision,provider_reference,amount,currency,reason,created_at) VALUES(:tx,:admin,:decision,:reference,:amount,:currency,:reason,:created)");
+                $record->execute([':tx'=>$tx['id'],':admin'=>$reconciliation['admin_user_id'],':decision'=>$reconciliation['decision'],':reference'=>$reconciliation['provider_reference'],':amount'=>$tx['amount'],':currency'=>$tx['currency'],':reason'=>$reconciliation['reason'],':created'=>$now]);
+            }
             if($newStatus==='paid'){
                 $customerQuery=$this->db->prepare('SELECT name,email FROM users WHERE id=:id LIMIT 1');$customerQuery->execute([':id'=>$invoice['user_id']]);$invoiceCustomer=$customerQuery->fetch();
                 if($invoiceCustomer)(new EmailService($this->db,$this->applicationKey))->queueInvoiceNotice((string)$invoiceCustomer['email'],(string)$invoiceCustomer['name'],(string)$invoice['invoice_number'],(float)$invoice['total'],(string)$invoice['currency'],'','paid',(int)$invoice['id']);
