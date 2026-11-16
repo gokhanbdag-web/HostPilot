@@ -14,7 +14,7 @@ $checks=[
     'invoice detail shows a read-only refresh link without a provider polling action'=>str_contains($source,'Durumu yenile')&&str_contains($source,'">Durumu yenile</a>'),
     'invoice detail suppresses checkout while an active attempt exists'=>str_contains($source,'&&!is_array($activePayment)'),
     'review and pending states use safe customer-facing explanations'=>str_contains($source,'Ödeme sağlayıcısından sonuç bekleniyor')&&str_contains($source,'yeni ödeme başlatılamaz'),
-    'invoice detail route remains customer-owned GET'=>str_contains($routes,"preg_match('#^/client/invoices/([0-9]+)$'")&&str_contains($routes,'$catalog->clientInvoiceDetail((int)$invoiceDetailMatch[1])'),
+    'invoice detail route remains customer-owned GET'=>str_contains($routes,"preg_match('#^/client/invoices/([0-9]+)$#'")&&str_contains($routes,'$catalog->clientInvoiceDetail((int)$invoiceDetailMatch[1])'),
 ];
 foreach($checks as $label=>$ok){if(!$ok)throw new RuntimeException('FAIL '.$label);echo 'PASS '.$label.PHP_EOL;}
 echo "HostPilot customer invoice payment status tests passed.\n";
