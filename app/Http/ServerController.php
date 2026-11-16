@@ -4,6 +4,7 @@ namespace HostPilot\Http;
 
 use HostPilot\Core\Auth;
 use HostPilot\Core\Authorization;
+use HostPilot\Core\SecurityAudit;
 use HostPilot\Core\SecretVault;
 use HostPilot\Hosting\CpanelWhmAdapter;
 use HostPilot\Hosting\DirectAdminAdapter;
@@ -63,6 +64,7 @@ final class ServerController
             if($panel==='plesk'&&$ip==='')throw new \RuntimeException('Plesk üzerinde hosting hesabı oluşturmak için paylaşımlı IP adresi gereklidir.');
             $q=$this->db->prepare("INSERT INTO servers(name,panel_type,base_url,username,secret_enc,auth_mode,shared_ip,enabled,created_at,updated_at) VALUES(:name,:panel,:base,:username,:secret,:mode,:ip,1,:created,:updated)");
             $now=gmdate('Y-m-d H:i:s');$q->execute([':name'=>$name,':panel'=>$panel,':base'=>$base,':username'=>$user,':secret'=>$this->vault->encrypt($secret),':mode'=>$mode,':ip'=>$ip!==''?$ip:null,':created'=>$now,':updated'=>$now]);
+            $actor=Auth::user();SecurityAudit::record($this->db,'server.created',isset($actor['id'])?(int)$actor['id']:null,['resource_id'=>(int)$this->db->lastInsertId(),'action'=>'created']);
             $this->go('/admin/servers','notice=Sunucu bağlantısı kaydedildi. Şimdi bağlantı testini çalıştırın.');
         }catch(Throwable $e){$this->go('/admin/servers','error='.rawurlencode($e->getMessage()));}
     }
@@ -76,10 +78,12 @@ final class ServerController
             $server=$this->server($id);$adapter=$this->adapter($server);$message=$adapter->testConnection();
             $q=$this->db->prepare("UPDATE servers SET last_test_at=:at,last_test_status='success',last_test_message=:message,updated_at=:at2 WHERE id=:id");
             $q->execute([':at'=>gmdate('Y-m-d H:i:s'),':message'=>substr($message,0,500),':at2'=>gmdate('Y-m-d H:i:s'),':id'=>$id]);
+            $actor=Auth::user();SecurityAudit::record($this->db,'server.connection_tested',isset($actor['id'])?(int)$actor['id']:null,['resource_id'=>$id,'action'=>'success']);
             $this->go('/admin/servers','notice='.$message);
         }catch(Throwable $e){
             $q=$this->db->prepare("UPDATE servers SET last_test_at=:at,last_test_status='failed',last_test_message=:message,updated_at=:at2 WHERE id=:id");
             $q->execute([':at'=>gmdate('Y-m-d H:i:s'),':message'=>substr($e->getMessage(),0,500),':at2'=>gmdate('Y-m-d H:i:s'),':id'=>$id]);
+            $actor=Auth::user();SecurityAudit::record($this->db,'server.connection_tested',isset($actor['id'])?(int)$actor['id']:null,['resource_id'=>$id,'action'=>'failed']);
             $this->go('/admin/servers','error='.$e->getMessage());
         }
     }
@@ -96,6 +100,7 @@ final class ServerController
         if($panel==='plesk'&&(($guid==='')!==($externalId==='')))$this->go('/admin/servers','error=Plesk için GUID ve harici plan kimliği birlikte girilmelidir.');
         $q=$this->db->prepare("INSERT INTO server_product_map(server_id,product_id,remote_package,remote_package_guid,remote_package_external_id,created_at,updated_at) VALUES(:server,:product,:package,:guid,:external_id,:created,:updated) ON DUPLICATE KEY UPDATE remote_package=VALUES(remote_package),remote_package_guid=VALUES(remote_package_guid),remote_package_external_id=VALUES(remote_package_external_id),updated_at=VALUES(updated_at)");
         $now=gmdate('Y-m-d H:i:s');$q->execute([':server'=>$server,':product'=>$product,':package'=>$package,':guid'=>$guid!==''?$guid:null,':external_id'=>$externalId!==''?$externalId:null,':created'=>$now,':updated'=>$now]);
+        $actor=Auth::user();SecurityAudit::record($this->db,'server.product_mapping_updated',isset($actor['id'])?(int)$actor['id']:null,['resource_id'=>$server,'action'=>'updated']);
         $this->go('/admin/servers','notice=Ürün ve sunucu paketi eşleştirildi.');
     }
 
@@ -149,11 +154,13 @@ final class ServerController
             $up=$this->db->prepare("UPDATE services SET status='active',provisioning_status='completed',remote_identifier=:remote,remote_username=:username,remote_password_enc=:password,provisioned_at=:at,provisioning_error=NULL,updated_at=:updated WHERE id=:id AND provisioning_status='in_progress'");
             $up->execute([':remote'=>$result['identifier'],':username'=>$result['username'],':password'=>$this->vault->encrypt($password),':at'=>$now,':updated'=>$now,':id'=>$id]);
             $this->log($id,$serverId,'create','success','Hosting hesabı oluşturuldu: '.$result['identifier']);
+            $actor=Auth::user();SecurityAudit::record($this->db,'service.provision_completed',isset($actor['id'])?(int)$actor['id']:null,['resource_id'=>$id,'action'=>'completed']);
             $this->go('/admin/services','notice=Hosting hesabı başarıyla oluşturuldu.');
         }catch(Throwable $e){
             if($this->db->inTransaction())$this->db->rollBack();
             $this->db->prepare("UPDATE services SET provisioning_status='failed',provisioning_error=:error,updated_at=:updated WHERE id=:id")->execute([':error'=>substr($e->getMessage(),0,1000),':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$id]);
             $this->log($id,$serverId,'create','failed',substr($e->getMessage(),0,1000));
+            $actor=Auth::user();SecurityAudit::record($this->db,'service.provision_failed',isset($actor['id'])?(int)$actor['id']:null,['resource_id'=>$id,'action'=>'failed']);
             $this->go('/admin/services','error='.$e->getMessage());
         }
     }
@@ -180,10 +187,12 @@ final class ServerController
             $u->execute([':status'=>$newStatus,':source'=>$operation==='suspend'?'admin':'none',':suspended'=>$operation==='suspend'?$now:null,':updated'=>$now,':id'=>$id,':old'=>$service['status']]);
             if($u->rowCount()!==1)throw new \RuntimeException('Hizmet durumu eşzamanlı değişti; işlem tekrar kontrol edilmeli.');
             $this->log($id,(int)$service['server_id'],$operation,'success','Kontrol paneli hizmet durumu: '.$newStatus);
+            $actor=Auth::user();SecurityAudit::record($this->db,'service.lifecycle_completed',isset($actor['id'])?(int)$actor['id']:null,['resource_id'=>$id,'action'=>$operation]);
             $this->go('/admin/services','notice=Sunucu ve HostPilot hizmet durumu güncellendi.');
         }catch(Throwable $e){
             if($this->db->inTransaction())$this->db->rollBack();
             $this->log($id,0,$operation,'failed',substr($e->getMessage(),0,900));
+            $actor=Auth::user();SecurityAudit::record($this->db,'service.lifecycle_failed',isset($actor['id'])?(int)$actor['id']:null,['resource_id'=>$id,'action'=>'failed']);
             $this->go('/admin/services','error='.$e->getMessage());
         }
     }
@@ -206,6 +215,7 @@ final class ServerController
             $insert->execute([':service'=>$id,':type'=>$type,':available'=>$now,':created'=>$now,':updated'=>$now]);
             $this->db->commit();
             $this->log($id,(int)$service['server_id'],'terminate_queued','success','Yönetici domain doğrulamasıyla kalıcı sonlandırma kuyruğa alındı.');
+            $actor=Auth::user();SecurityAudit::record($this->db,'service.termination_requested',isset($actor['id'])?(int)$actor['id']:null,['resource_id'=>$id,'action'=>'queued']);
             $this->go('/admin/services','notice=Sonlandırma işi kuyruğa alındı. Cron worker uzak işlemi gerçekleştirecek.');
         }catch(Throwable $e){
             if($this->db->inTransaction())$this->db->rollBack();

@@ -83,3 +83,8 @@ The staff permission form is generated from the central authorization catalog. I
 ### Staff permission catalog and scoped module access
 
 Staff permissions are generated from the central authorization registry and limited to explicit least-privilege modules: dashboard, customers, reports, support, catalog, orders, invoices, payment transaction viewing, domain order/renewal viewing, server inventory viewing, and hosting service viewing. Sensitive controls such as payment gateway settings, server/service mutations, registrar credentials, automation workers, privacy erasure, staff administration, software updates, and database upgrades remain administrator-only. The dashboard hides modules that a staff account has not been granted. Staff permission changes are recorded in the security audit log.
+
+
+### Financial, server and domain audit events
+
+The security audit log records payment gateway setting changes, payment settlement/failure/review outcomes, server creation and connection tests, server-product mappings, hosting provisioning/lifecycle/termination actions, registrar setting changes, domain renewal/nameserver requests, manual registrar reconciliations, expiry-sync queue actions, and domain CSV exports. These entries retain only allowlisted event names, actor IDs where available, resource IDs and safe action labels; they do not store API keys, passwords, merchant secrets, customer emails, raw provider payloads, or domain contact data.

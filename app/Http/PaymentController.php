@@ -5,6 +5,7 @@ namespace HostPilot\Http;
 use HostPilot\Core\Auth;
 use HostPilot\Core\Authorization;
 use HostPilot\Core\EmailService;
+use HostPilot\Core\SecurityAudit;
 use HostPilot\Core\SecretVault;
 use HostPilot\Payment\GatewayTransport;
 use HostPilot\Payment\PaytrSignature;
@@ -43,6 +44,7 @@ final class PaymentController
                     $s=$this->db->prepare("INSERT INTO settings(setting_group,setting_key,setting_value,is_secret,updated_at) VALUES('payment',:key,:value,:secret,:updated) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value),is_secret=VALUES(is_secret),updated_at=VALUES(updated_at)");
                     $s->execute([':key'=>$key,':value'=>$value,':secret'=>in_array($key,['paytr_merchant_key','paytr_merchant_salt','iyzico_api_key','iyzico_secret_key'],true)?1:0,':updated'=>gmdate('Y-m-d H:i:s')]);
                 }
+                $actor=Auth::user();SecurityAudit::record($this->db,'payment.gateway_settings_updated',isset($actor['id'])?(int)$actor['id']:null,['action'=>'updated']);
                 $notice='Ödeme ayarları kaydedildi. Gizli anahtarlar şifreli saklanır.';
             }catch(Throwable $e){$error='Ayarlar kaydedilemedi: '.$e->getMessage();}
         }
@@ -262,6 +264,7 @@ final class PaymentController
                 $review=$this->db->prepare("UPDATE payment_transactions SET status='review',response_code='overpayment_review',safe_message=:message,updated_at=:updated WHERE id=:id");
                 $review->execute([':message'=>'Sağlayıcı ödemeyi onayladı ancak fatura bakiyesi yetersiz. Manuel iade / mutabakat gerekiyor.',':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$tx['id']]);
                 $this->db->commit();
+                SecurityAudit::record($this->db,'payment.transaction_reviewed',null,['resource_id'=>(int)$tx['id'],'action'=>'review']);
                 return;
             }
             $newPaid=round((float)$invoice['amount_paid']+(float)$tx['amount'],2);$newStatus=$newPaid+0.005>=(float)$invoice['total']?'paid':'partially_paid';$now=gmdate('Y-m-d H:i:s');
@@ -303,6 +306,7 @@ final class PaymentController
                 }
             }
             $this->db->commit();
+            SecurityAudit::record($this->db,'payment.transaction_settled',null,['resource_id'=>(int)$tx['id'],'action'=>$newStatus]);
             if($newStatus==='paid'&&is_array($packageNotice))(new EmailService($this->db,$this->applicationKey))->sendPackageChange((string)$packageNotice['email'],(string)$packageNotice['name'],(string)($packageNotice['remote_domain']??''),(string)$packageNotice['from_name'],(string)$packageNotice['to_name'],'payment');
         }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();throw $e;}
     }
@@ -320,6 +324,7 @@ final class PaymentController
         $sets=[];$params=[':id'=>$id];foreach($fields as $k=>$v)if(in_array($k,$allowed,true)){$sets[]=$k.'=:'.$k;$params[':'.$k]=$v;}
         if(!$sets)return;$sets[]='updated_at=:updated';$params[':updated']=gmdate('Y-m-d H:i:s');
         $where=' WHERE id=:id';if(isset($fields['status'])&&$fields['status']!=='success')$where.=" AND status<>'success'";$q=$this->db->prepare('UPDATE payment_transactions SET '.implode(',',$sets).$where);$q->execute($params);
+        if(($fields['status']??'')==='failed')SecurityAudit::record($this->db,'payment.transaction_failed',null,['resource_id'=>$id,'action'=>'failed']);
         if(($fields['status']??'')==='failed'){
             $notice=$this->db->prepare('SELECT i.id,i.invoice_number,i.total,i.currency,i.due_at,u.email,u.name FROM payment_transactions t JOIN invoices i ON i.id=t.invoice_id JOIN users u ON u.id=t.user_id WHERE t.id=:id LIMIT 1');
             $notice->execute([':id'=>$id]);$invoice=$notice->fetch();

@@ -187,6 +187,43 @@ try {
     $login('/admin/login','http-staff@example.test',$cookieStaff);
     $login('/admin/login','http-admin@example.test',$cookieAdmin);
 
+    $paymentSettingsForm=$request('/admin/payments',$cookieAdmin);
+    $paymentSettingsToken=$getToken($paymentSettingsForm['body']);
+    $r=$request('/admin/payments',$cookieAdmin,'POST',[
+        '_token'=>$paymentSettingsToken,'paytr_enabled'=>'1','paytr_test_mode'=>'1','paytr_merchant_id'=>'ci-merchant',
+        'iyzico_enabled'=>'0','iyzico_test_mode'=>'1'
+    ]);
+    $paymentAudit=$pdo->prepare("SELECT metadata_json FROM security_audit_logs WHERE user_id=:actor AND event_key='payment.gateway_settings_updated' ORDER BY id DESC LIMIT 1");
+    $paymentAudit->execute([':actor'=>$admin]);$paymentAuditMetadata=json_decode((string)$paymentAudit->fetchColumn(),true);
+    $assert($r['status']===200 && ($paymentAuditMetadata['action']??'')==='updated'
+        && !str_contains(json_encode($paymentAuditMetadata),'ci-merchant'),
+        'payment gateway setting changes are audited without credentials or merchant identifiers');
+
+    $serverForm=$request('/admin/servers',$cookieAdmin);
+    $serverToken=$getToken($serverForm['body']);
+    $r=$request('/admin/servers/save',$cookieAdmin,'POST',[
+        '_token'=>$serverToken,'name'=>'CI Audit Server','panel_type'=>'cpanel','base_url'=>'https://cpanel.example.com:2087',
+        'username'=>'ci-admin','secret'=>'ci-server-secret','auth_mode'=>'password'
+    ]);
+    $auditServer=$pdo->prepare("SELECT id FROM servers WHERE name='CI Audit Server' ORDER BY id DESC LIMIT 1");
+    $auditServer->execute();$auditServerId=(int)$auditServer->fetchColumn();
+    $serverAudit=$pdo->prepare("SELECT metadata_json FROM security_audit_logs WHERE user_id=:actor AND event_key='server.created' ORDER BY id DESC LIMIT 1");
+    $serverAudit->execute([':actor'=>$admin]);$serverAuditMetadata=json_decode((string)$serverAudit->fetchColumn(),true);
+    $assert($r['status']===200 && $auditServerId>0 && (int)($serverAuditMetadata['resource_id']??0)===$auditServerId
+        && ($serverAuditMetadata['action']??'')==='created' && !str_contains(json_encode($serverAuditMetadata),'ci-server-secret'),
+        'server creation is audited with a resource id and without the server secret');
+
+    $domainSettingsForm=$request('/admin/domains/registrar',$cookieAdmin);
+    $domainSettingsToken=$getToken($domainSettingsForm['body']);
+    $r=$request('/admin/domains/registrar',$cookieAdmin,'POST',[
+        '_token'=>$domainSettingsToken,'enabled'=>'1','environment'=>'sandbox','user_id'=>'123456','api_key'=>'ci-domain-api-key'
+    ]);
+    $domainAudit=$pdo->prepare("SELECT metadata_json FROM security_audit_logs WHERE user_id=:actor AND event_key='domain.registrar_settings_updated' ORDER BY id DESC LIMIT 1");
+    $domainAudit->execute([':actor'=>$admin]);$domainAuditMetadata=json_decode((string)$domainAudit->fetchColumn(),true);
+    $assert($r['status']===200 && ($domainAuditMetadata['action']??'')==='updated'
+        && !str_contains(json_encode($domainAuditMetadata),'ci-domain-api-key'),
+        'registrar settings changes are audited without API credentials');
+
     $staffPermissionForm=$request('/admin/staff',$cookieAdmin);
     $staffPermissionToken=$getToken($staffPermissionForm['body']);
     $assignablePermissions=['dashboard.view','payments.view','servers.view','services.view','domains.orders.view','domains.operations.view'];
