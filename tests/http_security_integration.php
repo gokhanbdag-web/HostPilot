@@ -490,11 +490,26 @@ try {
     $assert($r['status']===409 && (str_contains($r['body'],'Bu fatura için bir ödeme işlemi bekliyor')||str_contains($r['body'],'manuel incelemede')) && $afterPaymentAttempts===$beforePaymentAttempts,
         'customer cannot create a second gateway attempt while an invoice payment is pending or under review');
 
+    $invoiceListA=$request('/client/invoices',$cookieA);
+    $assert($invoiceListA['status']===200 && str_contains($invoiceListA['body'],'Ödeme bekliyor')
+        && !str_contains($invoiceListA['body'],'/client/invoices/'.$invoiceA.'/pay'),
+        'customer invoice list shows active payment state and suppresses duplicate pay action');
+
     $invoiceDetailA=$request('/client/invoices/'.$invoiceA,$cookieA);
     $assert($invoiceDetailA['status']===200 && str_contains($invoiceDetailA['body'],'HTTP-A-INV')
         && str_contains($invoiceDetailA['body'],'Customer A hosting plan') && str_contains($invoiceDetailA['body'],'PayTR')
-        && str_contains($invoiceDetailA['body'],'Bekliyor') && str_contains($invoiceDetailA['body'],'Yazdır / PDF kaydet'),
-        'customer invoice detail shows owned line items, payment status and browser print-to-PDF action');
+        && str_contains($invoiceDetailA['body'],'Bekliyor') && str_contains($invoiceDetailA['body'],'Yazdır / PDF kaydet')
+        && str_contains($invoiceDetailA['body'],'Ödeme işlemi: Bekliyor')
+        && str_contains($invoiceDetailA['body'],'Durumu yenile')
+        && !str_contains($invoiceDetailA['body'],'/client/invoices/'.$invoiceA.'/pay'),
+        'customer invoice detail shows pending state, safe refresh and suppresses another payment action');
+
+    $pdo->prepare("UPDATE payment_transactions SET status='review' WHERE invoice_id=:invoice AND status='pending'")->execute([':invoice'=>$invoiceA]);
+    $invoiceReviewA=$request('/client/invoices/'.$invoiceA,$cookieA);
+    $assert($invoiceReviewA['status']===200 && str_contains($invoiceReviewA['body'],'Ödeme işlemi: İncelemede')
+        && str_contains($invoiceReviewA['body'],'yeni ödeme başlatılamaz')
+        && !str_contains($invoiceReviewA['body'],'/client/invoices/'.$invoiceA.'/pay'),
+        'customer invoice detail clearly shows manual review state without exposing internal provider diagnostics');
     $invoiceDetailB=$request('/client/invoices/'.$invoiceB,$cookieA);
     $assert($invoiceDetailB['status']===404 && !str_contains($invoiceDetailB['body'],'HTTP-B-INV')
         && !str_contains($invoiceDetailB['body'],'Customer B confidential line'),
