@@ -149,6 +149,13 @@ try {
     $assert($r['status']===404 && !str_contains($r['body'],'HTTP-B-INV'),'customer A cannot POST payment initiation for customer B invoice');
     $r=$request('/admin/payments',$cookieA,'POST',['_token'=>$packageToken,'paytr_enabled'=>'1','paytr_merchant_id'=>'attacker']);
     $assert($r['status']===403,'customer cannot POST admin payment gateway settings');
+    $r=$request('/admin/payments',$cookieStaff);
+    $assert($r['status']===403,'support staff without finance permission cannot view payment gateway settings');
+    $r=$request('/admin/payments',$cookieStaff,'POST',['_token'=>$packageToken,'paytr_enabled'=>'1','paytr_merchant_id'=>'staff-attacker']);
+    $assert($r['status']===403,'support staff without finance permission cannot change payment gateway settings');
+    $r=$request('/admin/payment-transactions',$cookieStaff);
+    $assert($r['status']===403,'support staff without finance permission cannot view payment transaction records');
+
 
     $r=$request('/client/services',$cookieA);
     $assert(!str_contains($r['body'],'private-customer-b.example'),'customer A service list excludes customer B service');
