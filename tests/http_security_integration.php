@@ -77,6 +77,16 @@ foreach ($paymentSettings as $settingKey=>$settingValue) {
     $pdo->prepare("INSERT INTO settings(setting_group,setting_key,setting_value,is_secret,updated_at) VALUES('payment',:key,:value,:secret,UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value),is_secret=VALUES(is_secret)")
         ->execute([':key'=>$settingKey,':value'=>$settingValue,':secret'=>str_contains($settingKey,'key')||str_contains($settingKey,'salt')?1:0]);
 }
+$domainSettings=[
+    'enabled'=>'1',
+    'environment'=>'sandbox',
+    'user_id'=>'123456',
+    'api_key_enc'=>$testVault->encrypt('ci-domain-api-key'),
+];
+foreach($domainSettings as $settingKey=>$settingValue){
+    $pdo->prepare("INSERT INTO settings(setting_group,setting_key,setting_value,is_secret,updated_at) VALUES('domain_registrar',:key,:value,:secret,UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value),is_secret=VALUES(is_secret)")
+        ->execute([':key'=>$settingKey,':value'=>$settingValue,':secret'=>$settingKey==='api_key_enc'?1:0]);
+}
 $pdo->prepare("INSERT INTO payment_transactions(invoice_id,user_id,gateway,idempotency_key,status,currency,amount,request_reference,created_at,updated_at) VALUES(:invoice,:user,'paytr',:key,'pending','TRY',100,'HTTP-EXISTING-PENDING',UTC_TIMESTAMP(),UTC_TIMESTAMP())")
     ->execute([':invoice'=>$invoiceA,':user'=>$a,':key'=>hash('sha256','http-existing-pending-payment')]);
 $pdo->prepare("INSERT INTO domain_registrations(user_id,order_id,invoice_id,domain_name,years,registrar_payload_enc,idempotency_key,status,available_at,created_at,updated_at) VALUES(:user,:order_id,:invoice_id,'private-customer-b-domain.example',1,'{}',:key,'awaiting_payment',UTC_TIMESTAMP(),UTC_TIMESTAMP(),UTC_TIMESTAMP())")
