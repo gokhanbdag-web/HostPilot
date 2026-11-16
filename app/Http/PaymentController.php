@@ -9,6 +9,7 @@ use HostPilot\Core\SecurityAudit;
 use HostPilot\Core\SecretVault;
 use HostPilot\Payment\GatewayTransport;
 use HostPilot\Payment\IyzicoSignature;
+use HostPilot\Payment\PaytrRequest;
 use HostPilot\Payment\PaytrSignature;
 use PDO;
 use Throwable;
@@ -274,19 +275,12 @@ final class PaymentController
         $basketQ=$this->db->prepare('SELECT description,quantity,unit_price FROM invoice_items WHERE invoice_id=:id');$basketQ->execute([':id'=>$invoice['id']]);
         $basket=[];foreach($basketQ->fetchAll() as $item)$basket[]=[substr((string)$item['description'],0,90),number_format((float)$item['unit_price'],2,'.',''),(int)$item['quantity']];
         if(!$basket)$basket=[['HostPilot invoice',number_format($amount,2,'.',''),1]];
-        $basketEncoded=base64_encode(json_encode($basket,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES));
-        $merchantId=$settings['paytr_merchant_id'];$paymentAmount=(string)round($amount*100);$noInstallment='0';$maxInstallment='0';$currency='TL';$test=$settings['paytr_test_mode']==='1'?'1':'0';
-        $hash=$merchantId.$ip.$merchantOid.$email.$paymentAmount.$basketEncoded.$noInstallment.$maxInstallment.$currency.$test;
-        $token=base64_encode(hash_hmac('sha256',$hash.$salt,$key,true));
-        $payload=[
-            'merchant_id'=>$merchantId,'user_ip'=>$ip,'merchant_oid'=>$merchantOid,'email'=>$email,
-            'payment_amount'=>$paymentAmount,'paytr_token'=>$token,'user_basket'=>$basketEncoded,
-            'debug_on'=>$test,'no_installment'=>$noInstallment,'max_installment'=>$maxInstallment,
-            'user_name'=>substr((string)$user['name'],0,60),'user_address'=>substr(trim((string)($_POST['address']??'')),0,400),
-            'user_phone'=>substr(trim((string)($_POST['phone']??'')),0,20),
-            'merchant_ok_url'=>$this->absolute('/payment/return'),'merchant_fail_url'=>$this->absolute('/payment/return'),
-            'timeout_limit'=>'30','currency'=>$currency,'test_mode'=>$test,'lang'=>'tr','iframe_v2'=>'1'
-        ];
+        $payload=PaytrRequest::buildPayload([
+            'merchant_id'=>(string)$settings['paytr_merchant_id'],'user_ip'=>$ip,'merchant_oid'=>$merchantOid,'email'=>$email,
+            'payment_amount'=>(string)round($amount*100),'basket'=>$basket,'test_mode'=>(string)$settings['paytr_test_mode'],
+            'user_name'=>(string)$user['name'],'user_address'=>(string)($_POST['address']??''),'user_phone'=>(string)($_POST['phone']??''),
+            'ok_url'=>$this->absolute('/payment/return'),'fail_url'=>$this->absolute('/payment/return')
+        ],$key,$salt);
         $result=GatewayTransport::postForm('https://www.paytr.com/odeme/api/get-token',$payload);
         if(($result['status']??'')!=='success'||empty($result['token']))throw new \RuntimeException((string)($result['reason']??'PayTR iframe token üretilemedi.'));
         $this->updateTransaction($txId,['request_reference'=>$merchantOid]);
