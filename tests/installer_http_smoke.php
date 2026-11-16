@@ -254,7 +254,10 @@ $nextStepCode = \HostPilot\Core\Mfa::codeAt($totpSecret, $testStep * 30);
     '_token' => csrfFromHtml($replayedRecovery),
     'code' => (string)$nextStepCode,
 ]);
-if (statusCode($totpLoginHeaders) !== 302) throw new RuntimeException('A valid TOTP challenge did not complete login.');
+if (statusCode($totpLoginHeaders) !== 302) {
+    $usedStep = (int)$db->query('SELECT last_used_step FROM admin_mfa LIMIT 1')->fetchColumn();
+    throw new RuntimeException('A valid TOTP challenge did not complete login. HTTP=' . statusCode($totpLoginHeaders) . '; expected_step=' . $testStep . '; stored_step=' . $usedStep . '; response=' . substr(strip_tags($totpLogin), 0, 240));
+}
 
 [$mfaSettings, $mfaSettingsHeaders] = httpRequest($base . 'admin/security/mfa', 'GET', cookieFromHeaders($totpLoginHeaders) ?: $cookie);
 $totpCookie = cookieFromHeaders($totpLoginHeaders) ?: $cookie;
