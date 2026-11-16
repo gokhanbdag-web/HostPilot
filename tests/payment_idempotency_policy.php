@@ -10,6 +10,10 @@ $checks = [
     'the invoice lock transaction commits before external gateway initialization' => str_contains($source, '$this->db->commit();' . "\n                if(\$gateway==='paytr')"),
     'provider-confirmed overpayment is retained for manual reconciliation' => str_contains($source, "response_code='overpayment_review'") && str_contains($source, "status='review'"),
     'payment initialization rolls back an open database transaction on failure' => str_contains($source, 'if($this->db->inTransaction())$this->db->rollBack();'),
+    'stale pending attempts move to review without releasing the invoice for another charge' => str_contains($source, "status='review',response_code='stale_pending_review'") && str_contains($source, "modify('-30 minutes')"),
+    'administrator can explicitly confirm that no capture occurred' => str_contains($source, "'no_capture_confirmed'") && str_contains($source, "status='cancelled'"),
+    'late callbacks cannot settle manually closed or terminal payment attempts' => str_contains($source, "['success','failed','cancelled','refunded']") && str_contains($source, "status NOT IN ('success','cancelled','refunded','review')"),
+    'no-capture decision is recorded in reconciliation history and audit log' => str_contains($source, "INSERT INTO payment_reconciliations(payment_transaction_id,admin_user_id,decision") && str_contains($source, "payment.no_capture_confirmed"),
 ];
 foreach ($checks as $label=>$passed) {
     if (!$passed) throw new RuntimeException('FAIL '.$label);
