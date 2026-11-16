@@ -105,6 +105,7 @@ final class MfaController
     private function assertCurrentPassword(int $userId, string $password): void
     {
         if ($password === '' || strlen($password) > 4096) throw new \RuntimeException('Mevcut parola doğrulanamadı.');
+        if (Auth::consumeMfaAttempt()) throw new \RuntimeException('Çok fazla güvenlik doğrulaması denendi. Bir süre sonra tekrar deneyin.');
         $query = $this->db->prepare("SELECT password_hash FROM users WHERE id = :id AND status = 'active' AND role IN ('super_admin','admin','staff') LIMIT 1");
         $query->execute([':id' => $userId]);
         $hash = $query->fetchColumn();
