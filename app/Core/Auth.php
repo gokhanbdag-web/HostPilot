@@ -67,7 +67,7 @@ final class Auth
     /** Complete login only after any required second factor has been verified. */
     public static function completeLogin(PDO $db, array $user): void
     {
-        if (($user['status'] ?? '') !== 'active' || !in_array((string)($user['role'] ?? ''), ['super_admin', 'admin', 'staff', 'client'], true)) {
+        if (($user['status'] ?? '') !== 'active' || !in_array((string)($user['role'] ?? ''), ['super_admin', 'admin', 'staff', 'client', 'customer'], true)) {
             throw new \RuntimeException('Account cannot be authenticated.');
         }
         session_regenerate_id(true);
