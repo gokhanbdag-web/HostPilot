@@ -62,7 +62,7 @@ final class PaymentController
         // A timeout is ambiguous: never release the invoice for another charge automatically.
         // Move old sessions to manual review so an administrator can verify provider-side state.
         $now=gmdate('Y-m-d H:i:s');
-        $cutoff=(new \\DateTimeImmutable('now',new \\DateTimeZone('UTC')))->modify('-30 minutes')->format('Y-m-d H:i:s');
+        $cutoff=(new \DateTimeImmutable('now',new \DateTimeZone('UTC')))->modify('-30 minutes')->format('Y-m-d H:i:s');
         $sql="UPDATE payment_transactions SET status='review',response_code='stale_pending_review',safe_message='Ödeme oturumu 30 dakikadan uzun süredir sonuçlanmadı. Sağlayıcı panelinde kontrol edilmelidir.',updated_at=:updated WHERE status='pending' AND created_at<=:cutoff";
         $params=[':updated'=>$now,':cutoff'=>$cutoff];
         if($invoiceId!==null){$sql.=' AND invoice_id=:invoice_id';$params[':invoice_id']=$invoiceId;}
