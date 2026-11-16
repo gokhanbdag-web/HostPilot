@@ -5,7 +5,7 @@ require_once dirname(__DIR__) . '/app/Core/SecurityAudit.php';
 use HostPilot\Core\SecurityAudit;
 
 if (!SecurityAudit::isAllowedEvent('auth.mfa_enabled') || !SecurityAudit::isAllowedEvent('auth.mfa_challenge_succeeded')) throw new RuntimeException('MFA audit events were not allowlisted.');
-if (!SecurityAudit::isAllowedEvent('privacy.exported') || !SecurityAudit::isAllowedEvent('privacy.erasure_requested') || !SecurityAudit::isAllowedEvent('privacy.request_reviewed')) throw new RuntimeException('Privacy audit events were not allowlisted.');
+if (!SecurityAudit::isAllowedEvent('privacy.exported') || !SecurityAudit::isAllowedEvent('privacy.erasure_requested') || !SecurityAudit::isAllowedEvent('privacy.request_reviewed') || !SecurityAudit::isAllowedEvent('privacy.erasure_completed')) throw new RuntimeException('Privacy audit events were not allowlisted.');
 if (!SecurityAudit::isAllowedEvent('auth.login_succeeded')) throw new RuntimeException('Known event was rejected.');
 if (SecurityAudit::isAllowedEvent('auth.custom_payload')) throw new RuntimeException('Unknown event was accepted.');
 $hash = SecurityAudit::hashIp('192.0.2.10');
