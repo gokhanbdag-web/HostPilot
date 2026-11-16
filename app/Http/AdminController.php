@@ -184,7 +184,7 @@ final class AdminController
         $user=Auth::user();
         if (!in_array($user['role'], ['super_admin','admin','staff'], true)) { http_response_code(403); echo 'Yetkisiz erişim.'; return; }
         $q=$this->db->prepare('SELECT t.*,u.name,u.email FROM tickets t JOIN users u ON u.id=t.user_id WHERE t.id=:id');
-        $q->execute([':id'=>$id]); $ticket=$q->fetch();
+        $q->execute([':id'=>$id]);$ticket=$q->fetch();
         if(!$ticket){http_response_code(404);echo 'Talep bulunamadı.';return;}
         if (($user['role'] ?? '') === 'staff' && !in_array((string)$ticket['department'], $this->staffDepartments((int)$user['id']), true)) { http_response_code(404); echo 'Destek talebi bulunamadı.'; return; }
         $error='';
@@ -198,23 +198,36 @@ final class AdminController
                     $this->redirect('/admin/tickets/'.$id);
                 }
                 $message=trim((string)($_POST['message']??''));
-                if($message===''||strlen($message)>36000)$error='Yanıt mesajını kontrol edin.';
+                if($message===''||strlen($message)>12000)$error='Yanıt mesajını kontrol edin.';
                 else{
-                    $m=$this->db->prepare('INSERT INTO ticket_messages(ticket_id,user_id,message,is_staff,created_at) VALUES(:ticket,:uid,:message,1,:created)');
-                    $m->execute([':ticket'=>$id,':uid'=>$user['id'],':message'=>$message,':created'=>$now]);
-                    $messageId=(int)$this->db->lastInsertId();
-                    $this->db->prepare("UPDATE tickets SET status='staff_reply',last_reply_at=:reply,updated_at=:updated WHERE id=:id")->execute([':reply'=>$now,':updated'=>$now,':id'=>$id]);
-                    if($this->applicationKey!=='')(new EmailService($this->db,$this->applicationKey))->queueTicketNotice((string)$ticket['email'],(string)$ticket['ticket_number'],(string)$ticket['subject'],'staff_reply','ticket:'.$id.':staff_reply:'.$messageId);
-                    $this->redirect('/admin/tickets/'.$id);
+                    $storedFiles=[];
+                    try{
+                        $this->db->beginTransaction();
+                        $m=$this->db->prepare('INSERT INTO ticket_messages(ticket_id,user_id,message,is_staff,created_at) VALUES(:ticket,:uid,:message,1,:created)');
+                        $m->execute([':ticket'=>$id,':uid'=>$user['id'],':message'=>$message,':created'=>$now]);$messageId=(int)$this->db->lastInsertId();
+                        $storedFiles=(new TicketAttachmentController($this->db,$this->basePath,HOSTPILOT_STORAGE))->storeUploads($id,$messageId,(int)$user['id']);
+                        $this->db->prepare("UPDATE tickets SET status='staff_reply',last_reply_at=:reply,updated_at=:updated WHERE id=:id")->execute([':reply'=>$now,':updated'=>$now,':id'=>$id]);
+                        $this->db->commit();
+                        if($this->applicationKey!=='')(new EmailService($this->db,$this->applicationKey))->queueTicketNotice((string)$ticket['email'],(string)$ticket['ticket_number'],(string)$ticket['subject'],'staff_reply','ticket:'.$id.':staff_reply:'.$messageId);
+                        $this->redirect('/admin/tickets/'.$id);
+                    }catch(Throwable $exception){
+                        if($this->db->inTransaction())$this->db->rollBack();TicketAttachmentController::cleanupStored($storedFiles);
+                        error_log('[HostPilot] Staff ticket reply failed: '.$exception->getMessage());$error='Yanıt veya dosya ekleri kaydedilemedi. Dosya türü ve boyutunu kontrol edin.';
+                    }
                 }
             }
         }
-        $m=$this->db->prepare('SELECT m.*,u.name FROM ticket_messages m JOIN users u ON u.id=m.user_id WHERE m.ticket_id=:id ORDER BY m.created_at');
-        $m->execute([':id'=>$id]);$this->startPage('Talep #'.$ticket['ticket_number']);
+        $m=$this->db->prepare('SELECT m.*,u.name FROM ticket_messages m JOIN users u ON u.id=m.user_id WHERE m.ticket_id=:id ORDER BY m.created_at,m.id');
+        $m->execute([':id'=>$id]);$attachmentService=new TicketAttachmentController($this->db,$this->basePath,HOSTPILOT_STORAGE);
+        $this->startPage('Talep #'.$ticket['ticket_number']);
         echo '<div class="layout"><aside class="sidebar"><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a class="nav-item" href="'.$this->url('/admin/tickets').'">← Destek listesi</a></aside><main class="main"><header class="topbar"><div><small>DESTEK / TALEP DETAYI</small><h1>#'.$this->e($ticket['ticket_number']).'</h1></div></header><article class="panel"><h3>'.$this->e($ticket['subject']).'</h3><p>'.$this->e($ticket['name']).' · '.$this->e($ticket['email']).' · '.$this->e($ticket['department']).'</p>';
-        foreach($m->fetchAll() as $msg)echo '<div class="ticket-admin"><span><b>'.$this->e($msg['name']).($msg['is_staff']?' · Destek':' · Müşteri').'</b><small>'.date('d.m.Y H:i',strtotime($msg['created_at'])).'</small><p>'.nl2br($this->e($msg['message'])).'</p></span></div>';
+        foreach($m->fetchAll() as $msg){
+            echo '<div class="ticket-admin"><span><b>'.$this->e($msg['name']).($msg['is_staff']?' · Destek':' · Müşteri').'</b><small>'.date('d.m.Y H:i',strtotime($msg['created_at'])).'</small><p>'.nl2br($this->e($msg['message'])).'</p>';
+            foreach($attachmentService->forMessage((int)$msg['id']) as $file)echo '<p>📎 <a href="'.$this->url('/admin/tickets/attachment/'.(int)$file['id']).'">'.$this->e($file['original_name']).' · '.number_format((int)$file['file_size']/1024,0).' KB</a></p>';
+            echo '</span></div>';
+        }
         if($error!=='')echo '<div class="alert">'.$this->e($error).'</div>';
-        echo '<form method="post"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><label>Yanıtınız<textarea name="message" rows="6" style="width:100%;padding:12px;background:#0b1425;color:#fff;border:1px solid #34445e;border-radius:8px"></textarea></label><button>Yanıt gönder</button></form><form method="post" style="margin-top:12px"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><button name="action" value="'.($ticket['status']==='closed'?'reopen':'close').'">'.($ticket['status']==='closed'?'Talebi yeniden aç':'Talebi kapat').'</button></form></article></main></div>';
+        echo '<form method="post" enctype="multipart/form-data"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><label>Yanıtınız<textarea name="message" rows="6" maxlength="12000" style="width:100%;padding:12px;background:#0b1425;color:#fff;border:1px solid #34445e;border-radius:8px"></textarea></label><label>Dosya ekleri (en fazla 3 dosya, her biri 5 MB; PDF, JPG, PNG, TXT)<input type="file" name="attachments[]" accept=".pdf,.jpg,.jpeg,.png,.txt,application/pdf,image/jpeg,image/png,text/plain" multiple></label><button>Yanıt gönder</button></form><form method="post" style="margin-top:12px"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><button name="action" value="'.($ticket['status']==='closed'?'reopen':'close').'">'.($ticket['status']==='closed'?'Talebi yeniden aç':'Talebi kapat').'</button></form></article></main></div>';
         $this->endPage();
     }
 

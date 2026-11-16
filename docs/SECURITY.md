@@ -140,3 +140,13 @@ Reference: https://owasp.org/www-project-application-security-verification-stand
 - Enrollment and disable/recovery-code rotation require the current password. Enrollment is not active until the authenticator code is verified.
 - Disabling MFA revokes other account sessions. MFA challenges expire after five minutes and are rate-limited.
 - Recovery codes are displayed only immediately after generation/rotation and cannot be retrieved later. Store them offline; rotating invalidates all prior codes.
+
+
+## Support ticket attachments
+
+- Ticket attachments are limited to three files per message and 5 MiB per file.
+- Accepted detected MIME types are PDF, JPEG, PNG, and plain text; the browser-provided extension and MIME are not trusted.
+- Files receive cryptographically random storage names, restrictive directory/file permissions, and SHA-256 integrity metadata.
+- Attachments are stored under `storage/private/ticket-attachments`, outside public upload paths. Apache access is denied by `storage/private/.htaccess`; deployments using Nginx or another server that ignores `.htaccess` must add an equivalent deny rule for `/storage/private/`.
+- Downloads are forced as attachments, include `nosniff` and no-store headers, verify file integrity, and require the ticket owner or a staff account authorized for that ticket's department.
+- This validation is not antivirus scanning; do not upload executable or sensitive secrets. Configure PHP `upload_max_filesize` and `post_max_size` to support the 5 MiB per-file limit plus request overhead.
