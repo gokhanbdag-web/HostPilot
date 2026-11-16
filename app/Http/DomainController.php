@@ -3,6 +3,7 @@ declare(strict_types=1);
 namespace HostPilot\Http;
 
 use HostPilot\Core\Auth;
+use HostPilot\Core\CronAuthenticator;
 use HostPilot\Core\ResellerClubClient;
 use HostPilot\Core\SecretVault;
 use PDO;
@@ -400,11 +401,7 @@ final class DomainController
 
     public function runRegistrationQueue():void
     {
-        $provided='';
-        if(preg_match('/Bearer\\s+(.+)/i',(string)($_SERVER['HTTP_AUTHORIZATION']??''),$m))$provided=trim($m[1]);
-        if($provided===''&&isset($_GET['token']))$provided=(string)$_GET['token'];
-        $expected=hash_hmac('sha256','HostPilot domain cron v1',$this->applicationKey);
-        if($this->applicationKey===''||$provided===''||!hash_equals($expected,$provided)){http_response_code(403);echo 'Forbidden';return;}
+        if(!CronAuthenticator::isAuthorized($this->applicationKey,'HostPilot domain cron v1',$_SERVER)){http_response_code(403);echo 'Forbidden';return;}
         header('Content-Type: application/json; charset=utf-8');
         $row=null;$stage='';$remoteCallStarted=false;$nameserverOperation=false;
         try{
@@ -515,9 +512,7 @@ final class DomainController
 
     public function runRenewalQueue():void
     {
-        $provided='';if(preg_match('/Bearer\\s+(.+)/i',(string)($_SERVER['HTTP_AUTHORIZATION']??''),$m))$provided=trim($m[1]);if($provided===''&&isset($_GET['token']))$provided=(string)$_GET['token'];
-        $expected=hash_hmac('sha256','HostPilot domain cron v1',$this->applicationKey);
-        if($this->applicationKey===''||$provided===''||!hash_equals($expected,$provided)){http_response_code(403);echo 'Forbidden';return;}
+        if(!CronAuthenticator::isAuthorized($this->applicationKey,'HostPilot domain cron v1',$_SERVER)){http_response_code(403);echo 'Forbidden';return;}
         header('Content-Type: application/json; charset=utf-8');$row=null;$remoteCallStarted=false;$stage='';
         try{
             $now=gmdate('Y-m-d H:i:s');$this->db->beginTransaction();
@@ -580,11 +575,7 @@ final class DomainController
      */
     public function runExpirySyncQueue():void
     {
-        $provided='';
-        if(preg_match('/Bearer\\s+(.+)/i',(string)($_SERVER['HTTP_AUTHORIZATION']??''),$m))$provided=trim($m[1]);
-        if($provided===''&&isset($_GET['token']))$provided=(string)$_GET['token'];
-        $expected=hash_hmac('sha256','HostPilot domain sync cron v1',$this->applicationKey);
-        if($this->applicationKey===''||$provided===''||!hash_equals($expected,$provided)){http_response_code(403);echo 'Forbidden';return;}
+        if(!CronAuthenticator::isAuthorized($this->applicationKey,'HostPilot domain sync cron v1',$_SERVER)){http_response_code(403);echo 'Forbidden';return;}
         header('Content-Type: application/json; charset=utf-8');
         $stats=['synced'=>0,'failed'=>0,'skipped'=>0];
         try{
