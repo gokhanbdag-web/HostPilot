@@ -53,6 +53,8 @@ final class SecurityAudit
         'attachment.scan_infected',
         'attachment.scan_unavailable',
         'attachment.uploaded_unscanned',
+        'database.restore_completed',
+        'database.restore_failed',
     ];
 
     public static function record(PDO $db, string $event, ?int $userId = null, array $metadata = []): void

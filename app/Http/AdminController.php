@@ -87,6 +87,7 @@ final class AdminController
         if (in_array(($user['role'] ?? ''), ['admin','super_admin'], true)) { $items[]=['Personel Yetkileri','/admin/staff','♙']; $items[]=['Oturum Güvenliği','/admin/security/sessions','⌑']; }
         $items[]=['İki Aşamalı Doğrulama','/admin/security/mfa','◈'];
         if (in_array(($user['role'] ?? ''), ['admin','super_admin'], true)) $items[]=['Ek Dosya Güvenliği','/admin/security/attachments','⛨'];
+        if (($user['role'] ?? '') === 'super_admin') $items[]=['Veritabanı Yedekleri','/admin/database-restore','⟲'];
         if(($user['role']??'')==='staff') $items=array_values(array_filter($items,fn($item)=>Authorization::allowsAdminRequest($item[1],'GET',$user,$this->db)));
         foreach($items as $item) echo '<a class="nav-item'.($item[1]==='/admin'?' active':'').'" href="'.$this->url($item[1]).'"><span>'.$item[2].'</span>'.$this->e($item[0]).'</a>';
         echo '</aside><main class="main"><header class="topbar"><div><small>YÖNETİM / GENEL BAKIŞ</small><h1>Kontrol merkezi</h1></div><div class="user">'.$this->e((string)$user['name']).'<form method="post" action="'.$this->url('/admin/logout').'"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><button class="logout">Çıkış</button></form></div></header>';

@@ -133,6 +133,7 @@ final class Authorization
         if ($path === '/admin/orders' && $method === 'GET') return 'orders.view';
         if ($path === '/admin/invoices' && $method === 'GET') return 'invoices.view';
         if ($path === '/admin/database-upgrade' && in_array($method, ['GET', 'POST'], true)) return 'database.upgrade';
+        if ($path === '/admin/database-restore' && in_array($method, ['GET', 'POST'], true)) return 'database.restore';
         if ($path === '/admin/privacy' && in_array($method, ['GET', 'POST'], true)) return 'privacy.requests.manage';
 
         return null;

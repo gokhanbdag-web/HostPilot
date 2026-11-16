@@ -31,6 +31,8 @@ jobs:
           for file in "${files[@]}"; do php -l "$file"; done
       - name: Test SQL migration parser
         run: php tests/migration_runner.php
+      - name: Test database backup restore policy
+        run: php tests/database_backup_restore_policy.php
       - name: Test demo data opt-in policy
         run: php tests/demo_seeder_opt_in.php
       - name: Test payment idempotency policy

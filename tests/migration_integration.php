@@ -244,7 +244,7 @@ if (MigrationRunner::pending($legacy, $directory) !== []) {
 }
 echo 'Fresh SQL schema matches the legacy PHP schema; the pending Stage 2 security migrations upgrade legacy installs without replaying old migrations, and admin-name data backfill passed.' . PHP_EOL;
 
-// Verify a complete compressed backup can be restored into a fresh database.
+// Verify backup discovery, integrity checking, and the production restore engine on a fresh disposable database.
 $backupStorage = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'hostpilot-backup-ci-' . bin2hex(random_bytes(4));
 if (!mkdir($backupStorage, 0700, true)) throw new RuntimeException('Unable to create temporary backup test directory.');
 $backup = \HostPilot\Core\DatabaseBackup::create($pdo, $backupStorage);
@@ -252,6 +252,10 @@ $compressedBackup = file_get_contents($backup['path']);
 $backupSql = is_string($compressedBackup) ? gzdecode($compressedBackup) : false;
 if (!is_string($backupSql) || $backup['size'] < 32 || !hash_equals($backup['sha256'], (string)hash_file('sha256', $backup['path']))) {
     throw new RuntimeException('Compressed database backup failed integrity verification.');
+}
+$listedBackups = \HostPilot\Core\DatabaseBackup::listBackups($backupStorage);
+if (count($listedBackups) !== 1 || !$listedBackups[0]['valid'] || $listedBackups[0]['filename'] !== $backup['filename'] || !hash_equals($backup['sha256'], $listedBackups[0]['sha256'])) {
+    throw new RuntimeException('Private backup listing did not validate the newly created backup.');
 }
 $restoreDatabase = 'hostpilot_restore_ci';
 $pdo->exec('CREATE DATABASE ' . $restoreDatabase . ' CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
@@ -261,7 +265,16 @@ $restore = new PDO(
     $password,
     [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC, PDO::ATTR_EMULATE_PREPARES => false, PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true]
 );
-foreach (MigrationRunner::splitStatements($backupSql) as $statement) $restore->exec($statement);
+try {
+    \HostPilot\Core\DatabaseBackup::restore($restore, $backupStorage, $backup['filename'], str_repeat('0', 64));
+    throw new RuntimeException('Restore accepted a mismatched backup integrity hash.');
+} catch (RuntimeException $exception) {
+    if (!str_contains($exception->getMessage(), 'hash does not match')) throw $exception;
+}
+$restoreResult = \HostPilot\Core\DatabaseBackup::restore($restore, $backupStorage, $backup['filename'], $backup['sha256']);
+if (($restoreResult['filename'] ?? '') !== $backup['filename'] || (int)($restoreResult['statements'] ?? 0) < 3) {
+    throw new RuntimeException('Production restore engine did not execute the complete backup statement stream.');
+}
 if ($schemaSignature($restore) !== $sqlSignature) throw new RuntimeException('Restored backup schema does not match the source database.');
 $restoredUser = $restore->query("SELECT first_name,last_name FROM users WHERE username='ada-admin'")->fetch(PDO::FETCH_ASSOC);
 if (($restoredUser['first_name'] ?? null) !== 'Ada' || ($restoredUser['last_name'] ?? null) !== 'Lovelace') {
@@ -271,4 +284,4 @@ if (($restoredUser['first_name'] ?? null) !== 'Ada' || ($restoredUser['last_name
 @unlink($backupStorage . DIRECTORY_SEPARATOR . 'backups' . DIRECTORY_SEPARATOR . '.htaccess');
 @rmdir($backupStorage . DIRECTORY_SEPARATOR . 'backups');
 @rmdir($backupStorage);
-echo 'Compressed database backup integrity and restore rehearsal passed.' . PHP_EOL;
+echo 'Compressed database backup integrity, private inventory, hash validation, and production restore engine passed.' . PHP_EOL;
