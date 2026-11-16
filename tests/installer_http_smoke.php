@@ -186,7 +186,7 @@ if (statusCode($startHeaders) !== 200 || !preg_match('/<div class="secret">([^<]
     throw new RuntimeException('MFA enrollment did not issue a manual authenticator secret.');
 }
 $totpSecret = html_entity_decode($secretMatch[1], ENT_QUOTES | ENT_HTML5, 'UTF-8');
-$enrollmentCode = \\HostPilot\\Core\\Mfa::codeAt($totpSecret, time());
+$enrollmentCode = \HostPilot\Core\Mfa::codeAt($totpSecret, time());
 if (!is_string($enrollmentCode)) throw new RuntimeException('Unable to generate the enrollment TOTP fixture.');
 [$enabledPage, $enabledHeaders] = httpRequest($base . 'admin/security/mfa', 'POST', $cookie, [
     '_token' => csrfFromHtml($startPage),
@@ -202,7 +202,7 @@ if (count($recoveryCodes) !== 10) throw new RuntimeException('MFA enrollment did
 $mfaState = $db->query('SELECT secret_enc,last_used_step,enabled_at FROM admin_mfa LIMIT 1')->fetch(PDO::FETCH_ASSOC);
 if (!is_array($mfaState) || $mfaState['enabled_at'] === null || $mfaState['secret_enc'] === $totpSecret) throw new RuntimeException('MFA secret was not encrypted at rest.');
 if ((int)$db->query('SELECT COUNT(*) FROM admin_mfa_recovery_codes WHERE used_at IS NULL')->fetchColumn() !== 10) throw new RuntimeException('MFA recovery code hashes were not stored.');
-$recoveryHash = \\HostPilot\\Core\\Mfa::recoveryCodeHash($recoveryCodes[0]);
+$recoveryHash = \HostPilot\Core\Mfa::recoveryCodeHash($recoveryCodes[0]);
 $storedRecovery = $db->prepare('SELECT code_hash FROM admin_mfa_recovery_codes WHERE code_hash=:hash LIMIT 1');
 $storedRecovery->execute([':hash' => $recoveryHash]);
 if ($storedRecovery->fetchColumn() !== $recoveryHash) throw new RuntimeException('Recovery code hash was not persisted.');
@@ -248,7 +248,7 @@ if ($newCookie !== '') $cookie = $newCookie;
     'code' => $recoveryCodes[0],
 ]);
 if (statusCode($replayedRecoveryHeaders) !== 200 || !str_contains($replayedRecovery, 'daha önce kullanılmış')) throw new RuntimeException('A consumed recovery code was accepted a second time.');
-$nextStepCode = \\HostPilot\\Core\\Mfa::codeAt($totpSecret, (intdiv(time(), 30) + 1) * 30);
+$nextStepCode = \HostPilot\Core\Mfa::codeAt($totpSecret, (intdiv(time(), 30) + 1) * 30);
 [$totpLogin, $totpLoginHeaders] = httpRequest($base . 'admin/login', 'POST', $cookie, [
     '_token' => csrfFromHtml($replayedRecovery),
     'code' => (string)$nextStepCode,
