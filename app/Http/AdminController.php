@@ -24,12 +24,13 @@ final class AdminController
                 $error = 'Oturum doğrulaması başarısız.';
             } elseif (is_array($challenge)) {
                 $userId = (int)($challenge['user_id'] ?? 0);
+                $challengeAuthVersion = (int)($challenge['auth_version'] ?? 0);
                 $code = trim((string)($_POST['code'] ?? ''));
                 if ($userId > 0 && !Auth::consumeMfaAttempt()) {
                     $method = \HostPilot\Core\Mfa::verifyCode($this->db, $userId, $code, $this->applicationKey);
                     if ($method !== null) {
-                        $query = $this->db->prepare("SELECT id,name,email,role,status,auth_version FROM users WHERE id=:id AND status='active' AND role IN ('super_admin','admin','staff') LIMIT 1");
-                        $query->execute([':id' => $userId]);
+                        $query = $this->db->prepare("SELECT id,name,email,role,status,auth_version FROM users WHERE id=:id AND auth_version=:auth_version AND status='active' AND role IN ('super_admin','admin','staff') LIMIT 1");
+                        $query->execute([':id' => $userId, ':auth_version' => $challengeAuthVersion]);
                         $user = $query->fetch(PDO::FETCH_ASSOC);
                         if (is_array($user)) {
                             if ($method === 'recovery') \HostPilot\Core\SecurityAudit::record($this->db, 'auth.mfa_recovery_used', $userId);
@@ -47,7 +48,7 @@ final class AdminController
                     if (\HostPilot\Core\Mfa::isEnabled($this->db, (int)$user['id'])) {
                         session_regenerate_id(true);
                         unset($_SESSION['hostpilot_csrf']);
-                        $_SESSION['hostpilot_mfa_challenge'] = ['user_id' => (int)$user['id'], 'expires_at' => time() + 300];
+                        $_SESSION['hostpilot_mfa_challenge'] = ['user_id' => (int)$user['id'], 'auth_version' => (int)($user['auth_version'] ?? 1), 'expires_at' => time() + 300];
                         $challenge = $_SESSION['hostpilot_mfa_challenge'];
                     } else {
                         Auth::completeLogin($this->db, $user);
