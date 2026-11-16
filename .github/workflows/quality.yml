@@ -45,6 +45,8 @@ jobs:
         run: php tests/auth_rate_limit.php
       - name: Test security audit event policy
         run: php tests/security_audit.php
+      - name: Test operational audit coverage
+        run: php tests/operational_audit_coverage.php
       - name: Test centralized admin authorization
         run: php tests/authorization.php
       - name: Test staff permission catalog
