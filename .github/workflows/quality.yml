@@ -43,6 +43,8 @@ jobs:
         run: php tests/payment_idempotency_policy.php
       - name: Test payment gateway protocol contracts
         run: php tests/payment_gateway_contracts.php
+      - name: Test iyzico retrieve response verification policy
+        run: php tests/iyzico_retrieve_verification.php
       - name: Test manual payment reconciliation policy
         run: php tests/payment_reconciliation_policy.php
       - name: Test hosting transport SSRF policy
