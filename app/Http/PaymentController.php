@@ -337,9 +337,23 @@ final class PaymentController
         if(!$tx){http_response_code(404);echo 'NOT_FOUND';return;}
         $paid=(int)$total;
         $expectedAmount=(int)round((float)$tx['amount']*100);
-        if($status==='success'&&$paid===$expectedAmount){
-            $this->settle($tx,'success',$oid,'PayTR callback doğrulandı');
-        }else{$this->updateTransaction((int)$tx['id'],['status'=>'failed','response_code'=>$status,'safe_message'=>'PayTR ödeme başarısız veya tutar eşleşmedi']);}
+        $callbackCurrency=strtoupper(trim((string)($_POST['currency']??'')));
+        if($status==='success'){
+            // PayTR documents that collected total_amount can differ from payment_amount
+            // (for example, installment/alternative payment flows). A verified capture
+            // with a different amount must never be labelled failed or silently settled.
+            if(!ctype_digit($total)||$paid<1||$paid!==$expectedAmount||($callbackCurrency!==''&&$callbackCurrency!=='TL')){
+                $this->updateTransaction((int)$tx['id'],[
+                    'status'=>'review',
+                    'response_code'=>'amount_mismatch_review',
+                    'safe_message'=>'PayTR başarılı ödeme bildirdi ancak tahsilat tutarı veya para birimi beklenen değerle eşleşmiyor. Sağlayıcı panelinde mutabakat gerekiyor.'
+                ]);
+            }else{
+                $this->settle($tx,'success',$oid,'PayTR callback doğrulandı');
+            }
+        }else{
+            $this->updateTransaction((int)$tx['id'],['status'=>'failed','response_code'=>$status,'safe_message'=>'PayTR ödeme onaylanmadı']);
+        }
         header('Content-Type: text/plain; charset=utf-8');echo 'OK';
     }
 
