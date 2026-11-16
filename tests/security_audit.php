@@ -15,4 +15,6 @@ if (SecurityAudit::sanitizeUserAgent("Browser\r\nInjected: yes") !== 'BrowserInj
 if (SecurityAudit::sanitizeUserAgent(str_repeat('a', 300)) !== str_repeat('a', 255)) throw new RuntimeException('User-agent length limit failed.');
 $metadata = SecurityAudit::sanitizeMetadata(['role' => 'admin', 'email' => 'secret@example.test', 'token' => 'secret', 'request_id' => 7, 'action' => 'declined']);
 if ($metadata !== ['role' => 'admin', 'request_id' => 7, 'action' => 'declined']) throw new RuntimeException('Sensitive metadata was not discarded.');
+$completedMetadata = SecurityAudit::sanitizeMetadata(['request_id'=>9,'action'=>'completed','email'=>'private@example.test']);
+if ($completedMetadata !== ['request_id'=>9,'action'=>'completed']) throw new RuntimeException('Completed erasure audit metadata was not safely allowlisted.');
 echo 'PASS security audit event allowlist, IP hashing, user-agent sanitization and metadata minimization.' . PHP_EOL;
