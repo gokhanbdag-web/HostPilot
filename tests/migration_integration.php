@@ -84,7 +84,7 @@ try {
 $applied = MigrationRunner::runPending($pdo, $directory, true);
 if (count($applied) !== 28) throw new RuntimeException('Expected 28 applied migrations; got ' . count($applied) . '.');
 $appliedCount = (int)$pdo->query('SELECT COUNT(*) FROM migrations')->fetchColumn();
-if ($appliedCount !== 27) throw new RuntimeException('Expected exactly 27 migration tracking rows.');
+if ($appliedCount !== 28) throw new RuntimeException('Expected exactly 28 migration tracking rows.');
 if (MigrationRunner::pending($pdo, $directory) !== []) throw new RuntimeException('Pending migrations remain after successful run.');
 if (MigrationRunner::runPending($pdo, $directory, true) !== []) throw new RuntimeException('Second run was not a no-op.');
 
@@ -115,7 +115,7 @@ $verified=$pdo->prepare("SELECT status,email_verified_at FROM users WHERE id=:id
 $verified->execute([':id'=>$verificationUserId]);
 $verifiedRow=$verified->fetch(PDO::FETCH_ASSOC);
 if (($verifiedRow['status']??'')!=='active'||empty($verifiedRow['email_verified_at'])) throw new RuntimeException('Email verification did not activate the pending customer.');
-echo 'MySQL/MariaDB migration integration passed: 27 migrations, staff defaults, partial-DDL retry, confirmation guard, tracking and idempotent second run.' . PHP_EOL;
+echo 'MySQL/MariaDB migration integration passed: 28 migrations, staff defaults, partial-DDL retry, confirmation guard, tracking and idempotent second run.' . PHP_EOL;
 
 // Compare the SQL migration path with the retained legacy PHP migration path
 // on an independent clean schema. This remains an ephemeral CI-only database.
