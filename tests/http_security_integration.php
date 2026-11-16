@@ -477,7 +477,7 @@ try {
     $paymentForm=$request('/client/invoices/'.$invoiceA.'/pay',$cookieA);
     $assert($paymentForm['status']===200 && str_contains($paymentForm['body'],'Bu fatura için bir ödeme işlemi bekliyor')
         && !str_contains($paymentForm['body'],'<form method="post">'),
-        'customer payment page explains a pending attempt and suppresses another payment form');
+        'customer payment page explains a pending attempt and suppresses another payment form; status='.$paymentForm['status'].'; body='.substr(strip_tags($paymentForm['body']),0,900));
     $paymentSecurityPage=$request('/client/security/mfa',$cookieA);
     $paymentToken=$getToken($paymentSecurityPage['body']);
     $beforePaymentAttempts=(int)$pdo->query("SELECT COUNT(*) FROM payment_transactions WHERE invoice_id=".$invoiceA)->fetchColumn();
