@@ -153,14 +153,14 @@ final class PaymentController
             }else{
                 $this->db->beginTransaction();
                 $lock=$this->db->prepare('SELECT * FROM payment_transactions WHERE id=:id FOR UPDATE');$lock->execute([':id'=>$id]);$current=$lock->fetch();
-                if(!$current||$current['status']!=='review')throw new \\RuntimeException('İşlem başka bir oturum tarafından güncellenmiş.');
+                if(!$current||$current['status']!=='review')throw new \RuntimeException('İşlem başka bir oturum tarafından güncellenmiş.');
                 $exists=$this->db->prepare("SELECT 1 FROM payment_reconciliations WHERE payment_transaction_id=:id AND decision='no_capture_confirmed' LIMIT 1");$exists->execute([':id'=>$id]);
-                if($exists->fetchColumn())throw new \\RuntimeException('Bu işlem için tahsilat olmadığı zaten kaydedilmiş.');
+                if($exists->fetchColumn())throw new \RuntimeException('Bu işlem için tahsilat olmadığı zaten kaydedilmiş.');
                 $insert=$this->db->prepare("INSERT INTO payment_reconciliations(payment_transaction_id,admin_user_id,decision,provider_reference,amount,currency,reason,created_at) VALUES(:tx,:admin,'no_capture_confirmed',:reference,:amount,:currency,:reason,:created)");
                 $insert->execute([':tx'=>$id,':admin'=>$actor['id'],':reference'=>$reference,':amount'=>$current['amount'],':currency'=>$current['currency'],':reason'=>$reason,':created'=>gmdate('Y-m-d H:i:s')]);
                 $update=$this->db->prepare("UPDATE payment_transactions SET status='cancelled',response_code='manual_no_capture_confirmed',safe_message='Sağlayıcı panelinde tahsilat olmadığı admin tarafından doğrulandı; geç gelen callback tahsilat oluşturamaz.',updated_at=:updated WHERE id=:id AND status='review'");
                 $update->execute([':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$id]);
-                if($update->rowCount()!==1)throw new \\RuntimeException('Ödeme işlemi güvenli biçimde kapatılamadı.');
+                if($update->rowCount()!==1)throw new \RuntimeException('Ödeme işlemi güvenli biçimde kapatılamadı.');
                 $this->db->commit();
                 SecurityAudit::record($this->db,'payment.no_capture_confirmed',(int)$actor['id'],['resource_id'=>$id,'action'=>'no_capture_confirmed']);
                 $this->logPaymentReconciliation('NO_CAPTURE_CONFIRMED',$id,(int)$actor['id'],$reference);
