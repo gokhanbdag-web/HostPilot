@@ -9,9 +9,11 @@ final class GatewayTransport
     public static function postForm(string $url,array $data):array
     {
         $body=http_build_query($data,'','&',PHP_QUERY_RFC3986);
-        [$status,$response]=self::request($url,$body,'application/x-www-form-urlencoded');
+        self::validateEndpoint($url);
+        try{[$status,$response]=self::request($url,$body,'application/x-www-form-urlencoded');}
+        catch(\Throwable $e){throw new GatewayTransportException('Ödeme sağlayıcısı bağlantısının sonucu doğrulanamadı.',$e->getCode(),$e);}
         $json=json_decode($response,true);
-        if($status<200||$status>=300||!is_array($json))throw new \RuntimeException('Ödeme sağlayıcısından geçerli yanıt alınamadı (HTTP '.$status.').');
+        if($status<200||$status>=300||!is_array($json))throw new GatewayTransportException('Ödeme sağlayıcısından doğrulanabilir yanıt alınamadı (HTTP '.$status.').');
         return $json;
     }
 
@@ -21,11 +23,14 @@ final class GatewayTransport
         if(!is_string($body))throw new \RuntimeException('Ödeme isteği hazırlanamadı.');
         $rnd=(string)round(microtime(true)*1000).bin2hex(random_bytes(5));
         $authorization=self::buildIyzicoAuthorization($path,$body,$apiKey,$secretKey,$rnd);
-        [$status,$response]=self::request($url,$body,'application/json',[
-            'Authorization: '.$authorization,'x-iyzi-rnd: '.$rnd
-        ],$path);
+        self::validateEndpoint($url,$path);
+        try{
+            [$status,$response]=self::request($url,$body,'application/json',[
+                'Authorization: '.$authorization,'x-iyzi-rnd: '.$rnd
+            ],$path);
+        }catch(\Throwable $e){throw new GatewayTransportException('iyzico bağlantısının sonucu doğrulanamadı.',$e->getCode(),$e);}
         $json=json_decode($response,true);
-        if($status<200||$status>=300||!is_array($json))throw new \RuntimeException('iyzico geçerli bir yanıt döndürmedi (HTTP '.$status.').');
+        if($status<200||$status>=300||!is_array($json))throw new GatewayTransportException('iyzico doğrulanabilir yanıt döndürmedi (HTTP '.$status.').');
         return $json;
     }
 

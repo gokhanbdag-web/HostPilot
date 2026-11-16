@@ -60,3 +60,11 @@ Yeni sürümlerde bu dosyaya tarihli başlık altında kullanıcıya görünen d
 - cURL ve cURL bulunmayan PHP stream bağlantılarında HTTP yönlendirmeleri kapatıldı; TLS sertifika/hostname doğrulaması zorunlu tutuldu.
 - Sağlayıcı yanıtları 1 MiB ile sınırlandı; her iki taşıma yolu da sınırı aşan yanıtları reddediyor.
 - Yeni güvenlik politika testleri CI'ya eklendi; gerçek merchant/sandbox isteği gönderilmedi.
+
+## 2026-11-16 · 2026.11.16.18
+
+- PayTR/iyzico bağlantı zaman aşımı, bozuk HTTP yanıtı veya doğrulanamayan sağlayıcı yanıtı artık otomatik başarısız sayılmıyor; işlem manuel incelemeye alınıyor.
+- Sağlayıcıdan açık başarısızlık yanıtı gelen başlatmalar başarısız olarak kalıyor; belirsiz sonuçlarda otomatik yeniden deneme veya yeni tahsilat açılmıyor.
+- Sağlayıcı oturumu oluşturulmuş olabileceği halde form/token bilgisi kaydedilemezse işlem incelemeye alınıyor.
+- Müşteri ödeme sayfası bekleyen ve incelemedeki işlemleri açıkça gösteriyor ve ikinci ödeme formunu göstermiyor.
+- Yeni ödeme başlatma belirsizliği ve müşteri arayüzü politika testleri CI'ya eklendi; gerçek sağlayıcı isteği gönderilmedi.

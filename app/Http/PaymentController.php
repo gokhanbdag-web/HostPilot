@@ -8,6 +8,7 @@ use HostPilot\Core\EmailService;
 use HostPilot\Core\SecurityAudit;
 use HostPilot\Core\SecretVault;
 use HostPilot\Payment\GatewayTransport;
+use HostPilot\Payment\GatewayTransportException;
 use HostPilot\Payment\IyzicoSignature;
 use HostPilot\Payment\PaytrRequest;
 use HostPilot\Payment\PaytrSignature;
@@ -224,10 +225,11 @@ final class PaymentController
                 if(in_array($invoice['status'],['cancelled','refunded'],true)){$this->db->commit();http_response_code(409);echo 'İptal edilmiş veya iade edilmiş fatura için ödeme alınamaz.';return;}
                 $active=$this->db->prepare("SELECT id,status FROM payment_transactions WHERE invoice_id=:invoice AND status IN ('pending','review') ORDER BY id DESC LIMIT 1 FOR UPDATE");
                 $active->execute([':invoice'=>$invoiceId]);
-                if($active->fetch()){
+                $activeAttempt=$active->fetch();
+                if($activeAttempt){
                     $this->db->commit();
                     http_response_code(409);
-                    $this->paymentPage($invoice,$enabled,'Bu fatura için zaten bekleyen bir ödeme işlemi var. Sonuç netleşmeden yeni bir ödeme başlatılamaz. Lütfen destek ekibiyle iletişime geçin.');
+                    $this->paymentPage($invoice,$enabled,'',(string)$activeAttempt['status']);
                     return;
                 }
                 $amount=round((float)$invoice['total']-(float)$invoice['amount_paid'],2);
@@ -243,22 +245,33 @@ final class PaymentController
                 return;
             }catch(Throwable $e){
                 if($this->db->inTransaction())$this->db->rollBack();
-                if($txId>0)$this->updateTransaction($txId,['status'=>'failed','response_code'=>'init_failed','safe_message'=>'Ödeme oturumu başlatılamadı']);
+                $uncertain=$e instanceof GatewayTransportException;
+                if($txId>0)$this->updateTransaction($txId,[
+                    'status'=>$uncertain?'review':'failed',
+                    'response_code'=>$uncertain?'init_result_uncertain':'init_failed',
+                    'safe_message'=>$uncertain?'Sağlayıcı isteğinin sonucu kesin olarak doğrulanamadı. Mükerrer tahsilatı önlemek için manuel inceleme gerekiyor.':'Ödeme oturumu sağlayıcı tarafından başlatılamadı'
+                ]);
                 error_log('[HostPilot] Payment initialization: '.$e->getMessage());
                 http_response_code(502);
-                $this->paymentPage($invoice,$enabled,'Ödeme başlatılamadı. Bilgileri kontrol edip tekrar deneyin.');
+                $this->paymentPage($invoice,$enabled,$uncertain?'Ödeme sağlayıcısından kesin sonuç alınamadı. Yeni ödeme başlatmayın; işlem sağlayıcı panelinde kontrol edilerek sonuçlandırılacaktır.':'Ödeme başlatılamadı. Bilgileri kontrol edip tekrar deneyin.',$uncertain?'review':null);
                 return;
             }
         }
-        $this->paymentPage($invoice,$enabled,'');
+        $activeQuery=$this->db->prepare("SELECT status FROM payment_transactions WHERE invoice_id=:invoice AND status IN ('pending','review') ORDER BY id DESC LIMIT 1");
+        $activeQuery->execute([':invoice'=>$invoiceId]);
+        $activeStatus=$activeQuery->fetchColumn();
+        $this->paymentPage($invoice,$enabled,'',is_string($activeStatus)?$activeStatus:null);
     }
 
-    private function paymentPage(array $invoice,array $enabled,string $error):void
+    private function paymentPage(array $invoice,array $enabled,string $error,?string $activeStatus=null):void
     {
         $this->pageStart('Fatura ödemesi');
         echo '<main class="detail"><a class="brand" href="'.$this->url('/client').'">HOST<span>PILOT</span></a><a class="back" href="'.$this->url('/client/invoices').'">← Faturalarıma dön</a><section class="productdetail"><small>GÜVENLİ ÖDEME</small><h1>#'.$this->e($invoice['invoice_number']).'</h1><h2>'.number_format((float)$invoice['total']-(float)$invoice['amount_paid'],2,',','.').' '.$this->e($invoice['currency']).'</h2><p>Ödeme sağlayıcısına yönlendirilmeden önce bilgilerinizi kontrol edin.</p>';
-        if($error!=='')echo '<div class="alert">'.$this->e($error).'</div>';
+        if($activeStatus==='review')echo '<div class="alert">Bu ödeme işlemi manuel incelemede. Sağlayıcı sonucu doğrulanmadan yeni bir ödeme başlatılamaz.</div>';
+        elseif($activeStatus==='pending')echo '<div class="notice">Bu fatura için bir ödeme işlemi bekliyor. Sonuç netleşene kadar yeni ödeme başlatılamaz.</div>';
+        elseif($error!=='')echo '<div class="alert">'.$this->e($error).'</div>';
         if(!$enabled)echo '<p>Şu anda etkin bir çevrimiçi ödeme yöntemi bulunmuyor. Lütfen yönetimle iletişime geçin.</p>';
+        elseif(in_array($activeStatus,['pending','review'],true))echo '<p>Ödeme durumunu müşteri panelindeki fatura sayfasından takip edebilirsiniz. Yardım gerekirse destek ekibiyle iletişime geçin.</p>';
         else{
             echo '<form method="post"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><label>Ödeme yöntemi<select name="gateway" required>';
             foreach($enabled as $g)echo '<option value="'.$g.'">'.($g==='paytr'?'PayTR':'iyzico Checkout Form').'</option>';
@@ -282,8 +295,13 @@ final class PaymentController
             'ok_url'=>$this->absolute('/payment/return'),'fail_url'=>$this->absolute('/payment/return')
         ],$key,$salt);
         $result=GatewayTransport::postForm('https://www.paytr.com/odeme/api/get-token',$payload);
-        if(($result['status']??'')!=='success'||empty($result['token']))throw new \RuntimeException((string)($result['reason']??'PayTR iframe token üretilemedi.'));
-        $this->updateTransaction($txId,['request_reference'=>$merchantOid]);
+        $providerStatus=strtolower((string)($result['status']??''));
+        if(in_array($providerStatus,['failed','failure','error'],true))throw new \RuntimeException((string)($result['reason']??'PayTR iframe token üretilemedi.'));
+        if($providerStatus!=='success')throw new GatewayTransportException('PayTR yanıtı ödeme oturumunun durumunu doğrulamıyor.');
+        try{
+            if(empty($result['token']))throw new \RuntimeException('PayTR başarılı yanıtında ödeme formu anahtarı bulunamadı.');
+            $this->updateTransaction($txId,['request_reference'=>$merchantOid]);
+        }catch(Throwable $e){throw new GatewayTransportException('PayTR ödeme oturumu oluşturuldu ancak kullanılabilir form bilgisi kaydedilemedi.',$e->getCode(),$e);}
         $this->pageStart('PayTR güvenli ödeme');
         echo '<main class="detail"><a class="brand" href="'.$this->url('/client').'">HOST<span>PILOT</span></a><section class="productdetail"><h1>PayTR güvenli ödeme</h1><iframe src="https://www.paytr.com/odeme/guvenli/'.$this->e((string)$result['token']).'" id="paytriframe" frameborder="0" scrolling="no" style="width:100%;min-height:720px"></iframe><script src="https://www.paytr.com/js/iframeResizer.min.js?v2"></script><script>if(window.iFrameResize){iFrameResize({},\"#paytriframe\")}</script></section></main>';$this->pageEnd();
     }
@@ -311,11 +329,16 @@ final class PaymentController
         ];
         $path='/payment/iyzipos/checkoutform/initialize/auth/ecom';
         $result=GatewayTransport::postJson($base.$path,$path,$body,$api,$secret);
-        if(($result['status']??'')!=='success'||empty($result['token']))throw new \RuntimeException((string)($result['errorMessage']??'iyzico ödeme formu oluşturulamadı.'));
-        $token=(string)$result['token'];$this->updateTransaction($txId,['request_reference'=>$token]);
-        if(!empty($result['paymentPageUrl'])){$this->redirectExternal((string)$result['paymentPageUrl']);}
-        $html=base64_decode((string)($result['checkoutFormContent']??''),true);
-        if($html===false||$html==='')throw new \RuntimeException('iyzico ödeme formu içeriği alınamadı.');
+        $providerStatus=strtolower((string)($result['status']??''));
+        if(in_array($providerStatus,['failed','failure','error'],true))throw new \RuntimeException((string)($result['errorMessage']??'iyzico ödeme formu oluşturulamadı.'));
+        if($providerStatus!=='success')throw new GatewayTransportException('iyzico yanıtı ödeme oturumunun durumunu doğrulamıyor.');
+        try{
+            if(empty($result['token']))throw new \RuntimeException('iyzico başarılı yanıtında ödeme formu anahtarı bulunamadı.');
+            $token=(string)$result['token'];$this->updateTransaction($txId,['request_reference'=>$token]);
+            if(!empty($result['paymentPageUrl'])){$this->redirectExternal((string)$result['paymentPageUrl']);}
+            $html=base64_decode((string)($result['checkoutFormContent']??''),true);
+            if($html===false||$html==='')throw new \RuntimeException('iyzico ödeme formu içeriği alınamadı.');
+        }catch(Throwable $e){if($e instanceof GatewayTransportException)throw $e;throw new GatewayTransportException('iyzico ödeme oturumu oluşturuldu ancak form bilgisi güvenle kullanılamadı.',$e->getCode(),$e);}
         $this->pageStart('iyzico güvenli ödeme');echo '<main class="detail"><a class="brand" href="'.$this->url('/client').'">HOST<span>PILOT</span></a><section class="productdetail"><h1>iyzico güvenli ödeme</h1><div id="iyzipay-checkout-form" class="responsive">'.$html.'</div></section></main>';$this->pageEnd();
     }
 
