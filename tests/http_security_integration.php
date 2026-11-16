@@ -289,10 +289,10 @@ try {
         'paid invoice and successful payment evidence remain for statutory retention');
 
     $domainSyncToken=hash_hmac('sha256','HostPilot domain sync cron v1',$cronKey);
-    $r=$request('/cron/domain-expiry-sync',$cookieCron,'GET',[],['Authorization: Bearer '.$domainSyncToken]);
-    $assert($r['status']===200 && str_contains($r['body'],'"ok":true'),'cron worker accepts a valid Authorization Bearer header');
     $r=$request('/cron/domain-expiry-sync',$cookieCron,'GET',[],['X-HostPilot-Cron-Token: '.$domainSyncToken]);
-    $assert($r['status']===200 && str_contains($r['body'],'"ok":true'),'cron worker accepts the dedicated token header');
+    $assert($r['status']===200 && str_contains($r['body'],'"ok":true'),'cron worker accepts a valid dedicated token header over HTTP');
+    $r=$request('/cron/domain-expiry-sync',$cookieCron,'GET',[],['X-HostPilot-Cron-Token: '.str_repeat('0',64)]);
+    $assert($r['status']===403,'cron worker rejects an invalid dedicated token header over HTTP');
 
     $r=$request('/admin',$cookieA);
     $assert($r['status']===403,'customer cannot access admin route over HTTP');
