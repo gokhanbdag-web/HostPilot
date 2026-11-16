@@ -4,6 +4,8 @@ namespace HostPilot\Payment;
 
 final class GatewayTransport
 {
+    private const MAX_RESPONSE_BYTES=1048576;
+
     public static function postForm(string $url,array $data):array
     {
         $body=http_build_query($data,'','&',PHP_QUERY_RFC3986);
@@ -21,7 +23,7 @@ final class GatewayTransport
         $authorization=self::buildIyzicoAuthorization($path,$body,$apiKey,$secretKey,$rnd);
         [$status,$response]=self::request($url,$body,'application/json',[
             'Authorization: '.$authorization,'x-iyzi-rnd: '.$rnd
-        ]);
+        ],$path);
         $json=json_decode($response,true);
         if($status<200||$status>=300||!is_array($json))throw new \RuntimeException('iyzico geçerli bir yanıt döndürmedi (HTTP '.$status.').');
         return $json;
@@ -30,28 +32,72 @@ final class GatewayTransport
     public static function buildIyzicoAuthorization(string $path,string $body,string $apiKey,string $secretKey,string $randomKey):string
     {
         $signature=hash_hmac('sha256',$randomKey.$path.$body,$secretKey);
-        return 'IYZWSv2 '.base64_encode('apiKey:'.$apiKey.'&randomKey:'.$randomKey.'&signature:'.$signature);
+        return 'IYZWSv2 '.base64_encode('apiKey:'.$apiKey.'&randomKey:'.$randomKey.'&signature='.$signature);
     }
 
-    private static function request(string $url,string $body,string $contentType,array $extra=[]):array
+    /**
+     * Only the fixed HTTPS API endpoints used by HostPilot payment integrations are allowed.
+     */
+    public static function validateEndpoint(string $url,?string $expectedPath=null):array
     {
+        $parts=parse_url($url);
+        if(!is_array($parts)||strtolower((string)($parts['scheme']??''))!=='https'
+            ||isset($parts['user'])||isset($parts['pass'])||isset($parts['query'])||isset($parts['fragment'])
+            ||isset($parts['port'])&&$parts['port']!==443){
+            throw new \RuntimeException('Ödeme sağlayıcısı HTTPS adresi güvenlik politikasına uymuyor.');
+        }
+        $host=strtolower(rtrim((string)($parts['host']??''),'.'));
+        $path=(string)($parts['path']??'');
+        $allowed=[
+            'www.paytr.com'=>['/odeme/api/get-token'],
+            'api.iyzipay.com'=>['/payment/iyzipos/checkoutform/initialize/auth/ecom','/payment/iyzipos/checkoutform/auth/ecom/detail'],
+            'sandbox-api.iyzipay.com'=>['/payment/iyzipos/checkoutform/initialize/auth/ecom','/payment/iyzipos/checkoutform/auth/ecom/detail']
+        ];
+        if(!isset($allowed[$host])||!in_array($path,$allowed[$host],true)
+            ||($expectedPath!==null&&$expectedPath!==$path)){
+            throw new \RuntimeException('Ödeme sağlayıcısı adresi izin verilen uç noktalardan biri değil.');
+        }
+        return ['host'=>$host,'path'=>$path];
+    }
+
+    public static function assertResponseSize(int $bytes):void
+    {
+        if($bytes<0||$bytes>self::MAX_RESPONSE_BYTES)throw new \RuntimeException('Ödeme sağlayıcısı yanıtı izin verilen boyutu aşıyor.');
+    }
+
+    private static function request(string $url,string $body,string $contentType,array $extra=[],?string $expectedPath=null):array
+    {
+        self::validateEndpoint($url,$expectedPath);
         $headers=array_merge(['Content-Type: '.$contentType,'Accept: application/json'],$extra);
         if(function_exists('curl_init')){
-            $ch=curl_init($url);
+            $ch=curl_init($url);$response='';$tooLarge=false;
             curl_setopt_array($ch,[
-                CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>$body,CURLOPT_RETURNTRANSFER=>true,
+                CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>$body,CURLOPT_RETURNTRANSFER=>false,
                 CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>35,CURLOPT_SSL_VERIFYPEER=>true,
-                CURLOPT_SSL_VERIFYHOST=>2,CURLOPT_HTTPHEADER=>$headers
+                CURLOPT_SSL_VERIFYHOST=>2,CURLOPT_FOLLOWLOCATION=>false,CURLOPT_MAXREDIRS=>0,
+                CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS,CURLOPT_REDIR_PROTOCOLS=>CURLPROTO_HTTPS,
+                CURLOPT_HTTPHEADER=>$headers,
+                CURLOPT_WRITEFUNCTION=>static function($handle,string $chunk)use(&$response,&$tooLarge):int{
+                    if(strlen($response)+strlen($chunk)>self::MAX_RESPONSE_BYTES){$tooLarge=true;return 0;}
+                    $response.=$chunk;return strlen($chunk);
+                }
             ]);
-            $response=curl_exec($ch);$error=curl_error($ch);$status=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);curl_close($ch);
-            if(!is_string($response))throw new \RuntimeException('Ödeme bağlantısı kurulamadı: '.$error);
+            $ok=curl_exec($ch);$error=curl_error($ch);$status=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);curl_close($ch);
+            if($tooLarge)throw new \RuntimeException('Ödeme sağlayıcısı yanıtı izin verilen boyutu aşıyor.');
+            if($ok===false)throw new \RuntimeException('Ödeme bağlantısı kurulamadı: '.$error);
             return [$status,$response];
         }
         $headerText=implode("\r\n",$headers);
-        $context=stream_context_create(['http'=>['method'=>'POST','header'=>$headerText,'content'=>$body,'timeout'=>35,'ignore_errors'=>true],
-            'ssl'=>['verify_peer'=>true,'verify_peer_name'=>true]]);
-        $response=@file_get_contents($url,false,$context);
-        if(!is_string($response))throw new \RuntimeException('Sunucuda cURL veya etkin HTTPS stream desteği bulunamadı.');
+        $context=stream_context_create(['http'=>[
+            'method'=>'POST','header'=>$headerText,'content'=>$body,'timeout'=>35,'ignore_errors'=>true,
+            'follow_location'=>0,'max_redirects'=>0,'protocol_version'=>1.1
+        ],'ssl'=>['verify_peer'=>true,'verify_peer_name'=>true,'allow_self_signed'=>false]]);
+        $stream=@fopen($url,'rb',false,$context);
+        if($stream===false)throw new \RuntimeException('Sunucuda güvenli ödeme HTTPS bağlantısı kurulamadı.');
+        $response=stream_get_contents($stream,self::MAX_RESPONSE_BYTES+1);
+        fclose($stream);
+        if(!is_string($response))throw new \RuntimeException('Ödeme sağlayıcısından yanıt okunamadı.');
+        self::assertResponseSize(strlen($response));
         $status=0;
         foreach(($http_response_header??[]) as $line)if(preg_match('#^HTTP/\\S+\\s+(\\d{3})#',$line,$m))$status=(int)$m[1];
         return [$status,$response];
