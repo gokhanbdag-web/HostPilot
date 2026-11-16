@@ -23,6 +23,9 @@ final class SecurityAudit
         'auth.mfa_challenge_failed',
         'auth.mfa_recovery_used',
         'auth.mfa_recovery_rotated',
+        'privacy.exported',
+        'privacy.erasure_requested',
+        'privacy.request_reviewed',
     ];
 
     public static function record(PDO $db, string $event, ?int $userId = null, array $metadata = []): void
@@ -75,6 +78,8 @@ final class SecurityAudit
             && in_array($metadata['role'], ['super_admin', 'admin', 'staff', 'client'], true)) {
             $safe['role'] = $metadata['role'];
         }
+        if (isset($metadata['request_id']) && is_int($metadata['request_id']) && $metadata['request_id'] > 0) $safe['request_id'] = $metadata['request_id'];
+        if (isset($metadata['action']) && is_string($metadata['action']) && in_array($metadata['action'], ['export','under_review','declined'], true)) $safe['action'] = $metadata['action'];
         return $safe;
     }
 }
