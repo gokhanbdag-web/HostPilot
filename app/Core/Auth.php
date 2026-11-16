@@ -47,6 +47,51 @@ final class Auth
         return true;
     }
 
+
+    /** Verify a password without creating an authenticated session; used by the admin MFA gate. */
+    public static function verifyCredentials(PDO $db, string $identifier, string $password): ?array
+    {
+        $identifier = strtolower(trim($identifier));
+        if ($identifier === '' || strlen($identifier) > 254 || $password === '' || strlen($password) > 4096 || self::consumeAttempt()) return null;
+        $versionSelect = self::hasAuthVersionColumn($db) ? ', auth_version' : ', 1 AS auth_version';
+        $statement = $db->prepare("SELECT id, name, email, password_hash, role, status" . $versionSelect . " FROM users WHERE email = :email OR username = :username LIMIT 1");
+        $statement->execute([':email' => $identifier, ':username' => $identifier]);
+        $user = $statement->fetch();
+        if (!$user || ($user['status'] ?? '') !== 'active' || !password_verify($password, (string)$user['password_hash'])) {
+            SecurityAudit::record($db, 'auth.login_failed');
+            return null;
+        }
+        return $user;
+    }
+
+    /** Complete login only after any required second factor has been verified. */
+    public static function completeLogin(PDO $db, array $user): void
+    {
+        if (($user['status'] ?? '') !== 'active' || !in_array((string)($user['role'] ?? ''), ['super_admin', 'admin', 'staff', 'client'], true)) {
+            throw new \RuntimeException('Account cannot be authenticated.');
+        }
+        session_regenerate_id(true);
+        $_SESSION['hostpilot_user'] = [
+            'id' => (int)$user['id'],
+            'name' => (string)$user['name'],
+            'email' => (string)$user['email'],
+            'role' => (string)$user['role'],
+            'auth_version' => (int)($user['auth_version'] ?? 1),
+        ];
+        $_SESSION['hostpilot_auth_created_at'] = time();
+        $_SESSION['hostpilot_auth_last_activity'] = time();
+        unset($_SESSION['hostpilot_csrf'], $_SESSION['hostpilot_mfa_challenge'], $_SESSION['hostpilot_mfa_pending_secret']);
+        self::clearRateLimitBucket();
+        $update = $db->prepare('UPDATE users SET last_login_at = UTC_TIMESTAMP() WHERE id = :id');
+        $update->execute([':id' => (int)$user['id']]);
+        SecurityAudit::record($db, 'auth.login_succeeded', (int)$user['id'], ['role' => (string)$user['role']]);
+    }
+
+    public static function consumeMfaAttempt(): bool
+    {
+        return self::consumeRateLimit('mfa', 10);
+    }
+
     public static function user(): ?array
     {
         $user = $_SESSION['hostpilot_user'] ?? null;

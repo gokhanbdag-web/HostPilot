@@ -98,12 +98,12 @@ function installBrowserApp(PDO $admin, string $host, int $port, string $user, st
         [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true]
     );
     $count = (int)$db->query('SELECT COUNT(*) FROM migrations')->fetchColumn();
-    if ($count !== 24) throw new RuntimeException('Fresh browser install did not apply all 24 migrations; found ' . $count . '.');
+    if ($count !== 25) throw new RuntimeException('Fresh browser install did not apply all 25 migrations; found ' . $count . '.');
     $adminCheck = $db->prepare('SELECT role FROM users WHERE username=:username LIMIT 1');
     $adminCheck->execute([':username' => $username]);
     if ($adminCheck->fetchColumn() !== 'super_admin') throw new RuntimeException('Installer did not create the first super administrator.');
     $adminCheck->closeCursor();
-    foreach (['product_groups','products','orders','services','invoices','payment_transactions','servers','email_outbox','domain_registrations','domain_renewals','password_reset_tokens'] as $table) {
+    foreach (['product_groups','products','orders','services','invoices','payment_transactions','servers','email_outbox','domain_registrations','domain_renewals','password_reset_tokens','admin_mfa','admin_mfa_recovery_codes'] as $table) {
         $check = $db->prepare('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=:table_name');
         $check->execute([':table_name' => $table]);
         if ((int)$check->fetchColumn() !== 1) throw new RuntimeException('Fresh installer schema is missing table ' . $table . '.');
@@ -125,7 +125,7 @@ function cleanupInstallFiles(string $storage): void
 }
 
 [$cookie, $db] = installBrowserApp($admin, $host, $port, $user, $password, $databaseName, $base, 'ci-installer', 'ci-installer@example.test', '');
-echo 'Root browser installer passed: fresh schema, 24 migrations and first administrator.' . PHP_EOL;
+echo 'Root browser installer passed: fresh schema, 25 migrations and first administrator.' . PHP_EOL;
 
 // Simulate a pre-repair installation and verify the authenticated admin upgrade flow.
 $db->exec('ALTER TABLE invoices DROP FOREIGN KEY fk_invoice_service');
@@ -171,8 +171,119 @@ $fk->closeCursor();
 if (count(glob($storage . '/backups/*.sql.gz') ?: []) < 1) throw new RuntimeException('Admin upgrade did not create a compressed pre-upgrade backup.');
 [$currentPage, $currentHeaders] = httpRequest($base . 'admin/database-upgrade', 'GET', $cookie);
 if (statusCode($currentHeaders) !== 200 || !str_contains($currentPage, 'Veritabanı güncel')) throw new RuntimeException('Upgrade page did not report a current database after success.');
-cleanupInstallFiles($storage);
 echo 'Authenticated admin upgrade passed: CSRF confirmation, pre-upgrade backup, maintenance mode and migration recovery.' . PHP_EOL;
+
+// Exercise MFA enrollment, one-time recovery codes, TOTP login and replay protection.
+require_once dirname(__DIR__) . '/app/Core/Mfa.php';
+[$mfaPage, $mfaHeaders] = httpRequest($base . 'admin/security/mfa', 'GET', $cookie);
+if (statusCode($mfaHeaders) !== 200 || !str_contains($mfaPage, 'Durum: Kapalı')) throw new RuntimeException('MFA settings page is unavailable after migration.');
+[$startPage, $startHeaders] = httpRequest($base . 'admin/security/mfa', 'POST', $cookie, [
+    '_token' => csrfFromHtml($mfaPage),
+    'action' => 'start',
+    'password' => 'Test-Installer-Password-2026!',
+]);
+if (statusCode($startHeaders) !== 200 || !preg_match('/<div class="secret">([^<]+)<\/div>/', $startPage, $secretMatch)) {
+    throw new RuntimeException('MFA enrollment did not issue a manual authenticator secret.');
+}
+$totpSecret = html_entity_decode($secretMatch[1], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+$enrollmentCode = \HostPilot\Core\Mfa::codeAt($totpSecret, time());
+if (!is_string($enrollmentCode)) throw new RuntimeException('Unable to generate the enrollment TOTP fixture.');
+[$enabledPage, $enabledHeaders] = httpRequest($base . 'admin/security/mfa', 'POST', $cookie, [
+    '_token' => csrfFromHtml($startPage),
+    'action' => 'enable',
+    'password' => 'Test-Installer-Password-2026!',
+    'code' => $enrollmentCode,
+]);
+if (statusCode($enabledHeaders) !== 200 || !str_contains($enabledPage, 'Kurtarma kodlarınız') || !preg_match('/<pre class="codes">([^<]+)<\/pre>/', $enabledPage, $codesMatch)) {
+    throw new RuntimeException('MFA enrollment did not verify the authenticator and display recovery codes.');
+}
+$recoveryCodes = preg_split('/\\s+/', trim(html_entity_decode($codesMatch[1], ENT_QUOTES | ENT_HTML5, 'UTF-8'))) ?: [];
+if (count($recoveryCodes) !== 10) throw new RuntimeException('MFA enrollment did not create ten recovery codes.');
+$mfaState = $db->query('SELECT secret_enc,last_used_step,enabled_at FROM admin_mfa LIMIT 1')->fetch(PDO::FETCH_ASSOC);
+if (!is_array($mfaState) || $mfaState['enabled_at'] === null || $mfaState['secret_enc'] === $totpSecret) throw new RuntimeException('MFA secret was not encrypted at rest.');
+if ((int)$db->query('SELECT COUNT(*) FROM admin_mfa_recovery_codes WHERE used_at IS NULL')->fetchColumn() !== 10) throw new RuntimeException('MFA recovery code hashes were not stored.');
+$recoveryHash = \HostPilot\Core\Mfa::recoveryCodeHash($recoveryCodes[0]);
+$storedRecovery = $db->prepare('SELECT code_hash FROM admin_mfa_recovery_codes WHERE code_hash=:hash LIMIT 1');
+$storedRecovery->execute([':hash' => $recoveryHash]);
+if ($storedRecovery->fetchColumn() !== $recoveryHash) throw new RuntimeException('Recovery code hash was not persisted.');
+
+[$mfaSettings, $mfaSettingsHeaders] = httpRequest($base . 'admin/security/mfa', 'GET', $cookie);
+[$logoutBody, $logoutHeaders] = httpRequest($base . 'admin/logout', 'POST', $cookie, ['_token' => csrfFromHtml($mfaSettings)]);
+if (statusCode($logoutHeaders) !== 302) throw new RuntimeException('Could not log out before MFA login verification.');
+$cookie = '';
+[$mfaLogin, $mfaLoginHeaders] = httpRequest($base . 'admin/login', 'GET', $cookie);
+$cookie = cookieFromHeaders($mfaLoginHeaders);
+[$challengePage, $challengeHeaders] = httpRequest($base . 'admin/login', 'POST', $cookie, [
+    '_token' => csrfFromHtml($mfaLogin),
+    'email' => 'ci-installer@example.test',
+    'password' => 'Test-Installer-Password-2026!',
+]);
+if (statusCode($challengeHeaders) !== 200 || !str_contains($challengePage, 'authenticator')) throw new RuntimeException('Password login bypassed the required MFA challenge.');
+$newCookie = cookieFromHeaders($challengeHeaders);
+if ($newCookie !== '') $cookie = $newCookie;
+[$recoveryLogin, $recoveryLoginHeaders] = httpRequest($base . 'admin/login', 'POST', $cookie, [
+    '_token' => csrfFromHtml($challengePage),
+    'code' => $recoveryCodes[0],
+]);
+if (statusCode($recoveryLoginHeaders) !== 302) throw new RuntimeException('A valid one-time recovery code did not complete login.');
+$newCookie = cookieFromHeaders($recoveryLoginHeaders);
+if ($newCookie !== '') $cookie = $newCookie;
+if ((int)$db->query('SELECT COUNT(*) FROM admin_mfa_recovery_codes WHERE used_at IS NOT NULL')->fetchColumn() !== 1) throw new RuntimeException('Recovery code was not consumed after login.');
+
+[$mfaSettings, $mfaSettingsHeaders] = httpRequest($base . 'admin/security/mfa', 'GET', $cookie);
+[$logoutBody, $logoutHeaders] = httpRequest($base . 'admin/logout', 'POST', $cookie, ['_token' => csrfFromHtml($mfaSettings)]);
+if (statusCode($logoutHeaders) !== 302) throw new RuntimeException('Could not log out before recovery replay test.');
+$cookie = '';
+[$mfaLogin, $mfaLoginHeaders] = httpRequest($base . 'admin/login', 'GET', $cookie);
+$cookie = cookieFromHeaders($mfaLoginHeaders);
+[$challengePage, $challengeHeaders] = httpRequest($base . 'admin/login', 'POST', $cookie, [
+    '_token' => csrfFromHtml($mfaLogin),
+    'email' => 'ci-installer@example.test',
+    'password' => 'Test-Installer-Password-2026!',
+]);
+$newCookie = cookieFromHeaders($challengeHeaders);
+if ($newCookie !== '') $cookie = $newCookie;
+[$replayedRecovery, $replayedRecoveryHeaders] = httpRequest($base . 'admin/login', 'POST', $cookie, [
+    '_token' => csrfFromHtml($challengePage),
+    'code' => $recoveryCodes[0],
+]);
+if (statusCode($replayedRecoveryHeaders) !== 200 || !str_contains($replayedRecovery, 'daha önce kullanılmış')) throw new RuntimeException('A consumed recovery code was accepted a second time.');
+$testStep = max(intdiv(time(), 30), (int)$mfaState['last_used_step'] + 1);
+$nextStepCode = \HostPilot\Core\Mfa::codeAt($totpSecret, $testStep * 30);
+[$totpLogin, $totpLoginHeaders] = httpRequest($base . 'admin/login', 'POST', $cookie, [
+    '_token' => csrfFromHtml($replayedRecovery),
+    'code' => (string)$nextStepCode,
+]);
+if (statusCode($totpLoginHeaders) !== 302) {
+    $usedStep = (int)$db->query('SELECT last_used_step FROM admin_mfa LIMIT 1')->fetchColumn();
+    throw new RuntimeException('A valid TOTP challenge did not complete login. HTTP=' . statusCode($totpLoginHeaders) . '; expected_step=' . $testStep . '; stored_step=' . $usedStep . '; response=' . substr(strip_tags($totpLogin), 0, 240));
+}
+
+[$mfaSettings, $mfaSettingsHeaders] = httpRequest($base . 'admin/security/mfa', 'GET', cookieFromHeaders($totpLoginHeaders) ?: $cookie);
+$totpCookie = cookieFromHeaders($totpLoginHeaders) ?: $cookie;
+[$logoutBody, $logoutHeaders] = httpRequest($base . 'admin/logout', 'POST', $totpCookie, ['_token' => csrfFromHtml($mfaSettings)]);
+if (statusCode($logoutHeaders) !== 302) throw new RuntimeException('Could not log out before TOTP replay test.');
+$cookie = '';
+[$mfaLogin, $mfaLoginHeaders] = httpRequest($base . 'admin/login', 'GET', $cookie);
+$cookie = cookieFromHeaders($mfaLoginHeaders);
+[$challengePage, $challengeHeaders] = httpRequest($base . 'admin/login', 'POST', $cookie, [
+    '_token' => csrfFromHtml($mfaLogin),
+    'email' => 'ci-installer@example.test',
+    'password' => 'Test-Installer-Password-2026!',
+]);
+$newCookie = cookieFromHeaders($challengeHeaders);
+if ($newCookie !== '') $cookie = $newCookie;
+[$replayedTotp, $replayedTotpHeaders] = httpRequest($base . 'admin/login', 'POST', $cookie, [
+    '_token' => csrfFromHtml($challengePage),
+    'code' => (string)$nextStepCode,
+]);
+if (statusCode($replayedTotpHeaders) !== 200 || !str_contains($replayedTotp, 'daha önce kullanılmış')) throw new RuntimeException('A previously accepted TOTP time step was replayed.');
+echo 'MFA browser flow passed: encrypted enrollment, ten hashed recovery codes, mandatory second factor, one-time recovery, TOTP login and replay rejection.' . PHP_EOL;
+
+// Clean up the test-only MFA fixture before continuing installer failure/retry cases.
+$db->exec('DELETE FROM admin_mfa WHERE user_id = (SELECT id FROM users WHERE username = "ci-installer")');
+cleanupInstallFiles($storage);
+
 
 // Invalid database credentials must fail closed without leaving an install lock or config.
 [$badPage, $badHeaders] = httpRequest($base);
@@ -210,11 +321,11 @@ $firstStatements = \HostPilot\Core\MigrationRunner::splitStatements($firstMigrat
 $partial->exec($firstStatements[0]);
 cleanupInstallFiles($storage);
 [$partialCookie, $partialDb] = installBrowserApp($admin, $host, $port, $user, $password, $partialDatabase, $base, 'ci-partial', 'ci-partial@example.test', '');
-if ((int)$partialDb->query('SELECT COUNT(*) FROM migrations')->fetchColumn() !== 24) {
+if ((int)$partialDb->query('SELECT COUNT(*) FROM migrations')->fetchColumn() !== 25) {
     throw new RuntimeException('Installer did not recover from a partially-created schema.');
 }
 cleanupInstallFiles($storage);
-echo 'Partial-install retry passed: installer completed all 24 migrations after an interrupted first DDL.' . PHP_EOL;
+echo 'Partial-install retry passed: installer completed all 25 migrations after an interrupted first DDL.' . PHP_EOL;
 
 // Verify root/subdirectory-aware browser installation independently.
 $subdirectory = $root . '/ci-subdir';
@@ -222,8 +333,8 @@ if (!mkdir($subdirectory, 0750, true)) throw new RuntimeException('Unable to cre
 file_put_contents($subdirectory . '/index.php', "<?php require dirname(__DIR__) . '/index.php';\n");
 $subDatabase = 'hostpilot_installer_subdir_ci';
 [$subCookie, $subDb] = installBrowserApp($admin, $host, $port, $user, $password, $subDatabase, 'http://127.0.0.1:8080/ci-subdir/', 'ci-subdir', 'ci-subdir@example.test', '/ci-subdir');
-if ((int)$subDb->query('SELECT COUNT(*) FROM migrations')->fetchColumn() !== 24) throw new RuntimeException('Subdirectory installer did not apply all SQL migrations.');
+if ((int)$subDb->query('SELECT COUNT(*) FROM migrations')->fetchColumn() !== 25) throw new RuntimeException('Subdirectory installer did not apply all SQL migrations.');
 cleanupInstallFiles($storage);
 @unlink($subdirectory . '/index.php');
 @rmdir($subdirectory);
-echo 'Subdirectory browser installer passed: base-path configuration and 24 SQL migrations.' . PHP_EOL;
+echo 'Subdirectory browser installer passed: base-path configuration and 25 SQL migrations.' . PHP_EOL;

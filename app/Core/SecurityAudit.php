@@ -17,6 +17,12 @@ final class SecurityAudit
         'auth.login_failed',
         'auth.sessions_revoked',
         'auth.password_reset_completed',
+        'auth.mfa_enabled',
+        'auth.mfa_disabled',
+        'auth.mfa_challenge_succeeded',
+        'auth.mfa_challenge_failed',
+        'auth.mfa_recovery_used',
+        'auth.mfa_recovery_rotated',
     ];
 
     public static function record(PDO $db, string $event, ?int $userId = null, array $metadata = []): void
