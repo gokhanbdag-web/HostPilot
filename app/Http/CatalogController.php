@@ -100,10 +100,22 @@ final class CatalogController
     {
         if(!Auth::check()){$this->redirect('/client/login');}
         $u=Auth::user();if(($u['role']??'')!=='customer'){http_response_code(403);echo 'Müşteri hesabı gerekli.';return;}
-        $q=$this->db->prepare('SELECT id,invoice_number,status,currency,total,amount_paid,issued_at,due_at FROM invoices WHERE user_id=:uid ORDER BY issued_at DESC');$q->execute([':uid'=>$u['id']]);$rows=$q->fetchAll();
+        $q=$this->db->prepare("SELECT i.id,i.invoice_number,i.status,i.currency,i.total,i.amount_paid,i.issued_at,i.due_at,ap.status AS active_payment_status,ap.gateway AS active_payment_gateway,ap.created_at AS active_payment_created_at
+            FROM invoices i LEFT JOIN payment_transactions ap ON ap.id=(SELECT MAX(pt.id) FROM payment_transactions pt WHERE pt.invoice_id=i.id AND pt.user_id=i.user_id AND pt.status IN ('pending','review'))
+            WHERE i.user_id=:uid ORDER BY i.issued_at DESC");$q->execute([':uid'=>$u['id']]);$rows=$q->fetchAll(PDO::FETCH_ASSOC);
         $this->start('Faturalarım');echo '<main class="detail"><a class="brand" href="'.$this->url('/').'">HOST<span>PILOT</span></a><a class="back" href="'.$this->url('/client').'">← Müşteri paneli</a><section class="productdetail"><h1>Faturalarım</h1>';
         if(!$rows)echo '<p>Henüz faturanız bulunmuyor.</p>';
-        foreach($rows as $v){echo '<article class="order"><b>#'.$this->e($v['invoice_number']).'</b><span>'.$this->e($this->invoiceStatus($v['status'])).'</span><p>'.number_format((float)$v['total'],2,',','.').' '.$this->e($v['currency']).' · Düzenlenme: '.date('d.m.Y',strtotime($v['issued_at'])).'</p><small>Son ödeme: '.($v['due_at']?date('d.m.Y',strtotime($v['due_at'])):'—').' · Ödenen: '.number_format((float)$v['amount_paid'],2,',','.').' '.$this->e($v['currency']).'</small><p><a class="button" href="'.$this->url('/client/invoices/'.$v['id']).'">Fatura detayını görüntüle</a></p>';if(in_array($v['status'],['unpaid','partially_paid','overdue'],true))echo '<p><a class="button" href="'.$this->url('/client/invoices/'.$v['id'].'/pay').'">Faturayı öde</a></p>';echo '</article>';}
+        foreach($rows as $v){
+            $activePayment=in_array((string)($v['active_payment_status']??''),['pending','review'],true);
+            echo '<article class="order"><b>#'.$this->e($v['invoice_number']).'</b><span>'.$this->e($this->invoiceStatus($v['status'])).'</span><p>'.number_format((float)$v['total'],2,',','.').' '.$this->e($v['currency']).' · Düzenlenme: '.date('d.m.Y',strtotime($v['issued_at'])).'</p><small>Son ödeme: '.($v['due_at']?date('d.m.Y',strtotime($v['due_at'])):'—').' · Ödenen: '.number_format((float)$v['amount_paid'],2,',','.').' '.$this->e($v['currency']).'</small>';
+            if($activePayment){
+                $activeLabel=$v['active_payment_status']==='review'?'İncelemede':'Ödeme bekliyor';
+                echo '<p class="notice"><b>'.$this->e($activeLabel).'</b> · '.($v['active_payment_gateway']==='paytr'?'PayTR':'iyzico').' işlemi sonuçlanmayı bekliyor.</p>';
+            }
+            echo '<p><a class="button" href="'.$this->url('/client/invoices/'.$v['id']).'">Fatura detayını görüntüle</a></p>';
+            if(in_array($v['status'],['unpaid','partially_paid','overdue'],true)&&!$activePayment)echo '<p><a class="button" href="'.$this->url('/client/invoices/'.$v['id'].'/pay').'">Faturayı öde</a></p>';
+            echo '</article>';
+        }
         echo '</section></main>';$this->end();
     }
 
@@ -115,6 +127,10 @@ final class CatalogController
         $q=$this->db->prepare('SELECT i.*,o.order_number FROM invoices i JOIN orders o ON o.id=i.order_id WHERE i.id=:id AND i.user_id=:uid LIMIT 1');
         $q->execute([':id'=>$invoiceId,':uid'=>$u['id']]);$invoice=$q->fetch(PDO::FETCH_ASSOC);
         if(!$invoice){http_response_code(404);echo 'Fatura bulunamadı.';return;}
+        header('Cache-Control: no-store, max-age=0');
+        header('Pragma: no-cache');
+        $activePaymentQuery=$this->db->prepare("SELECT gateway,status,created_at FROM payment_transactions WHERE invoice_id=:id AND user_id=:uid AND status IN ('pending','review') ORDER BY id DESC LIMIT 1");
+        $activePaymentQuery->execute([':id'=>$invoiceId,':uid'=>$u['id']]);$activePayment=$activePaymentQuery->fetch(PDO::FETCH_ASSOC);
         $itemsQuery=$this->db->prepare('SELECT description,quantity,unit_price,tax_rate,tax_amount,line_total FROM invoice_items WHERE invoice_id=:id ORDER BY id');
         $itemsQuery->execute([':id'=>$invoiceId]);$items=$itemsQuery->fetchAll(PDO::FETCH_ASSOC);
         $paymentsQuery=$this->db->prepare('SELECT gateway,status,currency,amount,created_at FROM payment_transactions WHERE invoice_id=:id AND user_id=:uid ORDER BY id');
@@ -126,8 +142,14 @@ final class CatalogController
         echo '<style>@media print{body{background:#fff!important;color:#111!important}.invoice-detail .brand,.invoice-detail .back,.invoice-actions{display:none!important}.invoice-detail .productdetail{box-shadow:none!important;border:0!important;max-width:none!important}a{color:#111!important;text-decoration:none!important}}</style>';
         echo '<main class="detail invoice-detail"><a class="brand" href="'.$this->url('/').'">HOST<span>PILOT</span></a><a class="back" href="'.$this->url('/client/invoices').'">← Faturalarıma dön</a><section class="productdetail">';
         echo '<div class="invoice-actions" style="display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end"><button type="button" class="button" onclick="window.print()">Yazdır / PDF kaydet</button>';
-        if(in_array($invoice['status'],['unpaid','partially_paid','overdue'],true)&&$remaining>0)echo '<a class="button" href="'.$this->url('/client/invoices/'.$invoiceId.'/pay').'">Faturayı öde</a>';
+        if(in_array($invoice['status'],['unpaid','partially_paid','overdue'],true)&&$remaining>0&&!is_array($activePayment))echo '<a class="button" href="'.$this->url('/client/invoices/'.$invoiceId.'/pay').'">Faturayı öde</a>';
         echo '</div><small>FATURA DETAYI</small><h1>#'.$this->e((string)$invoice['invoice_number']).'</h1><p><b>'.$this->e($this->invoiceStatus((string)$invoice['status'])).'</b> · Sipariş #'.$this->e((string)$invoice['order_number']).'</p>';
+        if(is_array($activePayment)){
+            $activeLabel=$activePayment['status']==='review'?'İncelemede':'Bekliyor';
+            $activeGateway=$activePayment['gateway']==='paytr'?'PayTR':'iyzico';
+            $activeCopy=$activePayment['status']==='review'?'Ödeme sağlayıcısının sonucu doğrulanana kadar yeni ödeme başlatılamaz. İşlem destek ekibi tarafından kontrol ediliyor.':'Ödeme sağlayıcısından sonuç bekleniyor. Aynı fatura için ikinci bir ödeme başlatılmaz.';
+            echo '<section class="notice invoice-payment-status"><b>Ödeme işlemi: '.$this->e($activeLabel).' · '.$this->e($activeGateway).'</b><p>'.$this->e($activeCopy).'</p><a class="button payment-refresh" href="'.$this->url('/client/invoices/'.$invoiceId).'">Durumu yenile</a></section>';
+        }
         echo '<div class="stats"><article><small>Fatura tarihi</small><strong>'.($invoice['issued_at']?date('d.m.Y',strtotime($invoice['issued_at'])):'—').'</strong></article><article><small>Son ödeme tarihi</small><strong>'.($invoice['due_at']?date('d.m.Y',strtotime($invoice['due_at'])):'—').'</strong></article><article><small>Para birimi</small><strong>'.$this->e((string)$invoice['currency']).'</strong></article></div>';
         echo '<h2>Fatura kalemleri</h2><div class="tablewrap"><table><thead><tr><th>Açıklama</th><th>Adet</th><th>Birim fiyat</th><th>KDV</th><th>Toplam</th></tr></thead><tbody>';
         if(!$items)echo '<tr><td colspan="5">Fatura kalemi bulunmuyor.</td></tr>';
