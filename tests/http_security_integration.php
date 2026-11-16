@@ -198,12 +198,12 @@ try {
     ]);
     $savedPermissions=$pdo->prepare('SELECT permission FROM staff_permissions WHERE user_id=:id ORDER BY permission');
     $savedPermissions->execute([':id'=>$financeStaff]);$savedPermissionList=$savedPermissions->fetchAll(PDO::FETCH_COLUMN);
-    $permissionAudit=$pdo->prepare("SELECT COUNT(*) FROM security_audit_logs WHERE user_id=:actor AND event_key='staff.permissions_updated' AND metadata_json LIKE :target");
-    $permissionAudit->execute([':actor'=>$admin,':target'=>'%"target_user_id":'.$financeStaff.'%']);
+    $permissionAudit=$pdo->prepare("SELECT metadata_json FROM security_audit_logs WHERE user_id=:actor AND event_key='staff.permissions_updated' ORDER BY id DESC LIMIT 1");
+    $permissionAudit->execute([':actor'=>$admin]);$permissionAuditMetadata=json_decode((string)$permissionAudit->fetchColumn(),true);
     $assert($r['status']===200 && count($savedPermissionList)===count($assignablePermissions)
         && count(array_intersect($assignablePermissions,$savedPermissionList))===count($assignablePermissions)
         && (int)($permissionAuditMetadata['target_user_id']??0)===$financeStaff,
-        'admin can assign the complete safe staff catalog and permission changes are audited');
+        'admin can assign the complete safe staff catalog and permission changes are audited; status='.$r['status'].'; permissions='.json_encode($savedPermissionList).' ; metadata='.json_encode($permissionAuditMetadata));
     $login('/admin/login','http-finance@example.test',$cookieFinance);
 
     $cronKey=str_repeat('h',64);
