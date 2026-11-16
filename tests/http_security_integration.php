@@ -137,6 +137,19 @@ try {
     $assert($r['status']===404 && !str_contains($r['body'],$fileContent),'customer A cannot download customer B attachment over HTTP');
     $r=$request('/client/invoices/'.$invoiceB.'/pay',$cookieA);
     $assert($r['status']===404 && !str_contains($r['body'],'HTTP-B-INV'),'customer A cannot open customer B invoice payment over HTTP');
+    $packageForm=$request('/client/tickets/new',$cookieA);
+    $packageToken=$getToken($packageForm['body']);
+    $beforeChanges=(int)$pdo->query("SELECT COUNT(*) FROM service_package_changes WHERE service_id IN (SELECT id FROM services WHERE user_id=".$b.")")->fetchColumn();
+    $r=$request('/client/services/change',$cookieA,'POST',[
+        '_token'=>$packageToken,'service_id'=>(string)$pdo->query("SELECT id FROM services WHERE user_id=".$b." LIMIT 1")->fetchColumn(),'product_id'=>(string)$product
+    ]);
+    $afterChanges=(int)$pdo->query("SELECT COUNT(*) FROM service_package_changes WHERE service_id IN (SELECT id FROM services WHERE user_id=".$b.")")->fetchColumn();
+    $assert($afterChanges===$beforeChanges,'customer A cannot create package change for customer B service over HTTP');
+    $r=$request('/client/invoices/'.$invoiceB.'/pay',$cookieA,'POST',['_token'=>$packageToken]);
+    $assert($r['status']===404 && !str_contains($r['body'],'HTTP-B-INV'),'customer A cannot POST payment initiation for customer B invoice');
+    $r=$request('/admin/payments',$cookieA,'POST',['_token'=>$packageToken,'paytr_enabled'=>'1','paytr_merchant_id'=>'attacker']);
+    $assert($r['status']===403,'customer cannot POST admin payment gateway settings');
+
     $r=$request('/client/services',$cookieA);
     $assert(!str_contains($r['body'],'private-customer-b.example'),'customer A service list excludes customer B service');
     $r=$request('/client/domains',$cookieA);
