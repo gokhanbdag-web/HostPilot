@@ -73,6 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $adminName = trim($adminFirstName . ' ' . $adminLastName);
     $adminUsername = trim((string)($_POST['admin_username'] ?? ''));
     $businessModel = (string)($_POST['business_model'] ?? '');
+    $demoDataEnabled = isset($_POST['demo_data']) && (string)$_POST['demo_data'] === '1';
     $adminEmail = trim((string)($_POST['admin_email'] ?? ''));
     $adminPass = (string)($_POST['admin_pass'] ?? '');
 
@@ -233,6 +234,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'timezone' => 'Europe/Istanbul',
                     'locale' => 'tr',
                     'business_model' => $businessModel,
+                    'demo_data_enabled' => $demoDataEnabled,
                     'key' => $appKey,
                 ],
                 'database' => [
@@ -338,6 +340,11 @@ button{border:0;border-radius:10px;padding:14px 20px;background:#1d4ed8;color:#f
 </div>
 <div class="field"><label for="admin_pass">Yönetici parolası (en az 12 karakter)</label><input id="admin_pass" name="admin_pass" type="password" minlength="12" autocomplete="new-password" required></div>
 <p class="hint">Kurulumdan önce hosting hesabınızda boş bir MySQL veritabanı ve kullanıcı oluşturun. Veritabanı kullanıcısının bu veritabanında tablo oluşturma yetkisi olmalıdır.</p>
+<div class="field" style="margin-top:18px;padding:14px;border:1px solid #cbd5e1;border-radius:10px">
+<label style="display:flex;gap:10px;align-items:flex-start;margin:0">
+<input type="checkbox" name="demo_data" value="1" style="width:auto;margin-top:2px">
+<span><strong>Örnek demo verilerini yükle (isteğe bağlı)</strong><br><small>Örnek müşteriler, siparişler, faturalar, hizmetler ve destek kayıtları ekler. Gerçek işletme kurulumu için bu seçeneği işaretlemeyin. Varsayılan olarak kapalıdır.</small></span>
+</label></div>
 <button type="submit">HostPilot'u kur</button>
 </form>
 <?php endif; ?>
