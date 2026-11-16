@@ -171,7 +171,6 @@ $fk->closeCursor();
 if (count(glob($storage . '/backups/*.sql.gz') ?: []) < 1) throw new RuntimeException('Admin upgrade did not create a compressed pre-upgrade backup.');
 [$currentPage, $currentHeaders] = httpRequest($base . 'admin/database-upgrade', 'GET', $cookie);
 if (statusCode($currentHeaders) !== 200 || !str_contains($currentPage, 'Veritabanı güncel')) throw new RuntimeException('Upgrade page did not report a current database after success.');
-cleanupInstallFiles($storage);
 echo 'Authenticated admin upgrade passed: CSRF confirmation, pre-upgrade backup, maintenance mode and migration recovery.' . PHP_EOL;
 
 // Exercise MFA enrollment, one-time recovery codes, TOTP login and replay protection.
@@ -279,6 +278,7 @@ echo 'MFA browser flow passed: encrypted enrollment, ten hashed recovery codes, 
 
 // Clean up the test-only MFA fixture before continuing installer failure/retry cases.
 $db->exec('DELETE FROM admin_mfa WHERE user_id = (SELECT id FROM users WHERE username = "ci-installer")');
+cleanupInstallFiles($storage);
 
 
 // Invalid database credentials must fail closed without leaving an install lock or config.
