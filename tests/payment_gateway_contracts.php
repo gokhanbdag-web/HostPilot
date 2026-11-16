@@ -21,7 +21,7 @@ $assert(!PaytrSignature::verifyCallback('HP-CI-ORDER-0001','ci-salt','failed','1
 $assert(!PaytrSignature::verifyCallback('HP-CI-ORDER-0001','ci-salt','success','12500','','ci-merchant-key'),'PayTR rejects missing callback signature');
 
 $path='/payment/iyzipos/checkoutform/initialize/auth/ecom';
-$body='{"locale":"tr","conversationId":"ci-123","price":"125.00"}';
+$body=json_encode(["locale"=>"tr","conversationId"=>"ci-123","price"=>"125.00"],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
 $authorization=GatewayTransport::buildIyzicoAuthorization($path,$body,'ci-api-key','ci-secret-key','1700000000000abcdef12345');
 $expected='IYZWSv2 YXBpS2V5OmNpLWFwaS1rZXkmcmFuZG9tS2V5OjE3MDAwMDAwMDAwMDBhYmNkZWYxMjM0NSZzaWduYXR1cmU6YjIzYmNjNmUzYmJjNjU5M2Y4N2VmOWE1ODg0YWE2N2NmMzM3MGE1YjUwYTM4ODQzOTA4Njk1MDUxODA1ODA4Nw==';
 $assert($authorization===$expected,'iyzico IYZWSv2 authorization matches fixed HMAC-SHA256 vector');
