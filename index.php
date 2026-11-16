@@ -123,6 +123,10 @@ if ($requestPath === '/client/register' && in_array($method, ['GET', 'POST'], tr
 if ($requestPath === '/client/verify-email' && in_array($method, ['GET','POST'], true)) { $client->verifyEmail(); exit; }
 if ($requestPath === '/client/resend-verification' && in_array($method, ['GET','POST'], true)) { $client->resendVerification(); exit; }
 if ($requestPath === '/client/logout' && $method === 'POST') { $client->logout(); exit; }
+$privacy = new \HostPilot\Http\PrivacyController($pdo, $basePath);
+if ($requestPath === '/client/privacy' && in_array($method, ['GET','POST'], true)) { $privacy->customer(); exit; }
+if ($requestPath === '/client/privacy/export' && $method === 'GET') { $privacy->export(); exit; }
+if ($requestPath === '/admin/privacy' && in_array($method, ['GET','POST'], true)) { $privacy->admin(); exit; }
 if ($requestPath === '/client' || $requestPath === '/client/') { $client->dashboard(); exit; }
 if ($requestPath === '/client/services' && $method === 'GET') { $client->services(); exit; }
 if ($requestPath === '/client/services/domain' && $method === 'POST') { $client->saveServiceDomain(); exit; }
