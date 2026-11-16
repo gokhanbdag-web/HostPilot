@@ -8,6 +8,7 @@ use HostPilot\Core\EmailService;
 use HostPilot\Core\SecurityAudit;
 use HostPilot\Core\SecretVault;
 use HostPilot\Payment\GatewayTransport;
+use HostPilot\Payment\IyzicoSignature;
 use HostPilot\Payment\PaytrSignature;
 use PDO;
 use Throwable;
