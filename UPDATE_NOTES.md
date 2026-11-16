@@ -45,3 +45,10 @@ Yeni sürümlerde bu dosyaya tarihli başlık altında kullanıcıya görünen d
 - Eksik/geçersiz imza ve tanınmayan risk durumu manuel incelemeye yönlendiriliyor; fraudStatus=0 risk incelemesinde bekliyor.
 - Sabit HMAC vektörü ve başarı/başarısızlık, fraud ve uyuşmazlık senaryoları CI'ya eklendi.
 - Gerçek iyzico sandbox çağrısı bu sürümde yapılmadı; testler sahte/sabit protokol yanıtları kullanır.
+
+## 2026-11-16 · 2026.11.16.16
+
+- PayTR iFrame token üretimi ve başlatma formu, ağ isteğinden bağımsız test edilebilir PaytrRequest sınıfına ayrıldı.
+- Tutarın kuruş cinsinden gönderimi, TL para birimi, sepet JSON/Base64 biçimi, merchant token HMAC, sandbox bayrakları ve dönüş URL'leri için sabit sözleşme testleri eklendi.
+- Sıfır tutar ve boş sepetle ödeme başlatılması engellendi.
+- Testler sentetik merchant bilgileri kullanır; gerçek PayTR hesabına veya ödeme API'sine istek göndermez.
