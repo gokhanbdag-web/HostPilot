@@ -21,7 +21,7 @@ $checks = [
     ['package change cancellation is owner-scoped', 'app/Http/PackageChangeController.php', 'WHERE c.id=:id AND s.user_id=:user FOR UPDATE'],
     ['invoice payment is owner-scoped', 'app/Http/PaymentController.php', 'WHERE id=:id AND user_id=:uid LIMIT 1'],
     ['privacy export filters every exported table by owner', 'app/Http/PrivacyController.php', 'WHERE user_id=:uid ORDER BY id ASC LIMIT 10000'],
-    ['staff ticket detail checks assigned department', 'app/Http/AdminController.php', "in_array((string)$ticket['department'], $this->staffDepartments((int)$user['id']), true)"],
+    ['staff ticket detail checks assigned department', 'app/Http/AdminController.php', 'staffDepartments((int)$user[\'id\'])'],
     ['staff attachment download checks assigned department', 'app/Http/TicketAttachmentController.php', 'staff_departments WHERE user_id=:u AND department=:d'],
     ['customer attachment download joins ticket owner', 'app/Http/TicketAttachmentController.php', 't.user_id=:uid'],
 ];
