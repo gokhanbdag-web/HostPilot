@@ -174,6 +174,113 @@ if (statusCode($currentHeaders) !== 200 || !str_contains($currentPage, 'Veritaba
 cleanupInstallFiles($storage);
 echo 'Authenticated admin upgrade passed: CSRF confirmation, pre-upgrade backup, maintenance mode and migration recovery.' . PHP_EOL;
 
+// Exercise MFA enrollment, one-time recovery codes, TOTP login and replay protection.
+require_once dirname(__DIR__) . '/app/Core/Mfa.php';
+[$mfaPage, $mfaHeaders] = httpRequest($base . 'admin/security/mfa', 'GET', $cookie);
+if (statusCode($mfaHeaders) !== 200 || !str_contains($mfaPage, 'Durum: Kapalı')) throw new RuntimeException('MFA settings page is unavailable after migration.');
+[$startPage, $startHeaders] = httpRequest($base . 'admin/security/mfa', 'POST', $cookie, [
+    '_token' => csrfFromHtml($mfaPage),
+    'action' => 'start',
+    'password' => 'Test-Installer-Password-2026!',
+]);
+if (statusCode($startHeaders) !== 200 || !preg_match('/<div class="secret">([^<]+)<\\/div>/', $startPage, $secretMatch)) {
+    throw new RuntimeException('MFA enrollment did not issue a manual authenticator secret.');
+}
+$totpSecret = html_entity_decode($secretMatch[1], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+$enrollmentCode = \\HostPilot\\Core\\Mfa::codeAt($totpSecret, time());
+if (!is_string($enrollmentCode)) throw new RuntimeException('Unable to generate the enrollment TOTP fixture.');
+[$enabledPage, $enabledHeaders] = httpRequest($base . 'admin/security/mfa', 'POST', $cookie, [
+    '_token' => csrfFromHtml($startPage),
+    'action' => 'enable',
+    'password' => 'Test-Installer-Password-2026!',
+    'code' => $enrollmentCode,
+]);
+if (statusCode($enabledHeaders) !== 200 || !str_contains($enabledPage, 'Kurtarma kodlarınız') || !preg_match('/<pre class="codes">([^<]+)<\\/pre>/', $enabledPage, $codesMatch)) {
+    throw new RuntimeException('MFA enrollment did not verify the authenticator and display recovery codes.');
+}
+$recoveryCodes = preg_split('/\\s+/', trim(html_entity_decode($codesMatch[1], ENT_QUOTES | ENT_HTML5, 'UTF-8'))) ?: [];
+if (count($recoveryCodes) !== 10) throw new RuntimeException('MFA enrollment did not create ten recovery codes.');
+$mfaState = $db->query('SELECT secret_enc,last_used_step,enabled_at FROM admin_mfa LIMIT 1')->fetch(PDO::FETCH_ASSOC);
+if (!is_array($mfaState) || $mfaState['enabled_at'] === null || $mfaState['secret_enc'] === $totpSecret) throw new RuntimeException('MFA secret was not encrypted at rest.');
+if ((int)$db->query('SELECT COUNT(*) FROM admin_mfa_recovery_codes WHERE used_at IS NULL')->fetchColumn() !== 10) throw new RuntimeException('MFA recovery code hashes were not stored.');
+$recoveryHash = \\HostPilot\\Core\\Mfa::recoveryCodeHash($recoveryCodes[0]);
+$storedRecovery = $db->prepare('SELECT code_hash FROM admin_mfa_recovery_codes WHERE code_hash=:hash LIMIT 1');
+$storedRecovery->execute([':hash' => $recoveryHash]);
+if ($storedRecovery->fetchColumn() !== $recoveryHash) throw new RuntimeException('Recovery code hash was not persisted.');
+
+[$mfaSettings, $mfaSettingsHeaders] = httpRequest($base . 'admin/security/mfa', 'GET', $cookie);
+[$logoutBody, $logoutHeaders] = httpRequest($base . 'admin/logout', 'POST', $cookie, ['_token' => csrfFromHtml($mfaSettings)]);
+if (statusCode($logoutHeaders) !== 302) throw new RuntimeException('Could not log out before MFA login verification.');
+$cookie = '';
+[$mfaLogin, $mfaLoginHeaders] = httpRequest($base . 'admin/login', 'GET', $cookie);
+$cookie = cookieFromHeaders($mfaLoginHeaders);
+[$challengePage, $challengeHeaders] = httpRequest($base . 'admin/login', 'POST', $cookie, [
+    '_token' => csrfFromHtml($mfaLogin),
+    'email' => 'ci-installer@example.test',
+    'password' => 'Test-Installer-Password-2026!',
+]);
+if (statusCode($challengeHeaders) !== 200 || !str_contains($challengePage, 'authenticator')) throw new RuntimeException('Password login bypassed the required MFA challenge.');
+$newCookie = cookieFromHeaders($challengeHeaders);
+if ($newCookie !== '') $cookie = $newCookie;
+[$recoveryLogin, $recoveryLoginHeaders] = httpRequest($base . 'admin/login', 'POST', $cookie, [
+    '_token' => csrfFromHtml($challengePage),
+    'code' => $recoveryCodes[0],
+]);
+if (statusCode($recoveryLoginHeaders) !== 302) throw new RuntimeException('A valid one-time recovery code did not complete login.');
+$newCookie = cookieFromHeaders($recoveryLoginHeaders);
+if ($newCookie !== '') $cookie = $newCookie;
+if ((int)$db->query('SELECT COUNT(*) FROM admin_mfa_recovery_codes WHERE used_at IS NOT NULL')->fetchColumn() !== 1) throw new RuntimeException('Recovery code was not consumed after login.');
+
+[$mfaSettings, $mfaSettingsHeaders] = httpRequest($base . 'admin/security/mfa', 'GET', $cookie);
+[$logoutBody, $logoutHeaders] = httpRequest($base . 'admin/logout', 'POST', $cookie, ['_token' => csrfFromHtml($mfaSettings)]);
+if (statusCode($logoutHeaders) !== 302) throw new RuntimeException('Could not log out before recovery replay test.');
+$cookie = '';
+[$mfaLogin, $mfaLoginHeaders] = httpRequest($base . 'admin/login', 'GET', $cookie);
+$cookie = cookieFromHeaders($mfaLoginHeaders);
+[$challengePage, $challengeHeaders] = httpRequest($base . 'admin/login', 'POST', $cookie, [
+    '_token' => csrfFromHtml($mfaLogin),
+    'email' => 'ci-installer@example.test',
+    'password' => 'Test-Installer-Password-2026!',
+]);
+$newCookie = cookieFromHeaders($challengeHeaders);
+if ($newCookie !== '') $cookie = $newCookie;
+[$replayedRecovery, $replayedRecoveryHeaders] = httpRequest($base . 'admin/login', 'POST', $cookie, [
+    '_token' => csrfFromHtml($challengePage),
+    'code' => $recoveryCodes[0],
+]);
+if (statusCode($replayedRecoveryHeaders) !== 200 || !str_contains($replayedRecovery, 'daha önce kullanılmış')) throw new RuntimeException('A consumed recovery code was accepted a second time.');
+$nextStepCode = \\HostPilot\\Core\\Mfa::codeAt($totpSecret, (intdiv(time(), 30) + 1) * 30);
+[$totpLogin, $totpLoginHeaders] = httpRequest($base . 'admin/login', 'POST', $cookie, [
+    '_token' => csrfFromHtml($replayedRecovery),
+    'code' => (string)$nextStepCode,
+]);
+if (statusCode($totpLoginHeaders) !== 302) throw new RuntimeException('A valid TOTP challenge did not complete login.');
+
+[$mfaSettings, $mfaSettingsHeaders] = httpRequest($base . 'admin/security/mfa', 'GET', cookieFromHeaders($totpLoginHeaders) ?: $cookie);
+$totpCookie = cookieFromHeaders($totpLoginHeaders) ?: $cookie;
+[$logoutBody, $logoutHeaders] = httpRequest($base . 'admin/logout', 'POST', $totpCookie, ['_token' => csrfFromHtml($mfaSettings)]);
+if (statusCode($logoutHeaders) !== 302) throw new RuntimeException('Could not log out before TOTP replay test.');
+$cookie = '';
+[$mfaLogin, $mfaLoginHeaders] = httpRequest($base . 'admin/login', 'GET', $cookie);
+$cookie = cookieFromHeaders($mfaLoginHeaders);
+[$challengePage, $challengeHeaders] = httpRequest($base . 'admin/login', 'POST', $cookie, [
+    '_token' => csrfFromHtml($mfaLogin),
+    'email' => 'ci-installer@example.test',
+    'password' => 'Test-Installer-Password-2026!',
+]);
+$newCookie = cookieFromHeaders($challengeHeaders);
+if ($newCookie !== '') $cookie = $newCookie;
+[$replayedTotp, $replayedTotpHeaders] = httpRequest($base . 'admin/login', 'POST', $cookie, [
+    '_token' => csrfFromHtml($challengePage),
+    'code' => (string)$nextStepCode,
+]);
+if (statusCode($replayedTotpHeaders) !== 200 || !str_contains($replayedTotp, 'daha önce kullanılmış')) throw new RuntimeException('A previously accepted TOTP time step was replayed.');
+echo 'MFA browser flow passed: encrypted enrollment, ten hashed recovery codes, mandatory second factor, one-time recovery, TOTP login and replay rejection.' . PHP_EOL;
+
+// Clean up the test-only MFA fixture before continuing installer failure/retry cases.
+$db->exec('DELETE FROM admin_mfa WHERE user_id = (SELECT id FROM users WHERE username = "ci-installer")');
+
+
 // Invalid database credentials must fail closed without leaving an install lock or config.
 [$badPage, $badHeaders] = httpRequest($base);
 $badCookie = cookieFromHeaders($badHeaders);
