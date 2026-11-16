@@ -110,7 +110,8 @@ final class CatalogController
             echo '<article class="order"><b>#'.$this->e($v['invoice_number']).'</b><span>'.$this->e($this->invoiceStatus($v['status'])).'</span><p>'.number_format((float)$v['total'],2,',','.').' '.$this->e($v['currency']).' · Düzenlenme: '.date('d.m.Y',strtotime($v['issued_at'])).'</p><small>Son ödeme: '.($v['due_at']?date('d.m.Y',strtotime($v['due_at'])):'—').' · Ödenen: '.number_format((float)$v['amount_paid'],2,',','.').' '.$this->e($v['currency']).'</small>';
             if($activePayment){
                 $activeLabel=$v['active_payment_status']==='review'?'İncelemede':'Ödeme bekliyor';
-                echo '<p class="notice"><b>'.$this->e($activeLabel).'</b> · '.($v['active_payment_gateway']==='paytr'?'PayTR':'iyzico').' işlemi sonuçlanmayı bekliyor.</p>';
+                $activeGateway=['paytr'=>'PayTR','iyzico'=>'iyzico','manual'=>'Manuel ödeme'][$v['active_payment_gateway']]??'Ödeme sağlayıcısı';
+                echo '<p class="notice"><b>'.$this->e($activeLabel).'</b> · '.$this->e($activeGateway).' işlemi sonuçlanmayı bekliyor.</p>';
             }
             echo '<p><a class="button" href="'.$this->url('/client/invoices/'.$v['id']).'">Fatura detayını görüntüle</a></p>';
             if(in_array($v['status'],['unpaid','partially_paid','overdue'],true)&&!$activePayment)echo '<p><a class="button" href="'.$this->url('/client/invoices/'.$v['id'].'/pay').'">Faturayı öde</a></p>';
