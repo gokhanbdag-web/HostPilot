@@ -328,6 +328,25 @@ try {
         && ($duplicateFinalRow['status']??'')==='success' && ($duplicateFinalRow['gateway_transaction_id']??'')===$duplicateOid,
         'replayed valid PayTR success callback is acknowledged twice but credits the invoice exactly once');
 
+    // A signed PayTR success may report a collected amount different from the requested amount.
+    // Preserve it for manual review and never credit the invoice with an unverified amount.
+    $amountMismatchOid='HTTP-PAYTR-AMOUNT-MISMATCH';
+    $pdo->prepare("INSERT INTO payment_transactions(invoice_id,user_id,gateway,idempotency_key,status,currency,amount,request_reference,created_at,updated_at) VALUES(:invoice,:user,'paytr',:key,'pending','TRY',100,:reference,UTC_TIMESTAMP(),UTC_TIMESTAMP())")
+        ->execute([':invoice'=>$invoiceA,':user'=>$a,':key'=>hash('sha256','http-paytr-amount-mismatch'),':reference'=>$amountMismatchOid]);
+    $amountMismatchId=(int)$pdo->lastInsertId();
+    $amountMismatchHash=base64_encode(hash_hmac('sha256',$amountMismatchOid.'ci-merchant-salt'.'success'.'10500','ci-merchant-key',true));
+    $amountMismatchCallback=$request('/payment/paytr/callback',$cookieCron,'POST',[
+        'merchant_oid'=>$amountMismatchOid,'status'=>'success','total_amount'=>'10500','currency'=>'TL','hash'=>$amountMismatchHash
+    ]);
+    $amountMismatchState=$pdo->prepare('SELECT status,response_code FROM payment_transactions WHERE id=:id');
+    $amountMismatchState->execute([':id'=>$amountMismatchId]);$amountMismatchRow=$amountMismatchState->fetch(PDO::FETCH_ASSOC);
+    $amountMismatchInvoice=$pdo->prepare('SELECT amount_paid,status FROM invoices WHERE id=:id');
+    $amountMismatchInvoice->execute([':id'=>$invoiceA]);$amountMismatchInvoiceRow=$amountMismatchInvoice->fetch(PDO::FETCH_ASSOC);
+    $assert($amountMismatchCallback['status']===200&&$amountMismatchCallback['body']==='OK'
+        &&($amountMismatchRow['status']??'')==='review'&&($amountMismatchRow['response_code']??'')==='amount_mismatch_review'
+        &&(float)($amountMismatchInvoiceRow['amount_paid']??-1)===0.0&&($amountMismatchInvoiceRow['status']??'')==='unpaid',
+        'verified PayTR success with collected-amount mismatch is retained for review without invoice credit');
+
     $r=$request('/admin/payment-transactions/reconcile',$cookieA,'POST',[
         'payment_transaction_id'=>$reviewPaymentId,'decision'=>'refund_confirmed','provider_reference'=>'CI-CUSTOMER-FORBIDDEN',
         'reason'=>'customer must not reconcile','password'=>$password,'confirm_external_action'=>'1'
