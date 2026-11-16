@@ -41,6 +41,10 @@ jobs:
         run: php tests/authorization.php
       - name: Test customer privacy policy
         run: php tests/privacy_policy.php
+      - name: Test IDOR access boundaries
+        run: php tests/idor_access.php
+      - name: Test HTML output escaping
+        run: php tests/security_output.php
       - name: Test ticket attachment policy
         run: php tests/ticket_attachments.php
       - name: Prevent Composer dependency
