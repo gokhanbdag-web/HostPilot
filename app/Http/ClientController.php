@@ -14,15 +14,55 @@ final class ClientController
 
     public function login(): void
     {
-        if(Auth::check() && (Auth::user()['role']??'')==='customer')$this->go('/client');$error='';
+        if(Auth::check() && (Auth::user()['role']??'')==='customer')$this->go('/client');
+        $error='';
+        $challenge=$_SESSION['hostpilot_customer_mfa_challenge']??null;
+        if(!is_array($challenge)||(int)($challenge['expires_at']??0)<time()){
+            unset($_SESSION['hostpilot_customer_mfa_challenge']);
+            $challenge=null;
+        }
         if($_SERVER['REQUEST_METHOD']==='POST'){
             if(!Auth::verifyCsrf($_POST['_token']??null))$error='Güvenlik doğrulaması başarısız.';
-            elseif(Auth::attempt($this->db,trim((string)($_POST['email']??'')),(string)($_POST['password']??''))){
-                if((Auth::user()['role']??'')==='customer')$this->go('/client');Auth::logout();$error='Bu giriş müşteri hesapları içindir.';
-            }else $error='Giriş bilgileri hatalı veya hesap etkin değil.';
+            elseif(is_array($challenge)){
+                $userId=(int)($challenge['user_id']??0);
+                $authVersion=(int)($challenge['auth_version']??0);
+                $code=trim((string)($_POST['code']??''));
+                if($userId>0&&!Auth::consumeMfaAttempt()){
+                    $factor=\HostPilot\Core\CustomerMfa::verifyCode($this->db,$userId,$code,$this->applicationKey);
+                    if($factor!==null){
+                        $q=$this->db->prepare("SELECT id,name,email,role,status,auth_version FROM users WHERE id=:id AND auth_version=:version AND status='active' AND role='customer' LIMIT 1");
+                        $q->execute([':id'=>$userId,':version'=>$authVersion]);$customer=$q->fetch(PDO::FETCH_ASSOC);
+                        if(is_array($customer)){
+                            if($factor==='recovery')\HostPilot\Core\SecurityAudit::record($this->db,'auth.customer_mfa_recovery_used',$userId);
+                            \HostPilot\Core\SecurityAudit::record($this->db,'auth.customer_mfa_challenge_succeeded',$userId);
+                            Auth::completeLogin($this->db,$customer);
+                            $this->go('/client');
+                        }
+                    }
+                }
+                \HostPilot\Core\SecurityAudit::record($this->db,'auth.customer_mfa_challenge_failed',$userId>0?$userId:null);
+                $error='Doğrulama kodu geçersiz, süresi dolmuş veya daha önce kullanılmış.';
+            }else{
+                $customer=Auth::verifyCredentials($this->db,trim((string)($_POST['email']??'')),(string)($_POST['password']??''));
+                if(is_array($customer)&&($customer['role']??'')==='customer'){
+                    if(\HostPilot\Core\CustomerMfa::isEnabled($this->db,(int)$customer['id'])){
+                        session_regenerate_id(true);unset($_SESSION['hostpilot_csrf']);
+                        $_SESSION['hostpilot_customer_mfa_challenge']=['user_id'=>(int)$customer['id'],'auth_version'=>(int)($customer['auth_version']??1),'expires_at'=>time()+300];
+                        $challenge=$_SESSION['hostpilot_customer_mfa_challenge'];
+                    }else{
+                        Auth::completeLogin($this->db,$customer);
+                        $this->go('/client');
+                    }
+                }else $error='Giriş bilgileri hatalı veya hesap etkin değil.';
+            }
         }
         $this->start('Müşteri girişi');echo '<main class="auth"><div class="brand">HOST<span>PILOT</span></div><h1>Müşteri hesabınıza giriş yapın</h1><p>Hizmetlerinizi, faturalarınızı ve destek taleplerinizi yönetin.</p>';$this->err($error);
-        echo '<form method="post"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><label>E-posta<input type="email" name="email" required></label><label>Parola<input type="password" name="password" required></label><button>Giriş yap</button></form><a href="'.$this->url('/client/register').'">Yeni müşteri hesabı oluştur</a></main>';$this->end();
+        if(is_array($challenge)){
+            echo '<p>Parolanız doğrulandı. Devam etmek için authenticator uygulamanızdaki 6 haneli kodu veya tek kullanımlık kurtarma kodlarından birini girin. Bu adım 5 dakika içinde tamamlanmalıdır.</p><form method="post"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><label>Doğrulama kodu<input name="code" autocomplete="one-time-code" maxlength="32" required></label><button>Giriş yap</button></form>';
+        }else{
+            echo '<form method="post"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><label>E-posta<input type="email" name="email" required></label><label>Parola<input type="password" name="password" required></label><button>Giriş yap</button></form><a href="'.$this->url('/client/register').'">Yeni müşteri hesabı oluştur</a>';
+        }
+        echo '</main>';$this->end();
     }
 
     public function register(): void
@@ -282,7 +322,7 @@ final class ClientController
 
     public function logout():void{if($_SERVER['REQUEST_METHOD']!=='POST'||!Auth::verifyCsrf($_POST['_token']??null)){http_response_code(400);echo 'Geçersiz istek.';return;}Auth::logout();$this->go('/client/login');}
     private function customer():?array{$a=Auth::user();if(!$a){$this->go('/client/login');return null;}if(($a['role']??'')!=='customer'){http_response_code(403);echo 'Bu alan müşteri hesaplarına özeldir.';return null;}$s=$this->db->prepare("SELECT id,name,email,username,created_at FROM users WHERE id=:id AND status='active'");$s->execute([':id'=>$a['id']]);$u=$s->fetch();if(!$u){Auth::logout();$this->go('/client/login');return null;}return $u;}
-    private function shell(array $u,string $title):void{$this->start($title);echo '<div class="client"><aside class="clientside"><a class="brand" href="'.$this->url('/client').'">HOST<span>PILOT</span></a><small>MÜŞTERİ ALANI</small><a href="'.$this->url('/client').'">Genel bakış</a><a href="'.$this->url('/client/orders').'">Siparişlerim</a><a href="'.$this->url('/client/invoices').'">Faturalarım</a><a href="'.$this->url('/client/tickets').'">Destek talepleri</a><a href="'.$this->url('/client/privacy').'">Gizlilik ve verilerim</a><a href="'.$this->url('/knowledgebase').'">Bilgi bankası</a><form method="post" action="'.$this->url('/client/logout').'"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><button class="logout">Güvenli çıkış</button></form></aside><main class="clientmain"><header><span>'.$this->e($title).'</span><b>'.$this->e($u['name']).'</b></header>';}
+    private function shell(array $u,string $title):void{$this->start($title);echo '<div class="client"><aside class="clientside"><a class="brand" href="'.$this->url('/client').'">HOST<span>PILOT</span></a><small>MÜŞTERİ ALANI</small><a href="'.$this->url('/client').'">Genel bakış</a><a href="'.$this->url('/client/orders').'">Siparişlerim</a><a href="'.$this->url('/client/invoices').'">Faturalarım</a><a href="'.$this->url('/client/tickets').'">Destek talepleri</a><a href="'.$this->url('/client/security/mfa').'">Hesap güvenliği</a><a href="'.$this->url('/client/privacy').'">Gizlilik ve verilerim</a><a href="'.$this->url('/knowledgebase').'">Bilgi bankası</a><form method="post" action="'.$this->url('/client/logout').'"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><button class="logout">Güvenli çıkış</button></form></aside><main class="clientmain"><header><span>'.$this->e($title).'</span><b>'.$this->e($u['name']).'</b></header>';}
     private function shellEnd():void{echo '<footer>HostPilot müşteri alanı · <a href="'.$this->url('/knowledgebase').'">Bilgi bankası</a></footer></main></div>';$this->end();}
     private function start(string $title):void{echo '<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'.$this->e($title).' · HostPilot</title><style>'.$this->css().'</style></head><body>';}
     private function end():void{echo '</body></html>';}

@@ -24,6 +24,12 @@ final class SecurityAudit
         'staff.permissions_updated',
         'auth.mfa_recovery_used',
         'auth.mfa_recovery_rotated',
+        'auth.customer_mfa_enabled',
+        'auth.customer_mfa_disabled',
+        'auth.customer_mfa_challenge_succeeded',
+        'auth.customer_mfa_challenge_failed',
+        'auth.customer_mfa_recovery_used',
+        'auth.customer_mfa_recovery_rotated',
         'privacy.exported',
         'privacy.erasure_requested',
         'privacy.request_reviewed',
@@ -106,7 +112,7 @@ final class SecurityAudit
     {
         $safe = [];
         if (isset($metadata['role']) && is_string($metadata['role'])
-            && in_array($metadata['role'], ['super_admin', 'admin', 'staff', 'client'], true)) {
+            && in_array($metadata['role'], ['super_admin', 'admin', 'staff', 'client', 'customer'], true)) {
             $safe['role'] = $metadata['role'];
         }
         if (isset($metadata['request_id']) && is_int($metadata['request_id']) && $metadata['request_id'] > 0) $safe['request_id'] = $metadata['request_id'];

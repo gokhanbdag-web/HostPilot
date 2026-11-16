@@ -208,6 +208,84 @@ try {
     $login('/client/login','http-a@example.test',$cookieA);
     $login('/client/login','http-b@example.test',$cookieB);
     $login('/client/login','http-c@example.test',$cookieC);
+    // Customer MFA enrollment, login challenge, TOTP replay prevention and recovery-code use.
+    require_once $root . '/app/Core/Mfa.php';
+    $customerMfaPage=$request('/client/security/mfa',$cookieA);
+    $assert($customerMfaPage['status']===200 && str_contains($customerMfaPage['body'],'Durum: Kapalı'),
+        'customer can open optional MFA settings while MFA is disabled');
+    $startCustomerMfa=$request('/client/security/mfa',$cookieA,'POST',[
+        '_token'=>$getToken($customerMfaPage['body']),'action'=>'start','password'=>$password,
+    ]);
+    $assert($startCustomerMfa['status']===200 && preg_match('/<div class="secret">([^<]+)<\/div>/',$startCustomerMfa['body'],$customerSecretMatch)===1,
+        'customer MFA enrollment requires password re-entry and issues a TOTP secret');
+    $customerSecret=html_entity_decode($customerSecretMatch[1],ENT_QUOTES|ENT_HTML5,'UTF-8');
+    $customerEnrollmentCode=\HostPilot\Core\Mfa::codeAt($customerSecret,time());
+    if(!is_string($customerEnrollmentCode))throw new RuntimeException('Unable to generate customer enrollment TOTP.');
+    $customerEnabled=$request('/client/security/mfa',$cookieA,'POST',[
+        '_token'=>$getToken($startCustomerMfa['body']),'action'=>'enable','password'=>$password,'code'=>$customerEnrollmentCode,
+    ]);
+    $assert($customerEnabled['status']===200 && str_contains($customerEnabled['body'],'Kurtarma kodlarınız')
+        && preg_match('/<pre class="codes">([^<]+)<\/pre>/',$customerEnabled['body'],$customerCodesMatch)===1,
+        'customer MFA enrollment verifies TOTP and displays one-time recovery codes');
+    $customerRecoveryCodes=preg_split('/\s+/',trim(html_entity_decode($customerCodesMatch[1],ENT_QUOTES|ENT_HTML5,'UTF-8')))?:[];
+    if(count($customerRecoveryCodes)!==10)throw new RuntimeException('Customer MFA did not create ten recovery codes.');
+    $customerMfaState=$pdo->prepare('SELECT secret_enc,last_used_step,enabled_at FROM customer_mfa WHERE user_id=:id');
+    $customerMfaState->execute([':id'=>$a]);$customerMfaRow=$customerMfaState->fetch(PDO::FETCH_ASSOC);
+    $assert(is_array($customerMfaRow)&&$customerMfaRow['enabled_at']!==null&&$customerMfaRow['secret_enc']!==$customerSecret
+        &&(int)$pdo->query('SELECT COUNT(*) FROM customer_mfa_recovery_codes WHERE user_id='.(int)$a.' AND used_at IS NULL')->fetchColumn()===10,
+        'customer MFA secret is encrypted at rest and ten recovery-code hashes are stored');
+    $r=$request('/admin/security/mfa',$cookieA);
+    $assert($r['status']===403,'customer cannot access staff MFA settings');
+    $r=$request('/client/security/mfa',$cookieStaff);
+    $assert($r['status']===403,'staff cannot access customer MFA settings');
+    $request('/client/logout',$cookieA,'POST',['_token'=>$getToken($customerEnabled['body'])]);
+    $customerLoginPage=$request('/client/login',$cookieA);
+    $customerChallenge=$request('/client/login',$cookieA,'POST',[
+        '_token'=>$getToken($customerLoginPage['body']),'email'=>'http-a@example.test','password'=>$password,
+    ]);
+    $assert($customerChallenge['status']===200&&str_contains($customerChallenge['body'],'Doğrulama kodu')
+        &&!str_contains($customerChallenge['body'],'MÜŞTERİ ALANI'),
+        'customer with MFA enabled must pass a second factor after the correct password');
+    $customerTotpStep=intdiv(time(),30)+1;
+    $customerLoginCode=\HostPilot\Core\Mfa::codeAt($customerSecret,$customerTotpStep*30);
+    if(!is_string($customerLoginCode))throw new RuntimeException('Unable to generate customer login TOTP.');
+    $customerLoginResult=$request('/client/login',$cookieA,'POST',[
+        '_token'=>$getToken($customerChallenge['body']),'code'=>$customerLoginCode,
+    ]);
+    $assert($customerLoginResult['status']===200&&str_contains($customerLoginResult['body'],'MÜŞTERİ ALANI'),
+        'customer login completes only after a valid TOTP challenge');
+    $request('/client/logout',$cookieA,'POST',['_token'=>$getToken($customerLoginResult['body'])]);
+    $customerReplayLogin=$request('/client/login',$cookieA);
+    $customerReplayChallenge=$request('/client/login',$cookieA,'POST',[
+        '_token'=>$getToken($customerReplayLogin['body']),'email'=>'http-a@example.test','password'=>$password,
+    ]);
+    $customerReplay=$request('/client/login',$cookieA,'POST',[
+        '_token'=>$getToken($customerReplayChallenge['body']),'code'=>$customerLoginCode,
+    ]);
+    $assert(str_contains($customerReplay['body'],'daha önce kullanılmış')&&!str_contains($customerReplay['body'],'MÜŞTERİ ALANI'),
+        'customer TOTP code cannot be replayed in a later login challenge');
+    $customerMfaState->execute([':id'=>$a]);$customerReplayState=$customerMfaState->fetch(PDO::FETCH_ASSOC);
+    $assert(is_array($customerReplayState)&&(int)$customerReplayState['last_used_step']===$customerTotpStep,
+        'replayed customer TOTP does not advance the already-consumed authenticator time step');
+    $customerRecoveryLogin=$request('/client/login',$cookieA,'POST',[
+        '_token'=>$getToken($customerReplay['body']),'code'=>$customerRecoveryCodes[0],
+    ]);
+    $customerRecoveryHash=\HostPilot\Core\Mfa::recoveryCodeHash($customerRecoveryCodes[0]);
+    $customerRecoveryUsed=$pdo->prepare('SELECT used_at FROM customer_mfa_recovery_codes WHERE user_id=:id AND code_hash=:hash');
+    $customerRecoveryUsed->execute([':id'=>$a,':hash'=>$customerRecoveryHash]);
+    $assert($customerRecoveryLogin['status']===200&&str_contains($customerRecoveryLogin['body'],'MÜŞTERİ ALANI')
+        &&$customerRecoveryUsed->fetchColumn()!==null,
+        'customer can recover access with a single-use code and that code is consumed');
+    $customerSecurityPage=$request('/client/security/mfa',$cookieA);
+    $customerDisable=$request('/client/security/mfa',$cookieA,'POST',[
+        '_token'=>$getToken($customerSecurityPage['body']),'action'=>'disable','password'=>$password,'code'=>$customerRecoveryCodes[1],
+    ]);
+    $customerMfaState->execute([':id'=>$a]);
+    $assert($customerDisable['status']===200&&str_contains($customerDisable['body'],'İki aşamalı doğrulama kapatıldı')
+        &&$customerMfaState->fetch(PDO::FETCH_ASSOC)===false,
+        'customer can disable MFA only with password plus an unused recovery code');
+    $assert((int)$pdo->query("SELECT COUNT(*) FROM security_audit_logs WHERE user_id=".(int)$a." AND event_key LIKE 'auth.customer_mfa_%'")->fetchColumn()>=4,
+        'customer MFA enrollment, challenge and recovery actions are security-audited');
     $login('/admin/login','http-staff@example.test',$cookieStaff);
     $login('/admin/login','http-admin@example.test',$cookieAdmin);
     $login('/admin/login','http-super@example.test',$cookieSuper);
