@@ -43,6 +43,8 @@ jobs:
         run: php tests/payment_idempotency_policy.php
       - name: Test payment initialization uncertainty policy
         run: php tests/payment_initialization_safety.php
+      - name: Test customer invoice payment status policy
+        run: php tests/customer_invoice_payment_status.php
       - name: Test payment gateway protocol contracts
         run: php tests/payment_gateway_contracts.php
       - name: Test payment gateway transport security
