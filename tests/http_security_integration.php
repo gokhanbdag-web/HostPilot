@@ -29,6 +29,7 @@ $a = $makeUser('HTTP Customer A', 'http-a@example.test', 'http-customer-a', 'cus
 $b = $makeUser('HTTP Customer B', 'http-b@example.test', 'http-customer-b', 'customer');
 $staff = $makeUser('HTTP Staff', 'http-staff@example.test', 'http-staff', 'staff');
 $pdo->prepare("INSERT INTO staff_permissions(user_id,permission,created_at) VALUES(:id,'support.view',UTC_TIMESTAMP())")->execute([':id'=>$staff]);
+$pdo->prepare("INSERT INTO staff_permissions(user_id,permission,created_at) VALUES(:id,'dashboard.view',UTC_TIMESTAMP())")->execute([':id'=>$staff]);
 $pdo->prepare("INSERT INTO staff_departments(user_id,department,created_at) VALUES(:id,'General Support',UTC_TIMESTAMP())")->execute([':id'=>$staff]);
 
 $pdo->exec("INSERT INTO products(name,slug,product_type,status,featured,sort_order,created_at,updated_at) VALUES('HTTP Test Hosting','http-test-hosting','hosting','active',0,0,UTC_TIMESTAMP(),UTC_TIMESTAMP())");
