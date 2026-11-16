@@ -61,7 +61,7 @@
 - Official docs describe a server-side token request followed by rendering the hosted iFrame and a separate callback/notification URL receiving payment results.
 - Credentials (merchant ID/key/salt) are obtained by the merchant from the PayTR merchant panel.
 - Implementation scope: iFrame checkout, callback endpoint, hash/signature verification exactly per current PayTR docs, duplicate notification protection, payment transaction record, sandbox/live configuration if provided by PayTR, reconciliation logs.
-- Security rule: browser redirect/query parameters are never sufficient proof of payment. Only a verified server notification or a separate authenticated verification flow may transition an invoice/order to paid.
+- Security rule: browser redirect/query parameters are never sufficient proof of payment. Only a verified server notification or a separate authenticated verification flow may transition an invoice/order to paid. PayTR documents that collected callback `total_amount` may differ from the requested amount in installment/alternative-payment cases; HostPilot preserves a signed success with amount/currency mismatch as `review` for provider-panel reconciliation and does not automatically credit the invoice.
 - Open verification item: confirm current PayTR Direct API and recurring/automatic collection availability, eligibility, and contractual prerequisites before promising those features. Do not equate stored card support with a generic recurring billing permission.
 
 ### iyzico
