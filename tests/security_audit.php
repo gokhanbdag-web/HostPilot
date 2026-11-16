@@ -5,6 +5,7 @@ require_once dirname(__DIR__) . '/app/Core/SecurityAudit.php';
 use HostPilot\Core\SecurityAudit;
 
 if (!SecurityAudit::isAllowedEvent('auth.mfa_enabled') || !SecurityAudit::isAllowedEvent('auth.mfa_challenge_succeeded')) throw new RuntimeException('MFA audit events were not allowlisted.');
+if (!SecurityAudit::isAllowedEvent('staff.permissions_updated')) throw new RuntimeException('Staff permission audit event was not allowlisted.');
 if (!SecurityAudit::isAllowedEvent('privacy.exported') || !SecurityAudit::isAllowedEvent('privacy.erasure_requested') || !SecurityAudit::isAllowedEvent('privacy.request_reviewed') || !SecurityAudit::isAllowedEvent('privacy.erasure_completed')) throw new RuntimeException('Privacy audit events were not allowlisted.');
 if (!SecurityAudit::isAllowedEvent('staff.permissions_updated')) throw new RuntimeException('Staff permission changes must be auditable.');
 if (!SecurityAudit::isAllowedEvent('auth.login_succeeded')) throw new RuntimeException('Known event was rejected.');
@@ -16,6 +17,8 @@ if (SecurityAudit::sanitizeUserAgent("Browser\r\nInjected: yes") !== 'BrowserInj
 if (SecurityAudit::sanitizeUserAgent(str_repeat('a', 300)) !== str_repeat('a', 255)) throw new RuntimeException('User-agent length limit failed.');
 $metadata = SecurityAudit::sanitizeMetadata(['role' => 'admin', 'email' => 'secret@example.test', 'token' => 'secret', 'request_id' => 7, 'action' => 'declined']);
 if ($metadata !== ['role' => 'admin', 'request_id' => 7, 'action' => 'declined']) throw new RuntimeException('Sensitive metadata was not discarded.');
+$permissionMetadata = SecurityAudit::sanitizeMetadata(['target_user_id'=>10,'action'=>'updated','email'=>'private@example.test']);
+if ($permissionMetadata !== ['target_user_id'=>10,'action'=>'updated']) throw new RuntimeException('Staff permission audit metadata was not safely allowlisted.');
 $permissionMetadata = SecurityAudit::sanitizeMetadata(['target_user_id'=>10,'action'=>'updated','email'=>'private@example.test']);
 if ($permissionMetadata !== ['target_user_id'=>10,'action'=>'updated']) throw new RuntimeException('Staff permission audit metadata was not safely allowlisted.');
 $completedMetadata = SecurityAudit::sanitizeMetadata(['request_id'=>9,'action'=>'completed','email'=>'private@example.test']);
