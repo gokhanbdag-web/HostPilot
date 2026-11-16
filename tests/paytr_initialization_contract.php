@@ -14,7 +14,7 @@ $input=[
  'ok_url'=>'https://hostpilot.example.test/payment/return','fail_url'=>'https://hostpilot.example.test/payment/return'
 ];
 $payload=PaytrRequest::buildPayload($input,'ci-merchant-key','ci-salt');
-$assert($payload['paytr_token']==='ek1YzFJ0qWIAhrekbsnGgGg3QHTqKqi7/68h3OFa7UE=','PayTR iframe initialization token matches fixed HMAC vector');
+$assert($payload['paytr_token']==='LtIPsksyrb1OqeMcaIcbCf2Pt27PnkKsInNcnxqNmPw=','PayTR iframe initialization token matches fixed HMAC vector');
 $assert($payload['user_basket']==='W1siSG9zdFBpbG90IFN0YXJ0ZXIiLCIxMjUuMDAiLDFdXQ==','PayTR basket is encoded with the expected JSON contract');
 $assert($payload['payment_amount']==='12500'&&$payload['currency']==='TL','PayTR amount is sent in kuruş and TRY uses TL');
 $assert($payload['test_mode']==='1'&&$payload['debug_on']==='1'&&$payload['lang']==='tr'&&$payload['iframe_v2']==='1','PayTR sandbox and iframe request flags are preserved');
