@@ -249,8 +249,9 @@ try {
     $r=$request('/admin/privacy',$cookieAdmin,'POST',['_token'=>$privacyToken,'action'=>'complete','request_id'=>$privacyB]);
     $privacyBStatus=$pdo->prepare('SELECT status FROM privacy_requests WHERE id=:id');
     $privacyBStatus->execute([':id'=>$privacyB]);$privacyBCurrent=(string)$privacyBStatus->fetchColumn();
-    $assert($r['status']===200 && str_contains($r['body'],'Aktif veya sonlandırılmamış hizmetler var') && $privacyBCurrent==='approved',
-        'erasure completion is blocked while customer has an active hosting service; HTTP '.$r['status'].'; request='.$privacyBCurrent.'; body='.substr(strip_tags($r['body']),0,600));
+    $privacyBodyText=strip_tags((string)preg_replace('#<style[^>]*>.*?</style>#s','',$r['body']));
+    $assert($r['status']===200 && str_contains($privacyBodyText,'Aktif veya sonlandırılmamış hizmetler var') && $privacyBCurrent==='approved',
+        'erasure completion is blocked while customer has an active hosting service; HTTP '.$r['status'].'; request='.$privacyBCurrent.'; body='.substr($privacyBodyText,0,600));
 
     $r=$request('/admin/privacy',$cookieAdmin,'POST',['_token'=>$privacyToken,'action'=>'complete','request_id'=>$privacyC]);
     $erased=$pdo->prepare('SELECT name,email,username,status,auth_version FROM users WHERE id=:id');
