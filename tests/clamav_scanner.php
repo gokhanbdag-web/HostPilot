@@ -53,7 +53,7 @@ try{
 }finally{@unlink($tmp);}
 
 $source=file_get_contents(dirname(__DIR__).'/app/Core/ClamAvScanner.php');
-foreach(["INSTREAM\\n","pack('N',strlen($chunk))","pack('N',0)","FOUND","'clean'","'infected'","'unavailable'"] as $needle){
+foreach(["INSTREAM\\n","pack('N',strlen("),"pack('N',0)","FOUND","'clean'","'infected'","'unavailable'"] as $needle){
     if(!is_string($source)||!str_contains($source,$needle))throw new RuntimeException('ClamAV protocol implementation is missing '.$needle);
 }
 echo "ClamAV scanner endpoint and fail-closed policy tests passed.\n";
