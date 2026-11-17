@@ -9,6 +9,8 @@ $checks=[
     'reconciliation requires CSRF'=>str_contains($source,'Auth::verifyCsrf'),
     'payment application reuses the normal settlement path'=>str_contains($source,'$this->settle('),
     'external refund is recorded as manual and not sent to gateway'=>str_contains($source,'manual_refund_confirmed')&&str_contains($source,'tam iade kaydedildi'),
+    'confirmed full refunds queue a customer notice atomically'=>str_contains($source,'queuePaymentStatusForTransaction($id,\'refunded\')')&&str_contains($source,"status='refunded'"),
+    'confirmed no-capture cancellations queue a customer notice atomically'=>str_contains($source,'queuePaymentStatusForTransaction($id,\'cancelled\')')&&str_contains($source,"status='cancelled'"),
     'refund path only handles reviewed captures'=>str_contains($source,"status']!=='review"),
     'payment reconciliation is stored in a dedicated table'=>str_contains($source,'INSERT INTO payment_reconciliations'),
 ];

@@ -159,6 +159,7 @@ final class PaymentController
                 $update=$this->db->prepare("UPDATE payment_transactions SET status='refunded',response_code='manual_refund_confirmed',safe_message='Dış ödeme sağlayıcısında tam iade admin tarafından doğrulandı.',updated_at=:updated WHERE id=:id AND status='review'");
                 $update->execute([':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$id]);
                 if($update->rowCount()!==1)throw new \RuntimeException('İşlem durumu güncellenemedi.');
+                $this->queuePaymentStatusForTransaction($id,'refunded');
                 $this->db->commit();
                 SecurityAudit::record($this->db,'payment.manual_refund_confirmed',(int)$actor['id'],['resource_id'=>$id,'action'=>'refund_confirmed']);
                 $this->logPaymentReconciliation('REFUND_CONFIRMED',$id,(int)$actor['id'],$reference);
@@ -174,6 +175,7 @@ final class PaymentController
                 $update=$this->db->prepare("UPDATE payment_transactions SET status='cancelled',response_code='manual_no_capture_confirmed',safe_message='Sağlayıcı panelinde tahsilat olmadığı admin tarafından doğrulandı; geç gelen callback tahsilat oluşturamaz.',updated_at=:updated WHERE id=:id AND status='review'");
                 $update->execute([':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$id]);
                 if($update->rowCount()!==1)throw new \RuntimeException('Ödeme işlemi güvenli biçimde kapatılamadı.');
+                $this->queuePaymentStatusForTransaction($id,'cancelled');
                 $this->db->commit();
                 SecurityAudit::record($this->db,'payment.no_capture_confirmed',(int)$actor['id'],['resource_id'=>$id,'action'=>'no_capture_confirmed']);
                 $this->logPaymentReconciliation('NO_CAPTURE_CONFIRMED',$id,(int)$actor['id'],$reference);

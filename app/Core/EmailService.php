@@ -78,6 +78,8 @@ final class EmailService
             'success'=>['Ödemeniz doğrulandı','Ödeme sağlayıcısı tahsilatınızı başarıyla doğruladı. Fatura bakiyeniz güncellendi.'],
             'review'=>['Ödeme işleminiz incelemede','Ödeme sonucunuz güvenliğiniz için manuel incelemeye alındı. Lütfen aynı fatura için yeni bir ödeme başlatmayın; durum müşteri panelinizde güncellenecektir.'],
             'failed'=>['Ödeme işlemi tamamlanamadı','Ödeme sağlayıcısı işleminizi onaylamadı. Fatura bakiyenizi ve ödeme yönteminizi müşteri panelinizden kontrol edip yeniden deneyebilirsiniz.'],
+            'refunded'=>['Ödemeniz iade edildi','Ödeme sağlayıcısında tam iade işlemi doğrulandı. İade tutarının hesabınıza yansıma süresi bankanıza ve ödeme yönteminize göre değişebilir.'],
+            'cancelled'=>['Ödeme oturumunuz iptal edildi','Sağlayıcı panelinde bu işlem için tahsilat yapılmadığı doğrulandı ve ödeme oturumu kapatıldı. Bu işlem için hesabınızdan tahsilat yapılmamıştır.']
         ];
         if(!isset($labels[$event])||$paymentTransactionId<1||!filter_var($recipient,FILTER_VALIDATE_EMAIL))return false;
         [$subject,$message]=$labels[$event];
