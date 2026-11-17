@@ -64,7 +64,7 @@ final class PaymentController
     {
         // A timeout is ambiguous: lock each row and enqueue its review notice atomically.
         $now=gmdate('Y-m-d H:i:s');
-        $cutoff=(new \\DateTimeImmutable('now',new \\DateTimeZone('UTC')))->modify('-30 minutes')->format('Y-m-d H:i:s');
+        $cutoff=(new \DateTimeImmutable('now',new \DateTimeZone('UTC')))->modify('-30 minutes')->format('Y-m-d H:i:s');
         $sql="SELECT id FROM payment_transactions WHERE status='pending' AND created_at<=:cutoff";
         $params=[':cutoff'=>$cutoff];
         if($invoiceId!==null){$sql.=' AND invoice_id=:invoice_id';$params[':invoice_id']=$invoiceId;}
