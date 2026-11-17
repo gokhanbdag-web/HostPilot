@@ -49,6 +49,7 @@ final class StatementImport
                 if (strlen($row['description']) > 500) throw new RuntimeException('CSV satır '.$line.' açıklaması çok uzun.');
                 if (!preg_match('/^(?:0|[1-9][0-9]{0,9})(?:\.[0-9]{1,2})?$/D', $row['amount'])) throw new RuntimeException('CSV satır '.$line.' tutarı geçersiz.');
                 if (!preg_match('/^[A-Z]{3}$/D', strtoupper($row['currency']))) throw new RuntimeException('CSV satır '.$line.' para birimi geçersiz.');
+                $row['date'] = $row['date'];
                 $row['currency'] = strtoupper($row['currency']);
                 $row['type'] = strtolower($row['type']);
                 if (!in_array($row['type'], ['capture','refund','unknown'], true)) throw new RuntimeException('CSV satır '.$line.' hareket türü capture, refund veya unknown olmalıdır.');
@@ -81,7 +82,7 @@ final class StatementImport
                 $status = $candidate['status'];
                 $counts[$status]++;
                 $insertRow->execute([
-                    ':import'=>$importId, ':row'=>$index+2, ':date'=>$row['occurred_at'],
+                    ':import'=>$importId, ':row'=>$index+2, ':date'=>$row['date'],
                     ':reference'=>$row['reference'], ':description'=>$row['description'],
                     ':amount'=>$row['amount'], ':currency'=>$row['currency'], ':type'=>$row['type'],
                     ':status'=>$status, ':payment'=>$candidate['payment_id'], ':refund'=>$candidate['refund_id'],
