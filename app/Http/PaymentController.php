@@ -25,9 +25,9 @@ final class PaymentController
     {
         if(!$this->isStaff()){http_response_code(403);echo 'Yetkisiz erişim.';return;}
         [$from,$to,$toExclusive,$rangeError]=$this->financeDateRange();
-        $summary=\\HostPilot\\Payment\\FinanceReport::summary($this->db,$from.' 00:00:00',$toExclusive.' 00:00:00');
-        $movements=\\HostPilot\\Payment\\FinanceReport::movements($this->db,$from.' 00:00:00',$toExclusive.' 00:00:00',150);
-        $reconciliations=\\HostPilot\\Payment\\FinanceReport::reconciliations($this->db,$from.' 00:00:00',$toExclusive.' 00:00:00',75);
+        $summary=\HostPilot\Payment\FinanceReport::summary($this->db,$from.' 00:00:00',$toExclusive.' 00:00:00');
+        $movements=\HostPilot\Payment\FinanceReport::movements($this->db,$from.' 00:00:00',$toExclusive.' 00:00:00',150);
+        $reconciliations=\HostPilot\Payment\FinanceReport::reconciliations($this->db,$from.' 00:00:00',$toExclusive.' 00:00:00',75);
         $this->pageStart('Finansal hareket raporu');
         echo '<div class="admin"><aside><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a href="'.$this->url('/admin').'">← Kontrol merkezi</a><a class="active" href="'.$this->url('/admin/finance').'">Finans raporları</a><a href="'.$this->url('/admin/payment-transactions').'">Ödeme işlemleri</a><a href="'.$this->url('/admin/payments').'">Ödeme ayarları</a><a href="'.$this->url('/admin/invoices').'">Faturalar</a></aside><main><header><small>FİNANS / MUTABAKAT</small><h1>Finansal hareket raporu</h1><p>Tahsilat, sağlayıcıda tamamlanmış iadeler, açık fatura bakiyeleri ve manuel inceleme kayıtları. Tutarlar para birimine göre ayrı hesaplanır.</p></header>';
         if($rangeError!=='')echo '<div class="alert">'.$this->e($rangeError).' Varsayılan son 30 günlük aralık gösteriliyor.</div>';
@@ -64,7 +64,7 @@ final class PaymentController
         if(!$this->isStaff()){http_response_code(403);echo 'Yetkisiz erişim.';return;}
         [$from,$to,$toExclusive,$rangeError]=$this->financeDateRange();
         if($rangeError!==''){$this->redirect('/admin/finance');}
-        $rows=\\HostPilot\\Payment\\FinanceReport::movements($this->db,$from.' 00:00:00',$toExclusive.' 00:00:00',5000);
+        $rows=\HostPilot\Payment\FinanceReport::movements($this->db,$from.' 00:00:00',$toExclusive.' 00:00:00',5000);
         $actor=Auth::user();
         SecurityAudit::record($this->db,'payment.finance_report_exported',isset($actor['id'])?(int)$actor['id']:null,['action'=>'export']);
         header('Content-Type: text/csv; charset=UTF-8');
@@ -83,12 +83,12 @@ final class PaymentController
 
     private function financeDateRange():array
     {
-        $today=new \\DateTimeImmutable('today',new \\DateTimeZone('UTC'));
+        $today=new \DateTimeImmutable('today',new \DateTimeZone('UTC'));
         $defaultFrom=$today->modify('-29 days');
         $fromRaw=trim((string)($_GET['from']??$defaultFrom->format('Y-m-d')));
         $toRaw=trim((string)($_GET['to']??$today->format('Y-m-d')));
-        $from=\\DateTimeImmutable::createFromFormat('!Y-m-d',$fromRaw,new \\DateTimeZone('UTC'));
-        $to=\\DateTimeImmutable::createFromFormat('!Y-m-d',$toRaw,new \\DateTimeZone('UTC'));
+        $from=\DateTimeImmutable::createFromFormat('!Y-m-d',$fromRaw,new \DateTimeZone('UTC'));
+        $to=\DateTimeImmutable::createFromFormat('!Y-m-d',$toRaw,new \DateTimeZone('UTC'));
         $valid=$from!==false&&$to!==false&&$from->format('Y-m-d')===$fromRaw&&$to->format('Y-m-d')===$toRaw&&$from<=$to&&($to->getTimestamp()-$from->getTimestamp())<=366*86400;
         if(!$valid)return [$defaultFrom->format('Y-m-d'),$today->format('Y-m-d'),$today->modify('+1 day')->format('Y-m-d'),'Geçersiz tarih aralığı. Başlangıç ve bitiş tarihlerini kontrol edin.'];
         return [$fromRaw,$toRaw,$to->modify('+1 day')->format('Y-m-d'),''];
@@ -96,7 +96,7 @@ final class PaymentController
 
     private function csvSafeValue(string $value):string
     {
-        if($value!==''&&preg_match('/^[=+@\\-\\t\\r]/',$value))return "'".$value;
+        if($value!==''&&preg_match('/^[=+@\-\t\r]/',$value))return "'".$value;
         return $value;
     }
 
