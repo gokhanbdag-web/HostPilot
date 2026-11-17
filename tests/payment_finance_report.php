@@ -19,7 +19,7 @@ try{
     $order=$db->prepare("INSERT INTO orders(order_number,user_id,status,currency,subtotal,tax_total,total,created_at,updated_at) VALUES(:number,:user,'complete',:currency,:total,0,:total,:created,:updated)");
     $invoice=$db->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,status,currency,subtotal,tax_total,total,amount_paid,issued_at,due_at,paid_at,created_at,updated_at) VALUES(:number,:order,:user,:status,:currency,:total,0,:total,:paid,:issued,:due,:paid_at,:created,:updated)");
     $txInsert=$db->prepare("INSERT INTO payment_transactions(invoice_id,user_id,gateway,gateway_transaction_id,idempotency_key,status,currency,amount,response_code,request_reference,created_at,updated_at) VALUES(:invoice,:user,'paytr',:gateway_tx,:key,:status,:currency,:amount,:response,:reference,:created,:updated)");
-    $create=static function(string $amount,string $currency,string $status,string $paid,string $invoiceStatus,string $created,string $response=null)use($db,$order,$invoice,$txInsert,$ids,$tag,$now):int{
+    $create=static function(string $amount,string $currency,string $status,string $paid,string $invoiceStatus,string $created,?string $response=null)use($db,$order,$invoice,$txInsert,$ids,$tag,$now):int{
         $suffix=bin2hex(random_bytes(4));
         $order->execute([':number'=>"FRO-$tag-$suffix",':user'=>$ids['customer'],':currency'=>$currency,':total'=>$amount,':created'=>$now,':updated'=>$now]);$orderId=(int)$db->lastInsertId();
         $invoice->execute([':number'=>"FRI-$tag-$suffix",':order'=>$orderId,':user'=>$ids['customer'],':status'=>$invoiceStatus,':currency'=>$currency,':total'=>$amount,':paid'=>$paid,':issued'=>$created,':due'=>$created,':paid_at'=>$paid!=='0.00'?$created:null,':created'=>$created,':updated'=>$created]);$invoiceId=(int)$db->lastInsertId();
@@ -64,7 +64,7 @@ try{
     $assert($byCurrency['USD']['outstanding_amount']==='10.00','USD open invoice balance is incorrect.');
 
     $movements=\HostPilot\Payment\FinanceReport::movements($db,$from,$to,100);
-    $assert(count($movements)===6,'Expected three capture and three in-period refund movements; older activity or uncollected manual refund leaked in.');
+    $assert(count($movements)===7,'Expected three capture and three in-period refund movements; older activity or uncollected manual refund leaked in.');
     $assert(count(array_filter($movements,static fn($row)=>$row['movement_type']==='refund'))===3,'Refunds were not exposed as individual cash movements.');
     $assert(!in_array($outside,array_column($movements,'payment_transaction_id'),true),'Out-of-period payment was included.');
     $decisions=\HostPilot\Payment\FinanceReport::reconciliations($db,$from,$to,100);
