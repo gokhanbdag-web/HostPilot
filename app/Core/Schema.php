@@ -551,21 +551,15 @@ final class Schema
             currency CHAR(3) NOT NULL,
             movement_type VARCHAR(16) NOT NULL DEFAULT 'unknown',
             match_status VARCHAR(24) NOT NULL DEFAULT 'unmatched',
-            review_status VARCHAR(16) NOT NULL DEFAULT 'pending',
             suggested_payment_transaction_id BIGINT UNSIGNED NULL,
             suggested_refund_id BIGINT UNSIGNED NULL,
-            reviewed_by BIGINT UNSIGNED NULL,
-            reviewed_at DATETIME NULL,
-            review_note VARCHAR(500) NOT NULL DEFAULT '',
             created_at DATETIME NOT NULL,
             UNIQUE KEY uq_statement_import_row (import_id, source_row_number),
             KEY idx_statement_reference (provider_reference),
             KEY idx_statement_match_status (match_status, created_at),
-            KEY idx_statement_review_status (review_status, created_at),
             CONSTRAINT fk_statement_movement_import FOREIGN KEY (import_id) REFERENCES payment_statement_imports(id) ON DELETE CASCADE,
             CONSTRAINT fk_statement_movement_payment FOREIGN KEY (suggested_payment_transaction_id) REFERENCES payment_transactions(id) ON DELETE SET NULL,
-            CONSTRAINT fk_statement_movement_refund FOREIGN KEY (suggested_refund_id) REFERENCES payment_refunds(id) ON DELETE SET NULL,
-            CONSTRAINT fk_statement_review_user FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
+            CONSTRAINT fk_statement_movement_refund FOREIGN KEY (suggested_refund_id) REFERENCES payment_refunds(id) ON DELETE SET NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
 
