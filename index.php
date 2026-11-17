@@ -211,6 +211,7 @@ if ($requestPath === '/admin/services/terminate' && $method === 'POST') { $serve
 if ($requestPath === '/admin/payments' && in_array($method, ['GET','POST'], true)) { $payment->adminSettings(); exit; }
 if ($requestPath === '/admin/payment-transactions' && $method === 'GET') { $payment->adminTransactions(); exit; }
 if ($requestPath === '/admin/finance' && $method === 'GET') { $payment->adminFinance(); exit; }
+if ($requestPath === '/admin/finance/import' && in_array($method, ['GET','POST'], true)) { (new \\HostPilot\\Http\\StatementImportController($pdo, $basePath))->index(); exit; }
 if ($requestPath === '/admin/finance/export' && $method === 'GET') { $payment->adminFinanceExport(); exit; }
 if ($requestPath === '/admin/payment-transactions/reconcile' && $method === 'POST') { $payment->adminReconcile(); exit; }
 if ($requestPath === '/admin/payment-transactions/refund' && $method === 'POST') { $payment->adminRecordRefund(); exit; }
