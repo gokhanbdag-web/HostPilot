@@ -235,7 +235,7 @@ final class PaymentController
             $result=\HostPilot\Payment\RefundLedger::record($this->db,$id,(int)$actor['id'],$amount,$currency,$reference,$reason);
             $q=$this->db->prepare('SELECT i.invoice_number,u.name,u.email FROM payment_transactions pt JOIN invoices i ON i.id=pt.invoice_id JOIN users u ON u.id=pt.user_id WHERE pt.id=:id LIMIT 1');
             $q->execute([':id'=>$id]);$customer=$q->fetch(PDO::FETCH_ASSOC);
-            if(!$customer)throw new \\RuntimeException('İade kaydı oluşturuldu ancak müşteri/fatura bildirimi için kayıt bulunamadı.');
+            if(!$customer)throw new \RuntimeException('İade kaydı oluşturuldu ancak müşteri/fatura bildirimi için kayıt bulunamadı.');
             (new EmailService($this->db,$this->applicationKey))->queueRefundNotice((string)$customer['email'],(string)$customer['name'],(string)$customer['invoice_number'],(string)$result['refund_amount'],(string)$result['total_refunded'],$currency,(string)$result['payment_status'],(int)$result['refund_id']);
             SecurityAudit::record($this->db,'payment.partial_refund_recorded',(int)$actor['id'],['resource_id'=>$id,'action'=>$result['payment_status'],'refund_id'=>(int)$result['refund_id']]);
             $this->db->commit();
@@ -243,7 +243,7 @@ final class PaymentController
         }catch(Throwable $exception){
             if($this->db->inTransaction())$this->db->rollBack();
             error_log('[HostPilot] Refund ledger: '.$exception->getMessage());
-            $safeMessage=$exception instanceof \\PDOException&&$exception->getCode()==='23000'?'Bu sağlayıcı iade referansı bu ödeme için daha önce kaydedilmiş.':$exception->getMessage();
+            $safeMessage=$exception instanceof \PDOException&&$exception->getCode()==='23000'?'Bu sağlayıcı iade referansı bu ödeme için daha önce kaydedilmiş.':$exception->getMessage();
             $this->flashReconcileError($safeMessage);
         }
         $this->redirect('/admin/payment-transactions');
