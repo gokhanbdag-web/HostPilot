@@ -9,7 +9,7 @@ $audit=file_get_contents(dirname(__DIR__).'/app/Core/SecurityAudit.php');
 $migration=file_get_contents(dirname(__DIR__).'/database/migrations/20261117_0003_payment_statement_review.sql');
 $checks=[
  'only exact suggestions can be confirmed'=>str_contains($service, "match_status'] !== 'matched"),
- 'review is single-use and locked'=>str_contains($service,'FOR UPDATE')&&str_contains($service,"review_status !== 'pending'"),
+ 'review is single-use and locked'=>str_contains($service,'FOR UPDATE')&&str_contains($service,"['review_status'] !== 'pending'"),
  'review does not mutate payment or invoice state'=>!str_contains($service,'UPDATE payment_transactions')&&!str_contains($service,'UPDATE invoices')&&!str_contains($service,'UPDATE payment_refunds'),
  'review requires a reason for rejection or manual resolution'=>str_contains($service,"note === ''"),
  'review metadata migration exists'=>str_contains($migration,'review_status')&&str_contains($migration,'reviewed_by')&&str_contains($migration,'review_note'),
