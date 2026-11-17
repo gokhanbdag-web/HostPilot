@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS payment_statement_imports (
 CREATE TABLE IF NOT EXISTS payment_statement_movements (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
     import_id BIGINT UNSIGNED NOT NULL,
-    row_number INT UNSIGNED NOT NULL,
+    source_row_number INT UNSIGNED NOT NULL,
     occurred_at DATETIME NOT NULL,
     provider_reference VARCHAR(190) NOT NULL,
     description VARCHAR(500) NOT NULL DEFAULT '',
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS payment_statement_movements (
     suggested_payment_transaction_id BIGINT UNSIGNED NULL,
     suggested_refund_id BIGINT UNSIGNED NULL,
     created_at DATETIME NOT NULL,
-    UNIQUE KEY uq_statement_import_row (import_id, row_number),
+    UNIQUE KEY uq_statement_import_row (import_id, source_row_number),
     KEY idx_statement_reference (provider_reference),
     KEY idx_statement_match_status (match_status, created_at),
     CONSTRAINT fk_statement_movement_import FOREIGN KEY (import_id) REFERENCES payment_statement_imports(id) ON DELETE CASCADE,
