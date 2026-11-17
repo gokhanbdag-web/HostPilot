@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require dirname(__DIR__) . '/app/Core/MigrationRunner.php';
 require dirname(__DIR__) . '/app/Core/DatabaseBackup.php';
+require dirname(__DIR__) . '/app/Payment/StatementImport.php';
 use HostPilot\Core\MigrationRunner;
 
 $host = getenv('HOSTPILOT_DB_HOST') ?: '127.0.0.1';
@@ -98,6 +99,30 @@ foreach ($requiredTables as $table) {
 }
 if ((int)$pdo->query("SELECT COUNT(*) FROM staff_permissions sp JOIN users u ON u.id=sp.user_id WHERE u.username='grace-staff'")->fetchColumn() !== 8) throw new RuntimeException('Existing staff permission defaults were not seeded.');
 if ((int)$pdo->query("SELECT COUNT(*) FROM staff_departments sd JOIN users u ON u.id=sd.user_id WHERE u.username='grace-staff'")->fetchColumn() !== 4) throw new RuntimeException('Existing staff department defaults were not seeded.');
+
+// Verify statement match review decisions are single-use and never require payment-state mutation.
+$adminUserId = (int)$pdo->query("SELECT id FROM users WHERE username='ada-admin'")->fetchColumn();
+$import = $pdo->prepare('INSERT INTO payment_statement_imports(source,original_filename,file_sha256,imported_by,total_rows,created_at) VALUES(\'bank\',\'review-test.csv\',:hash,:user,2,UTC_TIMESTAMP())');
+$import->execute([':hash'=>hash('sha256','statement-review-ci-fixture'),':user'=>$adminUserId]);
+$importId = (int)$pdo->lastInsertId();
+$movementInsert = $pdo->prepare('INSERT INTO payment_statement_movements(import_id,source_row_number,occurred_at,provider_reference,description,amount,currency,movement_type,match_status,created_at) VALUES(:import,:row,UTC_TIMESTAMP(),:reference,\'CI review fixture\',:amount,\'TRY\',\'capture\',:match_status,UTC_TIMESTAMP())');
+$movementInsert->execute([':import'=>$importId,':row'=>2,':reference'=>'REVIEW-EXACT',':amount'=>'25.00',':match_status'=>'matched']);
+$exactMovementId = (int)$pdo->lastInsertId();
+$movementInsert->execute([':import'=>$importId,':row'=>3,':reference'=>'REVIEW-MISMATCH',':amount'=>'30.00',':match_status'=>'amount_mismatch']);
+$mismatchMovementId = (int)$pdo->lastInsertId();
+$paymentCountBeforeReview = (int)$pdo->query('SELECT COUNT(*) FROM payment_transactions')->fetchColumn();
+$confirmedReview = StatementImport::review($pdo,$exactMovementId,'confirm',$adminUserId);
+if (($confirmedReview['review_status']??'') !== 'confirmed') throw new RuntimeException('Exact statement match was not confirmed.');
+$confirmAgainRejected = false;
+try { StatementImport::review($pdo,$exactMovementId,'confirm',$adminUserId); } catch (RuntimeException) { $confirmAgainRejected = true; }
+if (!$confirmAgainRejected) throw new RuntimeException('A reviewed statement movement was allowed to be confirmed twice.');
+$mismatchConfirmRejected = false;
+try { StatementImport::review($pdo,$mismatchMovementId,'confirm',$adminUserId); } catch (RuntimeException) { $mismatchConfirmRejected = true; }
+if (!$mismatchConfirmRejected) throw new RuntimeException('An amount-mismatched statement movement was confirmed.');
+$manualReview = StatementImport::review($pdo,$mismatchMovementId,'reviewed',$adminUserId,'Banka açıklaması kontrol edildi.');
+if (($manualReview['review_status']??'') !== 'reviewed') throw new RuntimeException('Manual review decision was not recorded.');
+if ((int)$pdo->query('SELECT COUNT(*) FROM payment_transactions')->fetchColumn() !== $paymentCountBeforeReview) throw new RuntimeException('Statement review unexpectedly changed payment transactions.');
+
 
 $pdo->exec("INSERT INTO users(name,email,username,password_hash,role,status,created_at,updated_at) VALUES('Verification Test','verify@example.test','verify-test','test-hash','customer','pending_verification',UTC_TIMESTAMP(),UTC_TIMESTAMP())");
 $verificationUserId=(int)$pdo->lastInsertId();
