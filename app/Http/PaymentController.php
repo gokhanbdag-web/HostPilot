@@ -575,7 +575,7 @@ final class PaymentController
         if($ownsTransaction)$this->db->beginTransaction();
         try{
             $where=' WHERE id=:id';
-            if(isset($fields['status'])&&$fields['status']!=='success')$where.=" AND status NOT IN ('success','cancelled','refunded','review')";
+            if(isset($fields['status'])&&$fields['status']!=='success')$where.=" AND status NOT IN ('success','cancelled','refunded','partially_refunded','review')";
             $q=$this->db->prepare('UPDATE payment_transactions SET '.implode(',',$sets).$where);$q->execute($params);
             if($q->rowCount()===1&&isset($fields['status'])){
                 $event=(string)$fields['status'];
