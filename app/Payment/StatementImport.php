@@ -1,0 +1,124 @@
+<?php
+declare(strict_types=1);
+
+namespace HostPilot\Payment;
+
+use PDO;
+use RuntimeException;
+use Throwable;
+
+final class StatementImport
+{
+    public const MAX_FILE_BYTES = 2097152;
+    public const MAX_ROWS = 5000;
+
+    /** @return list<array{occurred_at:string,reference:string,description:string,amount:string,currency:string,type:string}> */
+    public static function parseCsv(string $contents): array
+    {
+        if ($contents === '' || strlen($contents) > self::MAX_FILE_BYTES) {
+            throw new RuntimeException('CSV dosyası boş veya 2 MB sınırını aşıyor.');
+        }
+        if (str_contains($contents, "\0") || preg_match('//u', $contents) !== 1) {
+            throw new RuntimeException('CSV dosyası geçerli UTF-8 metin olmalıdır.');
+        }
+        $contents = preg_replace('/^\xEF\xBB\xBF/', '', $contents) ?? $contents;
+        $stream = fopen('php://temp', 'w+b');
+        if ($stream === false) throw new RuntimeException('CSV okunamadı.');
+        try {
+            fwrite($stream, $contents);
+            rewind($stream);
+            $header = fgetcsv($stream, 0, ',', '"', '\\');
+            if (!is_array($header)) throw new RuntimeException('CSV başlık satırı bulunamadı.');
+            $header = array_map(static fn($v): string => strtolower(trim((string)$v)), $header);
+            $required = ['date','reference','description','amount','currency','type'];
+            if ($header !== $required) {
+                throw new RuntimeException('CSV başlıkları sırasıyla date,reference,description,amount,currency,type olmalıdır.');
+            }
+            $rows = [];
+            $line = 1;
+            while (($values = fgetcsv($stream, 0, ',', '"', '\\')) !== false) {
+                $line++;
+                if ($values === [null] || $values === []) continue;
+                if (count($rows) >= self::MAX_ROWS) throw new RuntimeException('CSV en fazla 5.000 hareket içerebilir.');
+                if (count($values) !== count($required)) throw new RuntimeException('CSV satır '.$line.' sütun sayısı geçersiz.');
+                $row = array_combine($required, array_map(static fn($v): string => trim((string)$v), $values));
+                if (!is_array($row)) throw new RuntimeException('CSV satırı okunamadı.');
+                $date = \DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $row['date'], new \DateTimeZone('UTC'));
+                if (!$date || $date->format('Y-m-d H:i:s') !== $row['date']) throw new RuntimeException('CSV satır '.$line.' tarihi UTC YYYY-MM-DD HH:MM:SS biçiminde olmalıdır.');
+                if ($row['reference'] === '' || strlen($row['reference']) > 190) throw new RuntimeException('CSV satır '.$line.' referansı geçersiz.');
+                if (strlen($row['description']) > 500) throw new RuntimeException('CSV satır '.$line.' açıklaması çok uzun.');
+                if (!preg_match('/^(?:0|[1-9][0-9]{0,9})(?:\.[0-9]{1,2})?$/D', $row['amount'])) throw new RuntimeException('CSV satır '.$line.' tutarı geçersiz.');
+                if (!preg_match('/^[A-Z]{3}$/D', strtoupper($row['currency']))) throw new RuntimeException('CSV satır '.$line.' para birimi geçersiz.');
+                $row['currency'] = strtoupper($row['currency']);
+                $row['type'] = strtolower($row['type']);
+                if (!in_array($row['type'], ['capture','refund','unknown'], true)) throw new RuntimeException('CSV satır '.$line.' hareket türü capture, refund veya unknown olmalıdır.');
+                $rows[] = $row;
+            }
+            if ($rows === []) throw new RuntimeException('CSV içinde içe aktarılacak hareket bulunamadı.');
+            return $rows;
+        } finally {
+            fclose($stream);
+        }
+    }
+
+    /** Import rows and create match suggestions only; never changes payment or invoice state. */
+    public static function import(PDO $db, string $source, string $filename, string $contents, int $userId): array
+    {
+        if (!in_array($source, ['bank','paytr','iyzico'], true)) throw new RuntimeException('Kaynak türü geçersiz.');
+        $filename = trim(basename($filename));
+        if ($filename === '' || strlen($filename) > 190 || $userId < 1) throw new RuntimeException('Dosya veya kullanıcı bilgisi geçersiz.');
+        $rows = self::parseCsv($contents);
+        $hash = hash('sha256', $contents);
+        try {
+            $db->beginTransaction();
+            $insert = $db->prepare('INSERT INTO payment_statement_imports (source,original_filename,file_sha256,imported_by,total_rows,created_at) VALUES (:source,:filename,:hash,:user,:total,UTC_TIMESTAMP())');
+            $insert->execute([':source'=>$source,':filename'=>$filename,':hash'=>$hash,':user'=>$userId,':total'=>count($rows)]);
+            $importId = (int)$db->lastInsertId();
+            $insertRow = $db->prepare('INSERT INTO payment_statement_movements (import_id,row_number,occurred_at,provider_reference,description,amount,currency,movement_type,match_status,suggested_payment_transaction_id,suggested_refund_id,created_at) VALUES (:import,:row,:date,:reference,:description,:amount,:currency,:type,:status,:payment,:refund,UTC_TIMESTAMP())');
+            $counts = ['matched'=>0,'amount_mismatch'=>0,'ambiguous'=>0,'unmatched'=>0];
+            foreach ($rows as $index => $row) {
+                $candidate = self::findCandidate($db, $row);
+                $status = $candidate['status'];
+                $counts[$status]++;
+                $insertRow->execute([
+                    ':import'=>$importId, ':row'=>$index+2, ':date'=>$row['occurred_at'],
+                    ':reference'=>$row['reference'], ':description'=>$row['description'],
+                    ':amount'=>$row['amount'], ':currency'=>$row['currency'], ':type'=>$row['type'],
+                    ':status'=>$status, ':payment'=>$candidate['payment_id'], ':refund'=>$candidate['refund_id'],
+                ]);
+            }
+            $db->commit();
+            return ['import_id'=>$importId,'rows'=>count($rows),'counts'=>$counts,'file_sha256'=>$hash];
+        } catch (Throwable $exception) {
+            if ($db->inTransaction()) $db->rollBack();
+            if ($exception instanceof \PDOException && (string)$exception->getCode() === '23000') {
+                throw new RuntimeException('Bu dosya aynı kaynak için daha önce içe aktarılmış.', 0, $exception);
+            }
+            throw $exception;
+        }
+    }
+
+    /** @return array{status:string,payment_id:?int,refund_id:?int} */
+    private static function findCandidate(PDO $db, array $row): array
+    {
+        if ($row['type'] === 'refund') {
+            $q = $db->prepare('SELECT pr.id AS refund_id,pr.amount,pr.currency FROM payment_refunds pr WHERE pr.provider_reference=:reference AND pr.currency=:currency LIMIT 2');
+            $q->execute([':reference'=>$row['reference'],':currency'=>$row['currency']]);
+            $matches = $q->fetchAll(PDO::FETCH_ASSOC);
+            $idField = 'refund_id';
+        } elseif ($row['type'] === 'capture') {
+            $q = $db->prepare("SELECT pt.id AS payment_id,pt.amount,pt.currency FROM payment_transactions pt WHERE (pt.gateway_transaction_id=:gateway_reference OR pt.request_reference=:request_reference) AND pt.currency=:currency AND pt.status IN ('success','partially_refunded','refunded') LIMIT 2");
+            $q->execute([':gateway_reference'=>$row['reference'],':request_reference'=>$row['reference'],':currency'=>$row['currency']]);
+            $matches = $q->fetchAll(PDO::FETCH_ASSOC);
+            $idField = 'payment_id';
+        } else {
+            return ['status'=>'unmatched','payment_id'=>null,'refund_id'=>null];
+        }
+        if (count($matches) > 1) return ['status'=>'ambiguous','payment_id'=>null,'refund_id'=>null];
+        if (count($matches) === 0) return ['status'=>'unmatched','payment_id'=>null,'refund_id'=>null];
+        $match = $matches[0];
+        $exactAmount = number_format((float)$match['amount'],2,'.','') === number_format((float)$row['amount'],2,'.');
+        if (!$exactAmount) return ['status'=>'amount_mismatch','payment_id'=>$idField==='payment_id'?(int)$match[$idField]:null,'refund_id'=>$idField==='refund_id'?(int)$match[$idField]:null];
+        return ['status'=>'matched','payment_id'=>$idField==='payment_id'?(int)$match[$idField]:null,'refund_id'=>$idField==='refund_id'?(int)$match[$idField]:null];
+    }
+}
