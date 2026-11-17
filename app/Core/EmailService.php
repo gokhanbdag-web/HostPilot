@@ -71,6 +71,22 @@ final class EmailService
         return $this->queue($recipient,$subject,$body,$key,'domain_expiry_'.$daysRemaining);
     }
 
+    public function queuePaymentStatusNotice(string $recipient,string $customerName,string $invoiceNumber,float $amount,string $currency,string $event,int $paymentTransactionId):bool
+    {
+        $labels=[
+            'pending'=>['Ödeme işleminiz başlatıldı','Ödeme oturumunuz oluşturuldu ve sağlayıcı sonucu bekleniyor. Sonuç netleşene kadar aynı fatura için yeni bir ödeme başlatmayın.'],
+            'success'=>['Ödemeniz doğrulandı','Ödeme sağlayıcısı tahsilatınızı başarıyla doğruladı. Fatura bakiyeniz güncellendi.'],
+            'review'=>['Ödeme işleminiz incelemede','Ödeme sonucunuz güvenliğiniz için manuel incelemeye alındı. Lütfen aynı fatura için yeni bir ödeme başlatmayın; durum müşteri panelinizde güncellenecektir.'],
+            'failed'=>['Ödeme işlemi tamamlanamadı','Ödeme sağlayıcısı işleminizi onaylamadı. Fatura bakiyenizi ve ödeme yönteminizi müşteri panelinizden kontrol edip yeniden deneyebilirsiniz.'],
+        ];
+        if(!isset($labels[$event])||$paymentTransactionId<1||!filter_var($recipient,FILTER_VALIDATE_EMAIL))return false;
+        [$subject,$message]=$labels[$event];
+        $body="Merhaba ".($customerName!==''?$customerName:'Müşterimiz').",\n\n".$message."\n\n";
+        $body.="Fatura: ".$invoiceNumber."\nİşlem tutarı: ".number_format($amount,2,',','.')." ".$currency."\n\n";
+        $body.="Güncel fatura ve ödeme durumunuzu HostPilot müşteri panelinizden görüntüleyebilirsiniz.\n\nBu e-posta otomatik olarak gönderilmiştir.";
+        return $this->queue($recipient,$subject,$body,'payment-status:'.$paymentTransactionId.':'.$event,'payment_'.$event);
+    }
+
     public function queueInvoiceNotice(string $recipient,string $customerName,string $invoiceNumber,float $amount,string $currency,string $dueAt,string $event,int $invoiceId):bool
     {
         $labels=[
