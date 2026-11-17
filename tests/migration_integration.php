@@ -66,7 +66,7 @@ $pdo->exec("INSERT INTO users (name,email,username,password_hash,role,status,cre
 
 $directory = dirname(__DIR__) . '/database/migrations';
 $files = MigrationRunner::discover($directory);
-if (count($files) !== 30) throw new RuntimeException('Expected 29 SQL migrations; discovered ' . count($files) . '.');
+if (count($files) !== 30) throw new RuntimeException('Expected 30 SQL migrations; discovered ' . count($files) . '.');
 
 // Simulate interruption after the first DDL statement; the migration must safely retry.
 $firstSql = file_get_contents($files[0]['path']);
@@ -82,7 +82,7 @@ try {
     if (!str_contains($exception->getMessage(), 'Explicit administrator confirmation')) throw $exception;
 }
 $applied = MigrationRunner::runPending($pdo, $directory, true);
-if (count($applied) !== 30) throw new RuntimeException('Expected 29 applied migrations; got ' . count($applied) . '.');
+if (count($applied) !== 30) throw new RuntimeException('Expected 30 applied migrations; got ' . count($applied) . '.');
 $appliedCount = (int)$pdo->query('SELECT COUNT(*) FROM migrations')->fetchColumn();
 if ($appliedCount !== 30) throw new RuntimeException('Expected exactly 30 migration tracking rows.');
 if (MigrationRunner::pending($pdo, $directory) !== []) throw new RuntimeException('Pending migrations remain after successful run.');
@@ -115,7 +115,7 @@ $verified=$pdo->prepare("SELECT status,email_verified_at FROM users WHERE id=:id
 $verified->execute([':id'=>$verificationUserId]);
 $verifiedRow=$verified->fetch(PDO::FETCH_ASSOC);
 if (($verifiedRow['status']??'')!=='active'||empty($verifiedRow['email_verified_at'])) throw new RuntimeException('Email verification did not activate the pending customer.');
-echo 'MySQL/MariaDB migration integration passed: 29 migrations, customer/admin MFA tables, staff defaults, partial-DDL retry, confirmation guard, tracking and idempotent second run.' . PHP_EOL;
+echo 'MySQL/MariaDB migration integration passed: 30 migrations, customer/admin MFA and refund ledger tables, staff defaults, partial-DDL retry, confirmation guard, tracking and idempotent second run.' . PHP_EOL;
 
 // Compare the SQL migration path with the retained legacy PHP migration path
 // on an independent clean schema. This remains an ephemeral CI-only database.
