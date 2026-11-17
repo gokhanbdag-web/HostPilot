@@ -28,8 +28,8 @@ try{
     };
     $createInvoiceOnly=static function(string $amount,string $currency,string $status,string $paid,string $created)use($db,$order,$invoice,$ids,$tag,$now):void{
         $suffix=bin2hex(random_bytes(4));
-        $order->execute([':number'=>"FRO-$tag-$suffix",':user'=>$ids['customer'],':currency'=>$currency,':total'=>$amount,':created'=>$now,':updated'=>$now]);$orderId=(int)$db->lastInsertId();
-        $invoice->execute([':number'=>"FRI-$tag-$suffix",':order'=>$orderId,':user'=>$ids['customer'],':status'=>$status,':currency'=>$currency,':total'=>$amount,':paid'=>$paid,':issued'=>$created,':due'=>$created,':paid_at'=>$paid!=='0.00'?$created:null,':created'=>$created,':updated'=>$created]);
+        $order->execute([':number'=>"FRO-$tag-$suffix",':user'=>$ids['customer'],':currency'=>$currency,':subtotal'=>$amount,':total'=>$amount,':created'=>$now,':updated'=>$now]);$orderId=(int)$db->lastInsertId();
+        $invoice->execute([':number'=>"FRI-$tag-$suffix",':order'=>$orderId,':user'=>$ids['customer'],':status'=>$status,':currency'=>$currency,':subtotal'=>$amount,':total'=>$amount,':paid'=>$paid,':issued'=>$created,':due'=>$created,':paid_at'=>$paid!=='0.00'?$created:null,':created'=>$created,':updated'=>$created]);
     };
 
     $success=$create('100.00','TRY','success','100.00','paid',$now);
