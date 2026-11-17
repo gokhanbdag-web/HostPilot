@@ -155,6 +155,16 @@ jobs:
         run: |
           php -l tests/payment_status_notifications.php
           php tests/payment_status_notifications.php
+      - name: Test payment refund ledger invariants
+        env:
+          HOSTPILOT_DB_HOST: 127.0.0.1
+          HOSTPILOT_DB_PORT: 3306
+          HOSTPILOT_DB_NAME: hostpilot_ci
+          HOSTPILOT_DB_USER: root
+          HOSTPILOT_DB_PASSWORD: root
+        run: |
+          php -l tests/payment_refund_ledger.php
+          php tests/payment_refund_ledger.php
       - name: Run authenticated HTTP security integration tests
         env:
           HOSTPILOT_DB_HOST: 127.0.0.1
