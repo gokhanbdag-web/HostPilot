@@ -19,6 +19,10 @@ $cases = [
     ['login route remains public', '/admin/login', 'GET', null, true],
     ['customer cannot access admin MFA management', '/admin/security/mfa', 'GET', $customer, false],
     ['customer cannot reconcile payment transactions', '/admin/payment-transactions/reconcile', 'POST', $customer, false],
+    ['admin can view finance reports', '/admin/finance', 'GET', $admin, true],
+    ['admin can export finance reports', '/admin/finance/export', 'GET', $admin, true],
+    ['customer cannot view finance reports', '/admin/finance', 'GET', $customer, false],
+    ['staff finance reports require payment view permission', '/admin/finance', 'GET', $staff, false],
     ['support staff cannot reconcile payment transactions without privileged permission', '/admin/payment-transactions/reconcile', 'POST', $staff, false],
     ['admin can access payment reconciliation action', '/admin/payment-transactions/reconcile', 'POST', $admin, true],
     ['customer cannot access database restore', '/admin/database-restore', 'GET', $customer, false],
@@ -42,4 +46,6 @@ foreach ($cases as [$name, $path, $method, $user, $expected]) {
 $_SERVER['REQUEST_URI']='/hostpilot/admin';
 $_SERVER['REQUEST_METHOD']='GET';
 if (!\HostPilot\Core\Authorization::allowsCurrentRequest($admin,null,'/hostpilot')) throw new RuntimeException('Subdirectory-aware current request authorization failed.');
+if (\HostPilot\Core\Authorization::permissionFor('/admin/finance','GET') !== 'payments.view' || \HostPilot\Core\Authorization::permissionFor('/admin/finance/export','GET') !== 'payments.view') throw new RuntimeException('Finance report route permission mapping failed.');
+echo "PASS finance report permission mapping".PHP_EOL;
 echo "PASS subdirectory-aware current request authorization".PHP_EOL;
