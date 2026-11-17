@@ -84,7 +84,7 @@ final class FinanceReport
     {
         self::assertRange($from, $toExclusive);
         $limit = max(1, min(5000, $limit));
-        $captures = $db->prepare("SELECT pt.created_at AS occurred_at, 'capture' AS movement_type,
+        $captures = $db->prepare("SELECT pt.id AS payment_transaction_id, pt.created_at AS occurred_at, 'capture' AS movement_type,
                 i.invoice_number, pt.gateway, COALESCE(pt.gateway_transaction_id,'') AS provider_reference,
                 pt.amount, pt.currency, pt.status AS detail
             FROM payment_transactions pt
@@ -94,7 +94,7 @@ final class FinanceReport
               AND pt.created_at >= :from_date AND pt.created_at < :to_date
             ORDER BY pt.created_at DESC LIMIT ".$limit);
         $captures->execute([':from_date'=>$from, ':to_date'=>$toExclusive]);
-        $refunds = $db->prepare("SELECT pr.created_at AS occurred_at, 'refund' AS movement_type,
+        $refunds = $db->prepare("SELECT pr.payment_transaction_id, pr.created_at AS occurred_at, 'refund' AS movement_type,
                 i.invoice_number, pt.gateway, pr.provider_reference, pr.amount, pr.currency, pr.reason AS detail
             FROM payment_refunds pr
             JOIN payment_transactions pt ON pt.id=pr.payment_transaction_id
