@@ -237,7 +237,7 @@ final class PaymentController
             $q->execute([':id'=>$id]);$customer=$q->fetch(PDO::FETCH_ASSOC);
             if(!$customer)throw new \RuntimeException('İade kaydı oluşturuldu ancak müşteri/fatura bildirimi için kayıt bulunamadı.');
             (new EmailService($this->db,$this->applicationKey))->queueRefundNotice((string)$customer['email'],(string)$customer['name'],(string)$customer['invoice_number'],(string)$result['refund_amount'],(string)$result['total_refunded'],$currency,(string)$result['payment_status'],(int)$result['refund_id']);
-            SecurityAudit::record($this->db,'payment.partial_refund_recorded',(int)$actor['id'],['resource_id'=>$id,'action'=>$result['payment_status'],'refund_id'=>(int)$result['refund_id']]);
+            SecurityAudit::record($this->db,'payment.partial_refund_recorded',(int)$actor['id'],['resource_id'=>$id,'action'=>'refund_confirmed','refund_id'=>(int)$result['refund_id']]);
             $this->db->commit();
             $_SESSION['hostpilot_payment_reconcile_notice']='Sağlayıcıda doğrulanmış iade kaydedildi. Fatura bakiyesi güncellendi: kalan '.number_format((float)$result['invoice_remaining'],2,',','.').' '.$currency.'.';
         }catch(Throwable $exception){
