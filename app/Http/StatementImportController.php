@@ -21,7 +21,7 @@ final class StatementImportController
         $error=(string)($_SESSION['hostpilot_statement_error']??'');
         unset($_SESSION['hostpilot_statement_notice'],$_SESSION['hostpilot_statement_error']);
         if(($_SERVER['REQUEST_METHOD']??'GET')==='POST'){
-            if(!in_array(($user['role']??''),['admin','super_admin'],true)){$error='Ekstre içe aktarma işlemi yalnızca admin tarafından yapılabilir.';}
+            if(!in_array(($user['role']??''),['admin','super_admin'],true)){http_response_code(403);echo 'Ekstre içe aktarma işlemi yalnızca admin tarafından yapılabilir.';return;}
             if(!Auth::verifyCsrf($_POST['_token']??null))$error='Güvenlik doğrulaması başarısız.';
             elseif(!isset($_FILES['statement'])||!is_array($_FILES['statement'])||(int)($_FILES['statement']['error']??UPLOAD_ERR_NO_FILE)!==UPLOAD_ERR_OK)$error='CSV dosyası yüklenemedi.';
             else{
