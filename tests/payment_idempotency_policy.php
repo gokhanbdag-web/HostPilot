@@ -12,7 +12,7 @@ $checks = [
     'payment initialization rolls back an open database transaction on failure' => str_contains($source, 'if($this->db->inTransaction())$this->db->rollBack();'),
     'stale pending attempts move to review without releasing the invoice for another charge' => str_contains($source, "status='review',response_code='stale_pending_review'") && str_contains($source, "modify('-30 minutes')"),
     'administrator can explicitly confirm that no capture occurred' => str_contains($source, "'no_capture_confirmed'") && str_contains($source, "status='cancelled'"),
-    'late callbacks cannot settle manually closed or terminal payment attempts' => str_contains($source, "['success','failed','cancelled','refunded']") && str_contains($source, "status NOT IN ('success','cancelled','refunded','review')"),
+    'late callbacks cannot settle manually closed or terminal payment attempts' => str_contains($source, "['success','failed','cancelled','refunded','partially_refunded']") && str_contains($source, "status NOT IN ('success','cancelled','refunded','partially_refunded','review')"),
     'no-capture decision is recorded in reconciliation history and audit log' => str_contains($source, "INSERT INTO payment_reconciliations(payment_transaction_id,admin_user_id,decision") && str_contains($source, "payment.no_capture_confirmed"),
 ];
 foreach ($checks as $label=>$passed) {
