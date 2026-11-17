@@ -112,7 +112,19 @@ final class PaymentController
                 echo '<label><input type="checkbox" name="confirm_external_action" value="1" required> Sağlayıcı panelinde seçtiğim sonucu doğruladım; bu işlem sağlayıcıya otomatik istek göndermez.</label>';
                 echo '<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="submit" name="decision" value="payment_confirmed">Tahsilatı faturaya işle</button><button type="submit" name="decision" value="refund_confirmed">Tam iadenin yapıldığını kaydet</button><button type="submit" name="decision" value="no_capture_confirmed">Tahsilat olmadığını doğrula ve kapat</button></div></form></td></tr>';
             }
-        }
+
+
+            }
+            if($canReconcile&&in_array($v['status'],['success','partially_refunded'],true)){
+                echo '<tr><td colspan="6"><form method="post" action="'.$this->url('/admin/payment-transactions/refund').'" style="display:grid;gap:9px;padding:12px;background:#f6f8fc;border-radius:8px">';
+                echo '<input type="hidden" name="_token" value="'.$this->e($csrf).'"><input type="hidden" name="payment_transaction_id" value="'.(int)$v['id'].'"><input type="hidden" name="currency" value="'.$this->e((string)$v['currency']).'">';
+                echo '<b>Sağlayıcıda tamamlanmış iadeyi kaydet · #'.(int)$v['id'].'</b><p>Bu ekran PayTR/iyzico API çağrısı yapmaz. Önce sağlayıcı panelinde iadenin tamamlandığını doğrulayın.</p>';
+                echo '<label>İade tutarı<input name="refund_amount" inputmode="decimal" required pattern="[0-9]+([.][0-9]{1,2})?" maxlength="13" placeholder="0.00"></label>';
+                echo '<label>Sağlayıcı iade referansı<input name="provider_reference" required maxlength="190" autocomplete="off"></label>';
+                echo '<label>İade açıklaması<input name="reason" required maxlength="500"></label>';
+                echo '<label>Yönetici parolası<input type="password" name="password" required maxlength="4096" autocomplete="current-password"></label>';
+                echo '<label><input type="checkbox" name="confirm_external_action" value="1" required> İadenin sağlayıcı panelinde tamamlandığını doğruladım.</label><button type="submit">İadeyi kaydet</button></form></td></tr>';
+            }
         echo '</tbody></table></div></section></main></div>';$this->pageEnd();
     }
 
@@ -184,6 +196,43 @@ final class PaymentController
         }catch(Throwable $exception){
             if($this->db->inTransaction())$this->db->rollBack();
             error_log('[HostPilot] Payment reconciliation: '.$exception->getMessage());
+            $this->flashReconcileError($exception->getMessage());
+        }
+        $this->redirect('/admin/payment-transactions');
+    }
+
+
+    public function adminRecordRefund():void
+    {
+        $actor=Auth::user();
+        if(!$actor||!in_array(($actor['role']??''),['admin','super_admin'],true)){http_response_code(403);echo 'Bu işlem yalnızca admin tarafından yapılabilir.';return;}
+        if(($_SERVER['REQUEST_METHOD']??'GET')!=='POST')$this->redirect('/admin/payment-transactions');
+        if(!Auth::verifyCsrf($_POST['_token']??null)){$this->flashReconcileError('Güvenlik doğrulaması başarısız.');$this->redirect('/admin/payment-transactions');}
+        $id=(int)($_POST['payment_transaction_id']??0);
+        $amount=trim((string)($_POST['refund_amount']??''));
+        $currency=strtoupper(trim((string)($_POST['currency']??'')));
+        $reference=trim((string)($_POST['provider_reference']??''));
+        $reason=trim((string)($_POST['reason']??''));
+        if($id<1||$amount===''||$currency===''||$reference===''||$reason===''||(string)($_POST['confirm_external_action']??'')!=='1'){
+            $this->flashReconcileError('İade alanları eksik. Sağlayıcıda tamamlanmış iadeyi doğrulayıp tüm alanları doldurun.');$this->redirect('/admin/payment-transactions');
+        }
+        $verified=Auth::verifyCredentials($this->db,(string)($actor['email']??''),(string)($_POST['password']??''));
+        if(!is_array($verified)||(int)($verified['id']??0)!==(int)$actor['id']||!in_array(($verified['role']??''),['admin','super_admin'],true)){
+            $this->flashReconcileError('Yönetici parolası doğrulanamadı.');$this->redirect('/admin/payment-transactions');
+        }
+        try{
+            $this->db->beginTransaction();
+            $result=\HostPilot\Payment\RefundLedger::record($this->db,$id,(int)$actor['id'],$amount,$currency,$reference,$reason);
+            $q=$this->db->prepare('SELECT i.invoice_number,u.name,u.email FROM payment_transactions pt JOIN invoices i ON i.id=pt.invoice_id JOIN users u ON u.id=pt.user_id WHERE pt.id=:id LIMIT 1');
+            $q->execute([':id'=>$id]);$customer=$q->fetch(PDO::FETCH_ASSOC);
+            if(!$customer)throw new \\RuntimeException('İade kaydı oluşturuldu ancak müşteri/fatura bildirimi için kayıt bulunamadı.');
+            (new EmailService($this->db,$this->applicationKey))->queueRefundNotice((string)$customer['email'],(string)$customer['name'],(string)$customer['invoice_number'],(string)$result['refund_amount'],(string)$result['total_refunded'],$currency,(string)$result['payment_status'],(int)$result['refund_id']);
+            SecurityAudit::record($this->db,'payment.partial_refund_recorded',(int)$actor['id'],['resource_id'=>$id,'action'=>$result['payment_status'],'refund_id'=>(int)$result['refund_id']]);
+            $this->db->commit();
+            $_SESSION['hostpilot_payment_reconcile_notice']='Sağlayıcıda doğrulanmış iade kaydedildi. Fatura bakiyesi güncellendi: kalan '.number_format((float)$result['invoice_remaining'],2,',','.').' '.$currency.'.';
+        }catch(Throwable $exception){
+            if($this->db->inTransaction())$this->db->rollBack();
+            error_log('[HostPilot] Refund ledger: '.$exception->getMessage());
             $this->flashReconcileError($exception->getMessage());
         }
         $this->redirect('/admin/payment-transactions');
