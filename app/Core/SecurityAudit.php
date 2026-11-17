@@ -43,6 +43,7 @@ final class SecurityAudit
         'payment.partial_refund_recorded',
         'payment.finance_report_exported',
         'payment.statement_imported',
+        'payment.statement_movement_reviewed',
         'server.created',
         'server.connection_tested',
         'server.product_mapping_updated',
