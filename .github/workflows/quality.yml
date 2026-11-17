@@ -59,6 +59,8 @@ jobs:
         run: php tests/payment_finance_report_policy.php
       - name: Test payment statement import policy
         run: php tests/payment_statement_import_policy.php
+      - name: Test payment statement import parser
+        run: php tests/payment_statement_import_parser.php
       - name: Test hosting transport SSRF policy
         run: php tests/hosting_transport_ssrf.php
       - name: Test cron header authentication policy
