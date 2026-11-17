@@ -1,5 +1,15 @@
 # HostPilot güncelleme notları
 
+## 2026-11-17 · 2026.11.17.03
+
+- Yönetici, ödeme sağlayıcısı panelinde tamamlandığını doğruladığı kısmi iadeleri tutar, para birimi, sağlayıcı iade referansı ve açıklamayla ayrı kayıtlar halinde ekleyebilir.
+- Her ödeme işlemi için birden fazla iade kaydı tutulur; yinelenen sağlayıcı referansı, sıfır/geçersiz tutar, para birimi uyuşmazlığı ve tahsilat tutarını aşan toplam iade reddedilir.
+- Kısmi/tam iade kaydı, ödeme durumu, fatura tahsilat bakiyesi ve müşteri e-posta outbox bildirimi tek veritabanı işlemi içinde güncellenir.
+- Fatura bakiyesi iade tutarı kadar geri açılır; ödeme ancak kümülatif iade tahsilatın tamamına ulaştığında tamamen iade edildi durumuna geçer.
+- Yönetici ekranında iade geçmişi; müşteri fatura detayında yalnızca kendi iade tutarları ve tarihleri gösterilir.
+- Bu sürüm sağlayıcıya otomatik iade isteği göndermez. Sağlayıcı panelinde tamamlanmış iadenin kaydını tutar; gerçek PayTR/iyzico iade API çağrıları ve banka mutabakatı ayrı geliştirme/test gerektirir.
+
+
 ## 2026-11-17 · 2026.11.17.02
 
 - Yönetici, sağlayıcı panelinde tam iadenin tamamlandığını doğruladığında müşteriye iade bildirimi e-posta kuyruğuna eklenir.
