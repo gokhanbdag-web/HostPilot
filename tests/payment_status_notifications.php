@@ -32,16 +32,20 @@ try {
     $assert($service->queuePaymentStatusNotice($recipient, 'Test Customer', $invoiceNumber, 149.90, 'TRY', 'review', $transactionId), 'Review transition notice was not queued.');
     $assert($service->queuePaymentStatusNotice($recipient, 'Test Customer', $invoiceNumber, 149.90, 'TRY', 'success', $transactionId), 'Successful payment notice was not queued.');
     $assert($service->queuePaymentStatusNotice($recipient, 'Test Customer', $invoiceNumber, 149.90, 'TRY', 'failed', $transactionId), 'Failed payment notice was not queued.');
+    $assert($service->queuePaymentStatusNotice($recipient, 'Test Customer', $invoiceNumber, 149.90, 'TRY', 'refunded', $transactionId), 'Refund notice was not queued.');
+    $assert($service->queuePaymentStatusNotice($recipient, 'Test Customer', $invoiceNumber, 149.90, 'TRY', 'cancelled', $transactionId), 'Cancellation notice was not queued.');
+    $assert(!$service->queuePaymentStatusNotice($recipient, 'Test Customer', $invoiceNumber, 149.90, 'TRY', 'refunded', $transactionId), 'Duplicate refund notice was not suppressed.');
+    $assert(!$service->queuePaymentStatusNotice($recipient, 'Test Customer', $invoiceNumber, 149.90, 'TRY', 'cancelled', $transactionId), 'Duplicate cancellation notice was not suppressed.');
     $assert(!$service->queuePaymentStatusNotice($recipient, 'Test Customer', $invoiceNumber, 149.90, 'TRY', 'provider_debug', $transactionId), 'Unsupported event was accepted.');
     $assert(!$service->queuePaymentStatusNotice('invalid-recipient', 'Test Customer', $invoiceNumber, 149.90, 'TRY', 'review', $transactionId), 'Invalid recipient was accepted.');
 
     $query = $db->prepare('SELECT event_type,subject,body,idempotency_key FROM email_outbox WHERE recipient=:recipient ORDER BY id');
     $query->execute([':recipient' => $recipient]);
     $rows = $query->fetchAll();
-    $assert(count($rows) === 4, 'Expected exactly one outbox row per allowed payment state.');
+    $assert(count($rows) === 6, 'Expected exactly one outbox row per allowed payment state.');
     $events = array_column($rows, 'event_type');
     sort($events);
-    $assert($events === ['payment_failed', 'payment_pending', 'payment_review', 'payment_success'], 'Payment state event types were not stored correctly.');
+    $assert($events === ['payment_cancelled', 'payment_failed', 'payment_pending', 'payment_refunded', 'payment_review', 'payment_success'], 'Payment state event types were not stored correctly.');
     $keys = array_column($rows, 'idempotency_key');
     $assert(count(array_unique($keys)) === 4, 'Different payment states must have distinct idempotency keys.');
     foreach ($rows as $row) {
@@ -55,6 +59,8 @@ try {
     $assert(str_contains($source, "\$this->queuePaymentStatusForTransaction(\$txId,'pending')"), 'Initial pending transition is not queued.');
     $assert(str_contains($source, "\$this->queuePaymentStatusForTransaction((int)\$tx['id'],'success')"), 'Successful settlement is not queued.');
     $assert(str_contains($source, "\$this->queuePaymentStatusForTransaction(\$id,'review')"), 'Stale pending review is not queued.');
+    $assert(str_contains($source, "\$this->queuePaymentStatusForTransaction(\$id,'refunded')"), 'Confirmed full refund is not queued.');
+    $assert(str_contains($source, "\$this->queuePaymentStatusForTransaction(\$id,'cancelled')"), 'Confirmed no-capture cancellation is not queued.');
     $assert(str_contains($source, 'if($q->rowCount()===1&&isset($fields[\'status\']))'), 'Repeated status updates are not gated by a real row transition.');
     echo "PASS payment status email outbox idempotency and state transition coverage" . PHP_EOL;
 } finally {
