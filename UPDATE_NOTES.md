@@ -1,5 +1,14 @@
 # HostPilot güncelleme notları
 
+## 2026-11-17 · 2026.11.17.01
+
+- Ödeme oturumu başlatıldığında, sağlayıcı sonucu doğrulandığında, işlem manuel incelemeye alındığında veya başarısız olduğunda müşteriye Türkçe e-posta bildirimi kuyruğa eklenir.
+- Bildirimler ödeme işlem kimliği ve durum geçişi bazında tekilleştirilir; yinelenen callback ve tekrar mutabakat aynı bildirimi çoğaltmaz.
+- Ödeme durumu değişikliği ile e-posta outbox kaydı aynı veritabanı işlemi içinde yazılır; SMTP gönderimi mevcut kuyruk worker'ına bırakılır ve ödeme callback yanıtını bekletmez.
+- Belirsiz SMTP worker zaman aşımı otomatik tekrar yerine manuel incelemede kalır; e-posta içeriğinde sağlayıcı hata ayrıntıları veya gizli bilgiler paylaşılmaz.
+- CI, MySQL 8 ve MariaDB 10.11 üzerinde outbox tekilleştirmesini ve durum bildirimlerini test eder. Gerçek SMTP teslimatı bu testlerin kapsamı dışındadır.
+
+
 ## 2026-11-13
 
 - Ana sayfa, geçici duyuru metinleri kaldırılarak önceki satış odaklı başlık ve açıklamasına döndürüldü.
