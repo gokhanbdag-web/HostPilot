@@ -333,7 +333,7 @@ if (!mkdir($subdirectory, 0750, true)) throw new RuntimeException('Unable to cre
 file_put_contents($subdirectory . '/index.php', "<?php require dirname(__DIR__) . '/index.php';\n");
 $subDatabase = 'hostpilot_installer_subdir_ci';
 [$subCookie, $subDb] = installBrowserApp($admin, $host, $port, $user, $password, $subDatabase, 'http://127.0.0.1:8080/ci-subdir/', 'ci-subdir', 'ci-subdir@example.test', '/ci-subdir');
-if ((int)$subDb->query('SELECT COUNT(*) FROM migrations')->fetchColumn() !== 32) throw new RuntimeException('Subdirectory installer did not apply all 31 SQL migrations.');
+if ((int)$subDb->query('SELECT COUNT(*) FROM migrations')->fetchColumn() !== 32) throw new RuntimeException('Subdirectory installer did not apply all 32 SQL migrations.');
 cleanupInstallFiles($storage);
 @unlink($subdirectory . '/index.php');
 @rmdir($subdirectory);
