@@ -75,7 +75,7 @@ final class StatementImport
             $insert = $db->prepare('INSERT INTO payment_statement_imports (source,original_filename,file_sha256,imported_by,total_rows,created_at) VALUES (:source,:filename,:hash,:user,:total,UTC_TIMESTAMP())');
             $insert->execute([':source'=>$source,':filename'=>$filename,':hash'=>$hash,':user'=>$userId,':total'=>count($rows)]);
             $importId = (int)$db->lastInsertId();
-            $insertRow = $db->prepare('INSERT INTO payment_statement_movements (import_id,row_number,occurred_at,provider_reference,description,amount,currency,movement_type,match_status,suggested_payment_transaction_id,suggested_refund_id,created_at) VALUES (:import,:row,:date,:reference,:description,:amount,:currency,:type,:status,:payment,:refund,UTC_TIMESTAMP())');
+            $insertRow = $db->prepare('INSERT INTO payment_statement_movements (import_id,source_row_number,occurred_at,provider_reference,description,amount,currency,movement_type,match_status,suggested_payment_transaction_id,suggested_refund_id,created_at) VALUES (:import,:row,:date,:reference,:description,:amount,:currency,:type,:status,:payment,:refund,UTC_TIMESTAMP())');
             $counts = ['matched'=>0,'amount_mismatch'=>0,'ambiguous'=>0,'unmatched'=>0];
             foreach ($rows as $index => $row) {
                 $candidate = self::findCandidate($db, $row);
