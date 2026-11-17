@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require dirname(__DIR__) . '/app/Core/MigrationRunner.php';
 require dirname(__DIR__) . '/app/Core/DatabaseBackup.php';
+require dirname(__DIR__) . '/app/Payment/StatementImport.php';
 use HostPilot\Core\MigrationRunner;
 
 $host = getenv('HOSTPILOT_DB_HOST') ?: '127.0.0.1';
@@ -66,7 +67,7 @@ $pdo->exec("INSERT INTO users (name,email,username,password_hash,role,status,cre
 
 $directory = dirname(__DIR__) . '/database/migrations';
 $files = MigrationRunner::discover($directory);
-if (count($files) !== 31) throw new RuntimeException('Expected 31 SQL migrations; discovered ' . count($files) . '.');
+if (count($files) !== 32) throw new RuntimeException('Expected 32 SQL migrations; discovered ' . count($files) . '.');
 
 // Simulate interruption after the first DDL statement; the migration must safely retry.
 $firstSql = file_get_contents($files[0]['path']);
@@ -82,9 +83,9 @@ try {
     if (!str_contains($exception->getMessage(), 'Explicit administrator confirmation')) throw $exception;
 }
 $applied = MigrationRunner::runPending($pdo, $directory, true);
-if (count($applied) !== 31) throw new RuntimeException('Expected 31 applied migrations; got ' . count($applied) . '.');
+if (count($applied) !== 32) throw new RuntimeException('Expected 32 applied migrations; got ' . count($applied) . '.');
 $appliedCount = (int)$pdo->query('SELECT COUNT(*) FROM migrations')->fetchColumn();
-if ($appliedCount !== 31) throw new RuntimeException('Expected exactly 31 migration tracking rows.');
+if ($appliedCount !== 32) throw new RuntimeException('Expected exactly 32 migration tracking rows.');
 if (MigrationRunner::pending($pdo, $directory) !== []) throw new RuntimeException('Pending migrations remain after successful run.');
 if (MigrationRunner::runPending($pdo, $directory, true) !== []) throw new RuntimeException('Second run was not a no-op.');
 
@@ -98,6 +99,30 @@ foreach ($requiredTables as $table) {
 }
 if ((int)$pdo->query("SELECT COUNT(*) FROM staff_permissions sp JOIN users u ON u.id=sp.user_id WHERE u.username='grace-staff'")->fetchColumn() !== 8) throw new RuntimeException('Existing staff permission defaults were not seeded.');
 if ((int)$pdo->query("SELECT COUNT(*) FROM staff_departments sd JOIN users u ON u.id=sd.user_id WHERE u.username='grace-staff'")->fetchColumn() !== 4) throw new RuntimeException('Existing staff department defaults were not seeded.');
+
+// Verify statement match review decisions are single-use and never require payment-state mutation.
+$adminUserId = (int)$pdo->query("SELECT id FROM users WHERE username='ada-admin'")->fetchColumn();
+$import = $pdo->prepare('INSERT INTO payment_statement_imports(source,original_filename,file_sha256,imported_by,total_rows,created_at) VALUES(\'bank\',\'review-test.csv\',:hash,:user,2,UTC_TIMESTAMP())');
+$import->execute([':hash'=>hash('sha256','statement-review-ci-fixture'),':user'=>$adminUserId]);
+$importId = (int)$pdo->lastInsertId();
+$movementInsert = $pdo->prepare('INSERT INTO payment_statement_movements(import_id,source_row_number,occurred_at,provider_reference,description,amount,currency,movement_type,match_status,created_at) VALUES(:import,:row,UTC_TIMESTAMP(),:reference,\'CI review fixture\',:amount,\'TRY\',\'capture\',:match_status,UTC_TIMESTAMP())');
+$movementInsert->execute([':import'=>$importId,':row'=>2,':reference'=>'REVIEW-EXACT',':amount'=>'25.00',':match_status'=>'matched']);
+$exactMovementId = (int)$pdo->lastInsertId();
+$movementInsert->execute([':import'=>$importId,':row'=>3,':reference'=>'REVIEW-MISMATCH',':amount'=>'30.00',':match_status'=>'amount_mismatch']);
+$mismatchMovementId = (int)$pdo->lastInsertId();
+$paymentCountBeforeReview = (int)$pdo->query('SELECT COUNT(*) FROM payment_transactions')->fetchColumn();
+$confirmedReview = \HostPilot\Payment\StatementImport::review($pdo,$exactMovementId,'confirm',$adminUserId);
+if (($confirmedReview['review_status']??'') !== 'confirmed') throw new RuntimeException('Exact statement match was not confirmed.');
+$confirmAgainRejected = false;
+try { \HostPilot\Payment\StatementImport::review($pdo,$exactMovementId,'confirm',$adminUserId); } catch (RuntimeException) { $confirmAgainRejected = true; }
+if (!$confirmAgainRejected) throw new RuntimeException('A reviewed statement movement was allowed to be confirmed twice.');
+$mismatchConfirmRejected = false;
+try { \HostPilot\Payment\StatementImport::review($pdo,$mismatchMovementId,'confirm',$adminUserId); } catch (RuntimeException) { $mismatchConfirmRejected = true; }
+if (!$mismatchConfirmRejected) throw new RuntimeException('An amount-mismatched statement movement was confirmed.');
+$manualReview = \HostPilot\Payment\StatementImport::review($pdo,$mismatchMovementId,'reviewed',$adminUserId,'Banka açıklaması kontrol edildi.');
+if (($manualReview['review_status']??'') !== 'reviewed') throw new RuntimeException('Manual review decision was not recorded.');
+if ((int)$pdo->query('SELECT COUNT(*) FROM payment_transactions')->fetchColumn() !== $paymentCountBeforeReview) throw new RuntimeException('Statement review unexpectedly changed payment transactions.');
+
 
 $pdo->exec("INSERT INTO users(name,email,username,password_hash,role,status,created_at,updated_at) VALUES('Verification Test','verify@example.test','verify-test','test-hash','customer','pending_verification',UTC_TIMESTAMP(),UTC_TIMESTAMP())");
 $verificationUserId=(int)$pdo->lastInsertId();
@@ -115,7 +140,7 @@ $verified=$pdo->prepare("SELECT status,email_verified_at FROM users WHERE id=:id
 $verified->execute([':id'=>$verificationUserId]);
 $verifiedRow=$verified->fetch(PDO::FETCH_ASSOC);
 if (($verifiedRow['status']??'')!=='active'||empty($verifiedRow['email_verified_at'])) throw new RuntimeException('Email verification did not activate the pending customer.');
-echo 'MySQL/MariaDB migration integration passed: 31 migrations, customer/admin MFA and refund ledger tables, staff defaults, partial-DDL retry, confirmation guard, tracking and idempotent second run.' . PHP_EOL;
+echo 'MySQL/MariaDB migration integration passed: 32 migrations, customer/admin MFA and refund ledger tables, staff defaults, partial-DDL retry, confirmation guard, tracking and idempotent second run.' . PHP_EOL;
 
 // Compare the SQL migration path with the retained legacy PHP migration path
 // on an independent clean schema. This remains an ephemeral CI-only database.
@@ -232,11 +257,11 @@ foreach ([$pdo, $legacy] as $connection) {
     }
 }
 $legacyPending = MigrationRunner::pending($legacy, $directory);
-if ($legacyPending !== ['20261115_0002_staff_permissions_departments', '20261115_0003_customer_email_verification', '20261115_0004_user_auth_version', '20261115_0005_security_audit_logs', '20261116_0001_admin_mfa', '20261116_0002_privacy_requests', '20261116_0003_ticket_attachments', '20261116_0004_payment_reconciliations', '20261116_0005_customer_mfa', '20261117_0001_payment_refund_ledger', '20261117_0002_payment_statement_imports']) {
+if ($legacyPending !== ['20261115_0002_staff_permissions_departments', '20261115_0003_customer_email_verification', '20261115_0004_user_auth_version', '20261115_0005_security_audit_logs', '20261116_0001_admin_mfa', '20261116_0002_privacy_requests', '20261116_0003_ticket_attachments', '20261116_0004_payment_reconciliations', '20261116_0005_customer_mfa', '20261117_0001_payment_refund_ledger', '20261117_0002_payment_statement_imports', '20261117_0003_payment_statement_review']) {
     throw new RuntimeException('SQL runner did not isolate the new staff permission migration on a legacy-upgraded database: ' . json_encode($legacyPending));
 }
 $legacyApplied = MigrationRunner::runPending($legacy, $directory, true);
-if ($legacyApplied !== ['20261115_0002_staff_permissions_departments', '20261115_0003_customer_email_verification', '20261115_0004_user_auth_version', '20261115_0005_security_audit_logs', '20261116_0001_admin_mfa', '20261116_0002_privacy_requests', '20261116_0003_ticket_attachments', '20261116_0004_payment_reconciliations', '20261116_0005_customer_mfa', '20261117_0001_payment_refund_ledger', '20261117_0002_payment_statement_imports']) {
+if ($legacyApplied !== ['20261115_0002_staff_permissions_departments', '20261115_0003_customer_email_verification', '20261115_0004_user_auth_version', '20261115_0005_security_audit_logs', '20261116_0001_admin_mfa', '20261116_0002_privacy_requests', '20261116_0003_ticket_attachments', '20261116_0004_payment_reconciliations', '20261116_0005_customer_mfa', '20261117_0001_payment_refund_ledger', '20261117_0002_payment_statement_imports', '20261117_0003_payment_statement_review']) {
     throw new RuntimeException('SQL runner did not apply only the pending security and payment migrations to a legacy-upgraded database.');
 }
 if (MigrationRunner::pending($legacy, $directory) !== []) {

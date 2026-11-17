@@ -99,6 +99,41 @@ final class StatementImport
         }
     }
 
+
+    /** Record an administrator's review decision without changing payment or invoice state. */
+    public static function review(PDO $db, int $movementId, string $action, int $userId, string $note = ''): array
+    {
+        if ($movementId < 1 || $userId < 1 || !in_array($action, ['confirm','reject','reviewed'], true)) {
+            throw new RuntimeException('İnceleme bilgileri geçersiz.');
+        }
+        $note = trim($note);
+        if (strlen($note) > 500) throw new RuntimeException('İnceleme notu en fazla 500 karakter olabilir.');
+        if ($action !== 'confirm' && $note === '') throw new RuntimeException('Reddetme veya manuel inceleme için açıklama zorunludur.');
+        try {
+            $db->beginTransaction();
+            $query = $db->prepare('SELECT id,match_status,review_status FROM payment_statement_movements WHERE id=:id FOR UPDATE');
+            $query->execute([':id'=>$movementId]);
+            $movement = $query->fetch(PDO::FETCH_ASSOC);
+            if (!$movement) throw new RuntimeException('Ekstre hareketi bulunamadı.');
+            if ($movement['review_status'] !== 'pending') throw new RuntimeException('Bu hareket daha önce incelenmiş.');
+            if ($action === 'confirm' && $movement['match_status'] !== 'matched') {
+                throw new RuntimeException('Yalnızca tutarı ve referansı tam eşleşen hareket onaylanabilir.');
+            }
+            if ($action === 'reviewed' && $movement['match_status'] === 'matched') {
+                throw new RuntimeException('Tam eşleşen hareket için onayla veya reddet seçeneğini kullanın.');
+            }
+            $status = $action === 'confirm' ? 'confirmed' : ($action === 'reject' ? 'rejected' : 'reviewed');
+            $update = $db->prepare('UPDATE payment_statement_movements SET review_status=:status,reviewed_by=:user,reviewed_at=UTC_TIMESTAMP(),review_note=:note WHERE id=:id AND review_status=\'pending\'');
+            $update->execute([':status'=>$status,':user'=>$userId,':note'=>$note,':id'=>$movementId]);
+            if ($update->rowCount() !== 1) throw new RuntimeException('Hareket eşzamanlı olarak başka bir yönetici tarafından incelendi.');
+            $db->commit();
+            return ['movement_id'=>$movementId,'review_status'=>$status,'action'=>$action];
+        } catch (Throwable $exception) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $exception;
+        }
+    }
+
     private static function normalizeAmount(string $amount): string
     {
         $parts = explode('.', $amount, 2);
@@ -125,7 +160,7 @@ final class StatementImport
         if (count($matches) > 1) return ['status'=>'ambiguous','payment_id'=>null,'refund_id'=>null];
         if (count($matches) === 0) return ['status'=>'unmatched','payment_id'=>null,'refund_id'=>null];
         $match = $matches[0];
-        $exactAmount = self::normalizeAmount((string)$match['amount']) === number_format((float)$row['amount'],2,'.');
+        $exactAmount = self::normalizeAmount((string)$match['amount']) === self::normalizeAmount((string)$row['amount']);
         if (!$exactAmount) return ['status'=>'amount_mismatch','payment_id'=>$idField==='payment_id'?(int)$match[$idField]:null,'refund_id'=>$idField==='refund_id'?(int)$match[$idField]:null];
         return ['status'=>'matched','payment_id'=>$idField==='payment_id'?(int)$match[$idField]:null,'refund_id'=>$idField==='refund_id'?(int)$match[$idField]:null];
     }
