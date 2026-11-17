@@ -50,7 +50,7 @@ final class RefundLedger
             $newPaid=$invoicePaid-$cents;
             $invoiceTotal=(int)round((float)$tx['invoice_total']*100);
             $invoiceStatus=$newPaid>=$invoiceTotal?'paid':($newPaid>0?'partially_paid':(!empty($tx['due_at'])&&substr((string)$tx['due_at'],0,10)<gmdate('Y-m-d')?'overdue':'unpaid'));
-            $db->prepare('UPDATE invoices SET amount_paid=:paid,status=:status,paid_at=IF(:paid_status='paid',paid_at,NULL),updated_at=:updated WHERE id=:id')
+            $db->prepare("UPDATE invoices SET amount_paid=:paid,status=:status,paid_at=IF(:paid_status='paid',paid_at,NULL),updated_at=:updated WHERE id=:id")
                 ->execute([':paid'=>number_format($newPaid/100,2,'.',''),':status'=>$invoiceStatus,':paid_status'=>$invoiceStatus,':updated'=>$now,':id'=>$tx['invoice_id']]);
             $result=['refund_id'=>$refundId,'payment_transaction_id'=>$transactionId,'refund_amount'=>$normalized,'total_refunded'=>number_format($totalRefunded/100,2,'.',''),'payment_status'=>$newPaymentStatus,'invoice_status'=>$invoiceStatus,'invoice_amount_paid'=>number_format($newPaid/100,2,'.',''),'invoice_remaining'=>number_format(max(0,$invoiceTotal-$newPaid)/100,2,'.',''),'currency'=>$currency];
             if($owns)$db->commit();
