@@ -89,6 +89,19 @@ final class EmailService
         return $this->queue($recipient,$subject,$body,'payment-status:'.$paymentTransactionId.':'.$event,'payment_'.$event);
     }
 
+
+    public function queueRefundNotice(string $recipient,string $customerName,string $invoiceNumber,string $refundAmount,string $totalRefunded,string $currency,string $paymentStatus,int $refundId):bool
+    {
+        if($refundId<1||!in_array($paymentStatus,['partially_refunded','refunded'],true)||!filter_var($recipient,FILTER_VALIDATE_EMAIL))return false;
+        $full=$paymentStatus==='refunded';
+        $subject=$full?'Ödemenizin tamamı iade edildi':'Ödemenizin bir bölümü iade edildi';
+        $message=$full?'Ödeme sağlayıcısında bu tahsilatın tamamının iade edildiği doğrulandı.':'Ödeme sağlayıcısında kısmi iade doğrulandı. Kalan ödeme tutarı ve fatura bakiyesi müşteri panelinizde güncellendi.';
+        $body="Merhaba ".($customerName!==''?$customerName:'Müşterimiz').",\n\n".$message."\n\n";
+        $body.="Fatura: ".$invoiceNumber."\nBu iade: ".number_format((float)$refundAmount,2,',','.')." ".$currency."\nToplam iade: ".number_format((float)$totalRefunded,2,',','.')." ".$currency."\n\n";
+        $body.="İade tutarının hesabınıza yansıma süresi bankanıza ve ödeme yönteminize göre değişebilir. Güncel fatura bakiyenizi HostPilot müşteri panelinden görüntüleyebilirsiniz.\n\nBu e-posta otomatik olarak gönderilmiştir.";
+        return $this->queue($recipient,$subject,$body,'payment-refund:'.$refundId,'payment_refund');
+    }
+
     public function queueInvoiceNotice(string $recipient,string $customerName,string $invoiceNumber,float $amount,string $currency,string $dueAt,string $event,int $invoiceId):bool
     {
         $labels=[

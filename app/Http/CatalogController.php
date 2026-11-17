@@ -136,9 +136,11 @@ final class CatalogController
         $itemsQuery->execute([':id'=>$invoiceId]);$items=$itemsQuery->fetchAll(PDO::FETCH_ASSOC);
         $paymentsQuery=$this->db->prepare('SELECT gateway,status,currency,amount,created_at FROM payment_transactions WHERE invoice_id=:id AND user_id=:uid ORDER BY id');
         $paymentsQuery->execute([':id'=>$invoiceId,':uid'=>$u['id']]);$payments=$paymentsQuery->fetchAll(PDO::FETCH_ASSOC);
+        $refundsQuery=$this->db->prepare('SELECT pr.amount,pr.currency,pr.created_at FROM payment_refunds pr JOIN payment_transactions pt ON pt.id=pr.payment_transaction_id WHERE pt.invoice_id=:id AND pt.user_id=:uid ORDER BY pr.id');
+        $refundsQuery->execute([':id'=>$invoiceId,':uid'=>$u['id']]);$refunds=$refundsQuery->fetchAll(PDO::FETCH_ASSOC);
         $total=(float)$invoice['total'];$paid=(float)$invoice['amount_paid'];$remaining=max(0.0,round($total-$paid,2));
         $gatewayLabels=['paytr'=>'PayTR','iyzico'=>'iyzico','manual'=>'Manuel ödeme'];
-        $paymentStatuses=['success'=>'Başarılı','pending'=>'Bekliyor','review'=>'İncelemede','failed'=>'Başarısız','cancelled'=>'İptal','refunded'=>'İade edildi'];
+        $paymentStatuses=['success'=>'Başarılı','pending'=>'Bekliyor','review'=>'İncelemede','failed'=>'Başarısız','cancelled'=>'İptal','refunded'=>'İade edildi','partially_refunded'=>'Kısmi iade'];
         $this->start('Fatura detayları');
         echo '<style>@media print{body{background:#fff!important;color:#111!important}.invoice-detail .brand,.invoice-detail .back,.invoice-actions{display:none!important}.invoice-detail .productdetail{box-shadow:none!important;border:0!important;max-width:none!important}a{color:#111!important;text-decoration:none!important}}</style>';
         echo '<main class="detail invoice-detail"><a class="brand" href="'.$this->url('/').'">HOST<span>PILOT</span></a><a class="back" href="'.$this->url('/client/invoices').'">← Faturalarıma dön</a><section class="productdetail">';
@@ -159,6 +161,10 @@ final class CatalogController
         echo '<h2>Ödeme geçmişi</h2>';
         if(!$payments)echo '<p>Bu fatura için henüz ödeme işlemi bulunmuyor.</p>';
         foreach($payments as $payment){$gateway=$gatewayLabels[$payment['gateway']]??'Ödeme sağlayıcısı';$status=$paymentStatuses[$payment['status']]??'Durum güncelleniyor';echo '<article class="order"><b>'.$this->e($gateway).' · '.$this->e($status).'</b><p>'.number_format((float)$payment['amount'],2,',','.').' '.$this->e((string)$payment['currency']).' · '.date('d.m.Y H:i',strtotime($payment['created_at'])).'</p></article>';}
+        if($refunds){
+            echo '<h2>İade geçmişi</h2>';
+            foreach($refunds as $refund)echo '<article class="order"><b>İade edildi</b><p>'.number_format((float)$refund['amount'],2,',','.').' '.$this->e((string)$refund['currency']).' · '.date('d.m.Y H:i',strtotime($refund['created_at'])).'</p></article>';
+        }
         echo '</section></main>';$this->end();
     }
 

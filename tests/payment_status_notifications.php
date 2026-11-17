@@ -36,21 +36,26 @@ try {
     $assert($service->queuePaymentStatusNotice($recipient, 'Test Customer', $invoiceNumber, 149.90, 'TRY', 'cancelled', $transactionId), 'Cancellation notice was not queued.');
     $assert(!$service->queuePaymentStatusNotice($recipient, 'Test Customer', $invoiceNumber, 149.90, 'TRY', 'refunded', $transactionId), 'Duplicate refund notice was not suppressed.');
     $assert(!$service->queuePaymentStatusNotice($recipient, 'Test Customer', $invoiceNumber, 149.90, 'TRY', 'cancelled', $transactionId), 'Duplicate cancellation notice was not suppressed.');
+    $assert($service->queueRefundNotice($recipient, 'Test Customer', $invoiceNumber, '30.00', '30.00', 'TRY', 'partially_refunded', $transactionId + 1), 'Partial refund notice was not queued.');
+    $assert(!$service->queueRefundNotice($recipient, 'Test Customer', $invoiceNumber, '30.00', '30.00', 'TRY', 'partially_refunded', $transactionId + 1), 'Duplicate refund notice was not suppressed.');
+    $assert($service->queueRefundNotice($recipient, 'Test Customer', $invoiceNumber, '20.00', '50.00', 'TRY', 'refunded', $transactionId + 2), 'Full refund notice after partial refunds was not queued.');
+    $assert(!$service->queueRefundNotice($recipient, 'Test Customer', $invoiceNumber, '20.00', '50.00', 'TRY', 'pending', $transactionId + 3), 'Unsupported refund state was accepted.');
     $assert(!$service->queuePaymentStatusNotice($recipient, 'Test Customer', $invoiceNumber, 149.90, 'TRY', 'provider_debug', $transactionId), 'Unsupported event was accepted.');
     $assert(!$service->queuePaymentStatusNotice('invalid-recipient', 'Test Customer', $invoiceNumber, 149.90, 'TRY', 'review', $transactionId), 'Invalid recipient was accepted.');
 
     $query = $db->prepare('SELECT event_type,subject,body,idempotency_key FROM email_outbox WHERE recipient=:recipient ORDER BY id');
     $query->execute([':recipient' => $recipient]);
     $rows = $query->fetchAll();
-    $assert(count($rows) === 6, 'Expected exactly one outbox row per allowed payment state.');
+    $assert(count($rows) === 8, 'Expected payment state notices and one notice per refund record.');
     $events = array_column($rows, 'event_type');
     sort($events);
-    $assert($events === ['payment_cancelled', 'payment_failed', 'payment_pending', 'payment_refunded', 'payment_review', 'payment_success'], 'Payment state event types were not stored correctly.');
+    $assert($events === ['payment_cancelled', 'payment_failed', 'payment_pending', 'payment_refund', 'payment_refund', 'payment_refunded', 'payment_review', 'payment_success'], 'Payment state and refund event types were not stored correctly.');
     $keys = array_column($rows, 'idempotency_key');
-    $assert(count(array_unique($keys)) === 6, 'Different payment states must have distinct idempotency keys.');
+    $assert(count(array_unique($keys)) === 8, 'Payment states and individual refunds must have distinct idempotency keys.');
     foreach ($rows as $row) {
         $assert(str_contains($row['body'], $invoiceNumber), 'Customer notice omitted the invoice reference.');
-        $assert(str_contains($row['body'], '149,90 TRY'), 'Customer notice omitted the formatted amount.');
+        if ($row['event_type'] === 'payment_refund') { $assert(str_contains($row['body'], 'Bu iade: ') && str_contains($row['body'], 'Toplam iade: '), 'Refund notice omitted individual or cumulative refund amounts.'); }
+        else { $assert(str_contains($row['body'], '149,90 TRY'), 'Customer notice omitted the formatted amount.'); }
         $assert(!str_contains(strtolower($row['body']), 'merchant_key') && !str_contains(strtolower($row['body']), 'stack trace'), 'Customer notice exposed internal diagnostics or secrets.');
     }
 

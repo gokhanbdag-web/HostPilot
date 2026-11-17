@@ -40,6 +40,7 @@ final class SecurityAudit
         'payment.transaction_failed',
         'payment.transaction_reconciled',
         'payment.manual_refund_confirmed',
+        'payment.partial_refund_recorded',
         'server.created',
         'server.connection_tested',
         'server.product_mapping_updated',
@@ -118,6 +119,7 @@ final class SecurityAudit
         if (isset($metadata['request_id']) && is_int($metadata['request_id']) && $metadata['request_id'] > 0) $safe['request_id'] = $metadata['request_id'];
         if (isset($metadata['target_user_id']) && is_int($metadata['target_user_id']) && $metadata['target_user_id'] > 0) $safe['target_user_id'] = $metadata['target_user_id'];
         if (isset($metadata['resource_id']) && is_int($metadata['resource_id']) && $metadata['resource_id'] > 0) $safe['resource_id'] = $metadata['resource_id'];
+        if (isset($metadata['refund_id']) && is_int($metadata['refund_id']) && $metadata['refund_id'] > 0) $safe['refund_id'] = $metadata['refund_id'];
         if (isset($metadata['action']) && is_string($metadata['action']) && in_array($metadata['action'], ['export','under_review','approved','declined','completed','updated','created','success','failed','queued','review','paid','partially_paid','suspend','unsuspend','remote_applied','remote_not_applied','mark_failed','resume_customer','resume_contact','resume_action','mark_active','unavailable','unscanned','payment_confirmed','refund_confirmed'], true)) $safe['action'] = $metadata['action'];
         return $safe;
     }

@@ -16,7 +16,7 @@ $checks=[
     'customer GET page detects active pending or review attempts'=>str_contains($controller,"SELECT status FROM payment_transactions WHERE invoice_id=:invoice AND status IN ('pending','review') ORDER BY id DESC LIMIT 1"),
     'customer payment form is suppressed while an attempt is pending or under review'=>str_contains($controller,'elseif(in_array(')&&str_contains($controller,"['pending','review'],true))")&&str_contains($controller,'Ödeme durumunu müşteri panelindeki fatura sayfasından takip edebilirsiniz'),
     'invoice row lock serializes concurrent starts and active attempt lock rejects duplicates'=>str_contains($controller,'SELECT * FROM invoices WHERE id=:id AND user_id=:uid LIMIT 1 FOR UPDATE')&&str_contains($controller,"status IN ('pending','review') ORDER BY id DESC LIMIT 1 FOR UPDATE"),
-    'settlement locks the transaction and ignores terminal or already settled callbacks'=>str_contains($controller,'SELECT * FROM payment_transactions WHERE id=:id FOR UPDATE')&&str_contains($controller,"['success','failed','cancelled','refunded']"),
+    'settlement locks the transaction and ignores terminal or already settled callbacks'=>str_contains($controller,'SELECT * FROM payment_transactions WHERE id=:id FOR UPDATE')&&str_contains($controller,"['success','failed','cancelled','refunded','partially_refunded']"),
 ];
 foreach($checks as $label=>$ok){if(!$ok)throw new RuntimeException('FAIL '.$label);echo 'PASS '.$label.PHP_EOL;}
 echo "HostPilot payment initialization uncertainty tests passed.\n";
