@@ -125,7 +125,7 @@ final class StatementImport
         if (count($matches) > 1) return ['status'=>'ambiguous','payment_id'=>null,'refund_id'=>null];
         if (count($matches) === 0) return ['status'=>'unmatched','payment_id'=>null,'refund_id'=>null];
         $match = $matches[0];
-        $exactAmount = number_format((float)$match['amount'],2,'.','') === number_format((float)$row['amount'],2,'.');
+        $exactAmount = self::normalizeAmount((string)$match['amount']) === number_format((float)$row['amount'],2,'.');
         if (!$exactAmount) return ['status'=>'amount_mismatch','payment_id'=>$idField==='payment_id'?(int)$match[$idField]:null,'refund_id'=>$idField==='refund_id'?(int)$match[$idField]:null];
         return ['status'=>'matched','payment_id'=>$idField==='payment_id'?(int)$match[$idField]:null,'refund_id'=>$idField==='refund_id'?(int)$match[$idField]:null];
     }
