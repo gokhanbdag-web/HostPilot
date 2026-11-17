@@ -62,11 +62,13 @@ try{
     $assert($byCurrency['TRY']['review_count']===1&&$byCurrency['TRY']['review_amount']==='200.00','Manual review amount was not separated from captured funds.');
     $assert($byCurrency['TRY']['outstanding_amount']==='1329.00','TRY open invoice balances do not reflect refund-restored balances.');
     $assert($byCurrency['USD']['outstanding_amount']==='10.00','USD open invoice balance is incorrect.');
+    $assert($byCurrency['TRY']['overdue_amount']==='70.00','Overdue balance should use calendar-day boundaries, not the current time of day.');
+    try{\\HostPilot\\Payment\\FinanceReport::summary($db,'2026-02-30 00:00:00',$to);throw new RuntimeException('Invalid calendar date was accepted.');}catch(\\InvalidArgumentException){}
 
     $movements=\HostPilot\Payment\FinanceReport::movements($db,$from,$to,100);
-    $assert(count($movements)===7,'Expected three capture and three in-period refund movements; older activity or uncollected manual refund leaked in.');
+    $assert(count($movements)===7,'Expected four capture and three in-period refund movements; older activity or uncollected manual refund leaked in.');
     $assert(count(array_filter($movements,static fn($row)=>$row['movement_type']==='refund'))===3,'Refunds were not exposed as individual cash movements.');
-    $assert(!in_array($outside,array_column($movements,'payment_transaction_id'),true),'Out-of-period payment was included.');
+    $assert(!in_array($outside,array_map('intval',array_column($movements,'payment_transaction_id')),true),'Out-of-period payment was included.');
     $decisions=\HostPilot\Payment\FinanceReport::reconciliations($db,$from,$to,100);
     $assert(count($decisions)===2,'Manual reconciliation decision history was not returned.');
     $assert(count(\HostPilot\Payment\FinanceReport::movements($db,$from,$to,1))===1,'Movement result limit was not enforced.');
