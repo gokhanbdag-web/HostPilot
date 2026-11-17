@@ -1,5 +1,14 @@
 # HostPilot güncelleme notları
 
+## 2026-11-17 · 2026.11.17.02
+
+- Yönetici, sağlayıcı panelinde tam iadenin tamamlandığını doğruladığında müşteriye iade bildirimi e-posta kuyruğuna eklenir.
+- Sağlayıcıda tahsilat olmadığı doğrulanıp ödeme oturumu kapatıldığında müşteriye iptal bildirimi gönderilmek üzere kuyruğa eklenir.
+- İade/iptal bildirimleri ödeme durumu ve outbox kaydı aynı veritabanı işlemi içinde tamamlanır; benzersiz işlem/durum anahtarı tekrar bildirimleri engeller.
+- Müşteri mesajları yalnızca doğrulanmış tam iade veya tahsilat yok kararı için kullanılır; otomatik sağlayıcı iadesi başlatıldığı iddia edilmez.
+- MySQL 8 ve MariaDB 10.11 üzerinde iade/iptal bildirim içeriği, tekilleştirme ve mutabakat akışı test edilir. Gerçek banka/sağlayıcı iade işlemi ve SMTP teslimatı CI kapsamı dışındadır.
+
+
 ## 2026-11-17 · 2026.11.17.01
 
 - Ödeme oturumu başlatıldığında, sağlayıcı sonucu doğrulandığında, işlem manuel incelemeye alındığında veya başarısız olduğunda müşteriye Türkçe e-posta bildirimi kuyruğa eklenir.
