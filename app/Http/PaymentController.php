@@ -243,7 +243,8 @@ final class PaymentController
         }catch(Throwable $exception){
             if($this->db->inTransaction())$this->db->rollBack();
             error_log('[HostPilot] Refund ledger: '.$exception->getMessage());
-            $this->flashReconcileError($exception->getMessage());
+            $safeMessage=$exception instanceof \\PDOException&&$exception->getCode()==='23000'?'Bu sağlayıcı iade referansı bu ödeme için daha önce kaydedilmiş.':$exception->getMessage();
+            $this->flashReconcileError($safeMessage);
         }
         $this->redirect('/admin/payment-transactions');
     }
