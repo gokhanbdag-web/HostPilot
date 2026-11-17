@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 $files=[
     'PaymentController.php'=>[
-        'payment.gateway_settings_updated','payment.transaction_reviewed','payment.transaction_settled','payment.transaction_failed',
+        'payment.gateway_settings_updated','payment.transaction_reviewed','payment.transaction_settled','payment.transaction_failed','payment.finance_report_exported',
     ],
     'ServerController.php'=>[
         'server.created','server.connection_tested','server.product_mapping_updated','service.provision_completed',

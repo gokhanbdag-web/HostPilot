@@ -1,5 +1,16 @@
 # HostPilot güncelleme notları
 
+## 2026-11-17 · 2026.11.17.04
+
+- Yönetim paneline Finans Raporları eklendi; seçilebilir tarih aralığında tahsilat, iade, net nakit hareketi, açık fatura ve vadesi geçmiş bakiye raporlanır.
+- Tutarlar TRY/USD gibi para birimlerine göre ayrı gruplanır; farklı para birimleri tek toplamda birleştirilmez.
+- Tahsilat kayıtları ödeme işleminin oluşturulma zamanıyla, iadeler iade kaydının oluşturulma zamanıyla ayrı hareket satırlarında gösterilir; gerçek banka valör zamanı bu sürümde saklanmadığından rapor bunu iddia etmez. Dönem dışı hareketler rapora karışmaz.
+- Henüz tahsil edilmemiş manuel inceleme/iade kararları gerçekleşmiş tahsilat toplamından hariç tutulur ve ayrı inceleme alanında gösterilir.
+- Finans hareketleri CSV olarak dışa aktarılabilir; elektronik tablo formül enjeksiyonu önlemi ve denetim kaydı uygulanır.
+- Rapor ve CSV erişimi mevcut payments.view personel yetkisini kullanır. Rapor yalnızca kayıtlı HostPilot hareketlerini gösterir; sağlayıcı/banka ekstresiyle otomatik mutabakat yaptığı anlamına gelmez.
+- MySQL 8 ve MariaDB 10.11 üzerinde para birimi ayrımı, tarih aralığı, iade hareketleri, açık bakiye ve manuel mutabakat ayrımı entegrasyon testleriyle doğrulanır.
+
+
 ## 2026-11-17 · 2026.11.17.03
 
 - Yönetici, ödeme sağlayıcısı panelinde tamamlandığını doğruladığı kısmi iadeleri tutar, para birimi, sağlayıcı iade referansı ve açıklamayla ayrı kayıtlar halinde ekleyebilir.

@@ -128,7 +128,7 @@ final class Authorization
         if (in_array($path, ['/admin/automation/jobs/retry', '/admin/automation/jobs/resolve'], true) && $method === 'POST') return 'automation.manage';
 
         if ($path === '/admin/payments' && in_array($method, ['GET', 'POST'], true)) return 'payments.manage';
-        if ($path === '/admin/payment-transactions' && $method === 'GET') return 'payments.view';
+        if (in_array($path, ['/admin/payment-transactions','/admin/finance','/admin/finance/export'], true) && $method === 'GET') return 'payments.view';
         if ($path === '/admin/payment-transactions/reconcile' && $method === 'POST') return 'payments.reconcile';
         if ($path === '/admin/products' && in_array($method, ['GET', 'POST'], true)) return 'catalog.manage';
         if ($path === '/admin/orders' && $method === 'GET') return 'orders.view';

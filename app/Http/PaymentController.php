@@ -21,6 +21,85 @@ final class PaymentController
     public function __construct(private readonly PDO $db,private readonly string $basePath,private readonly string $baseUrl,private readonly string $applicationKey)
     {$this->vault=new SecretVault($applicationKey);}
 
+    public function adminFinance():void
+    {
+        if(!$this->isStaff()){http_response_code(403);echo 'Yetkisiz erişim.';return;}
+        [$from,$to,$toExclusive,$rangeError]=$this->financeDateRange();
+        $summary=\HostPilot\Payment\FinanceReport::summary($this->db,$from.' 00:00:00',$toExclusive.' 00:00:00');
+        $movements=\HostPilot\Payment\FinanceReport::movements($this->db,$from.' 00:00:00',$toExclusive.' 00:00:00',150);
+        $reconciliations=\HostPilot\Payment\FinanceReport::reconciliations($this->db,$from.' 00:00:00',$toExclusive.' 00:00:00',75);
+        $this->pageStart('Finansal hareket raporu');
+        echo '<div class="admin"><aside><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a href="'.$this->url('/admin').'">← Kontrol merkezi</a><a class="active" href="'.$this->url('/admin/finance').'">Finans raporları</a><a href="'.$this->url('/admin/payment-transactions').'">Ödeme işlemleri</a><a href="'.$this->url('/admin/payments').'">Ödeme ayarları</a><a href="'.$this->url('/admin/invoices').'">Faturalar</a></aside><main><header><small>FİNANS / MUTABAKAT</small><h1>Finansal hareket raporu</h1><p>Tahsilat, sağlayıcıda tamamlanmış iadeler, açık fatura bakiyeleri ve manuel inceleme kayıtları. Tutarlar para birimine göre ayrı hesaplanır.</p></header>';
+        if($rangeError!=='')echo '<div class="alert">'.$this->e($rangeError).' Varsayılan son 30 günlük aralık gösteriliyor.</div>';
+        echo '<section class="box"><form method="get" action="'.$this->url('/admin/finance').'" style="display:flex;gap:12px;align-items:end;flex-wrap:wrap"><label>Başlangıç tarihi<input type="date" name="from" value="'.$this->e($from).'" required></label><label>Bitiş tarihi<input type="date" name="to" value="'.$this->e($to).'" required></label><button class="button" type="submit">Raporu görüntüle</button><a class="button" href="'.$this->url('/admin/finance/export').'?from='.rawurlencode($from).'&to='.rawurlencode($to).'">CSV indir</a></form><p class="muted">En fazla 366 günlük aralık. Tahsilat kayıtları ödeme işleminin oluşturulma zamanını, iadeler iade kaydının zamanını kullanır; gerçek banka valör zamanı bu sürümde saklanmaz. CSV en fazla 5.000 hareket içerir.</p></section>';
+        echo '<section class="box"><h2>Seçili dönemin nakit hareketleri</h2>';
+        if(!$summary)echo '<p class="muted">Seçilen aralıkta finansal hareket veya açık fatura bakiyesi bulunamadı.</p>';
+        foreach($summary as $row){
+            $currency=$this->e((string)$row['currency']);
+            echo '<div style="border-top:1px solid #26354c;padding:15px 0"><h3>'.$currency.'</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px">';
+            echo '<div><small class="muted">Tahsilat · '.(int)$row['capture_count'].'</small><h2>'.number_format((float)$row['capture_amount'],2,',','.').' '.$currency.'</h2></div>';
+            echo '<div><small class="muted">İade · '.(int)$row['refund_count'].'</small><h2>'.number_format((float)$row['refund_amount'],2,',','.').' '.$currency.'</h2></div>';
+            echo '<div><small class="muted">Net hareket</small><h2>'.number_format((float)$row['net_amount'],2,',','.').' '.$currency.'</h2></div>';
+            echo '<div><small class="muted">Açık fatura · '.(int)$row['outstanding_count'].'</small><h2>'.number_format((float)$row['outstanding_amount'],2,',','.').' '.$currency.'</h2></div>';
+            echo '<div><small class="muted">Vadesi geçmiş bakiye</small><h2>'.number_format((float)$row['overdue_amount'],2,',','.').' '.$currency.'</h2></div>';
+            echo '<div><small class="muted">Manuel inceleme · '.(int)$row['review_count'].'</small><h2>'.number_format((float)$row['review_amount'],2,',','.').' '.$currency.'</h2></div>';
+            echo '</div></div>';
+        }
+        echo '</section><section class="box"><h2>Finansal hareket dökümü</h2><p class="muted">Son 150 kayıt. Tahsilatlar ve iade kayıtları ayrı hareketlerdir; aynı işlem birden fazla satırda görünebilir.</p><div style="overflow-x:auto"><table><thead><tr><th>Kayıt zamanı UTC</th><th>Tür</th><th>Fatura</th><th>Sağlayıcı</th><th>Referans</th><th>Tutar</th><th>Detay</th></tr></thead><tbody>';
+        if(!$movements)echo '<tr><td colspan="7">Hareket bulunamadı.</td></tr>';
+        foreach($movements as $movement){
+            $type=$movement['movement_type']==='refund'?'İade':'Tahsilat';
+            echo '<tr><td>'.date('d.m.Y H:i',strtotime((string)$movement['occurred_at'])).'</td><td>'.$type.'</td><td>'.$this->e((string)$movement['invoice_number']).'</td><td>'.$this->e(strtoupper((string)$movement['gateway'])).'</td><td>'.$this->e((string)$movement['provider_reference']).'</td><td>'.number_format((float)$movement['amount'],2,',','.').' '.$this->e((string)$movement['currency']).'</td><td>'.$this->e((string)$movement['detail']).'</td></tr>';
+        }
+        echo '</tbody></table></div></section><section class="box"><h2>Manuel mutabakat kararları</h2><p class="muted">Sağlayıcı panelinde yönetici tarafından doğrulanmış karar kayıtları. İptal veya henüz faturaya işlenmemiş iade onayları tahsilat toplamına dahil edilmez.</p><div style="overflow-x:auto"><table><thead><tr><th>Tarih</th><th>Karar</th><th>Fatura</th><th>Referans</th><th>Tutar</th><th>İşlemi yapan</th><th>Açıklama</th></tr></thead><tbody>';
+        if(!$reconciliations)echo '<tr><td colspan="7">Manuel mutabakat kaydı bulunamadı.</td></tr>';
+        $decisions=['payment_confirmed'=>'Tahsilat doğrulandı','refund_confirmed'=>'Tam iade doğrulandı','no_capture_confirmed'=>'Tahsilat yok / kapatıldı'];
+        foreach($reconciliations as $item)echo '<tr><td>'.date('d.m.Y H:i',strtotime((string)$item['created_at'])).'</td><td>'.$this->e($decisions[$item['decision']]??(string)$item['decision']).'</td><td>'.$this->e((string)$item['invoice_number']).'</td><td>'.$this->e((string)$item['provider_reference']).'</td><td>'.number_format((float)$item['amount'],2,',','.').' '.$this->e((string)$item['currency']).'</td><td>'.$this->e((string)$item['admin_name']).'</td><td>'.$this->e((string)$item['reason']).'</td></tr>';
+        echo '</tbody></table></div></section></main></div>';
+        $this->pageEnd();
+    }
+
+    public function adminFinanceExport():void
+    {
+        if(!$this->isStaff()){http_response_code(403);echo 'Yetkisiz erişim.';return;}
+        [$from,$to,$toExclusive,$rangeError]=$this->financeDateRange();
+        if($rangeError!==''){$this->redirect('/admin/finance');}
+        $rows=\HostPilot\Payment\FinanceReport::movements($this->db,$from.' 00:00:00',$toExclusive.' 00:00:00',5000);
+        $actor=Auth::user();
+        SecurityAudit::record($this->db,'payment.finance_report_exported',isset($actor['id'])?(int)$actor['id']:null,['action'=>'export']);
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="hostpilot-finans-'.$from.'-'.$to.'.csv"');
+        header('Cache-Control: no-store, private');
+        $out=fopen('php://output','wb');
+        if($out===false){http_response_code(500);return;}
+        fwrite($out,"\xEF\xBB\xBF");
+        fputcsv($out,['İşlem kayıt zamanı UTC','Hareket türü','Fatura','Sağlayıcı','Sağlayıcı referansı','Tutar','Para birimi','Açıklama']);
+        foreach($rows as $row){
+            $values=[(string)$row['occurred_at'],$row['movement_type']==='refund'?'İade':'Tahsilat',(string)$row['invoice_number'],strtoupper((string)$row['gateway']),(string)$row['provider_reference'],number_format((float)$row['amount'],2,'.',''),(string)$row['currency'],(string)$row['detail']];
+            fputcsv($out,array_map([$this,'csvSafeValue'],$values));
+        }
+        fclose($out);
+    }
+
+    private function financeDateRange():array
+    {
+        $today=new \DateTimeImmutable('today',new \DateTimeZone('UTC'));
+        $defaultFrom=$today->modify('-29 days');
+        $fromRaw=trim((string)($_GET['from']??$defaultFrom->format('Y-m-d')));
+        $toRaw=trim((string)($_GET['to']??$today->format('Y-m-d')));
+        $from=\DateTimeImmutable::createFromFormat('!Y-m-d',$fromRaw,new \DateTimeZone('UTC'));
+        $to=\DateTimeImmutable::createFromFormat('!Y-m-d',$toRaw,new \DateTimeZone('UTC'));
+        $valid=$from!==false&&$to!==false&&$from->format('Y-m-d')===$fromRaw&&$to->format('Y-m-d')===$toRaw&&$from<=$to&&($to->getTimestamp()-$from->getTimestamp())<=365*86400;
+        if(!$valid)return [$defaultFrom->format('Y-m-d'),$today->format('Y-m-d'),$today->modify('+1 day')->format('Y-m-d'),'Geçersiz tarih aralığı. Başlangıç ve bitiş tarihlerini kontrol edin.'];
+        return [$fromRaw,$toRaw,$to->modify('+1 day')->format('Y-m-d'),''];
+    }
+
+    private function csvSafeValue(string $value):string
+    {
+        if($value!==''&&preg_match('/^[=+@\-\t\r]/',$value))return "'".$value;
+        return $value;
+    }
+
     public function adminSettings():void
     {
         if(!$this->isStaff()){http_response_code(403);echo 'Yetkisiz erişim.';return;}
