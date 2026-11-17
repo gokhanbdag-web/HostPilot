@@ -4,8 +4,6 @@ declare(strict_types=1);
 require dirname(__DIR__) . '/app/Core/SecretVault.php';
 require dirname(__DIR__) . '/app/Core/EmailService.php';
 
-use HostPilot\\Core\\EmailService;
-
 $host = getenv('HOSTPILOT_DB_HOST') ?: '127.0.0.1';
 $port = (int)(getenv('HOSTPILOT_DB_PORT') ?: 3306);
 $name = getenv('HOSTPILOT_DB_NAME') ?: '';
@@ -20,7 +18,7 @@ $db = new PDO(sprintf('mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4', $host, 
     PDO::ATTR_EMULATE_PREPARES => false,
 ]);
 
-$service = new EmailService($db, 'hostpilot-ci-payment-email-key');
+$service = new \HostPilot\Core\EmailService($db, 'hostpilot-ci-payment-email-key');
 $transactionId = random_int(100000, 2000000000);
 $recipient = 'payment-notice-' . bin2hex(random_bytes(8)) . '@example.test';
 $invoiceNumber = 'CI-' . strtoupper(bin2hex(random_bytes(4)));
@@ -54,9 +52,9 @@ try {
 
     $source = file_get_contents(dirname(__DIR__) . '/app/Http/PaymentController.php');
     $assert(is_string($source), 'Cannot read PaymentController.php.');
-    $assert(str_contains($source, "$"."this->queuePaymentStatusForTransaction($txId,'pending')"), 'Initial pending transition is not queued.');
-    $assert(str_contains($source, "$"."this->queuePaymentStatusForTransaction((int)$"."tx['id'],'success')"), 'Successful settlement is not queued.');
-    $assert(str_contains($source, "$"."this->queuePaymentStatusForTransaction($id,'review')"), 'Stale pending review is not queued.');
+    $assert(str_contains($source, "\$this->queuePaymentStatusForTransaction(\$txId,'pending')"), 'Initial pending transition is not queued.');
+    $assert(str_contains($source, "\$this->queuePaymentStatusForTransaction((int)\$tx['id'],'success')"), 'Successful settlement is not queued.');
+    $assert(str_contains($source, "\$this->queuePaymentStatusForTransaction(\$id,'review')"), 'Stale pending review is not queued.');
     $assert(str_contains($source, 'if($q->rowCount()===1&&isset($fields[\'status\']))'), 'Repeated status updates are not gated by a real row transition.');
     echo "PASS payment status email outbox idempotency and state transition coverage" . PHP_EOL;
 } finally {
