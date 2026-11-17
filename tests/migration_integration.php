@@ -111,15 +111,15 @@ $exactMovementId = (int)$pdo->lastInsertId();
 $movementInsert->execute([':import'=>$importId,':row'=>3,':reference'=>'REVIEW-MISMATCH',':amount'=>'30.00',':match_status'=>'amount_mismatch']);
 $mismatchMovementId = (int)$pdo->lastInsertId();
 $paymentCountBeforeReview = (int)$pdo->query('SELECT COUNT(*) FROM payment_transactions')->fetchColumn();
-$confirmedReview = \\HostPilot\\Payment\\StatementImport::review($pdo,$exactMovementId,'confirm',$adminUserId);
+$confirmedReview = \HostPilot\Payment\StatementImport::review($pdo,$exactMovementId,'confirm',$adminUserId);
 if (($confirmedReview['review_status']??'') !== 'confirmed') throw new RuntimeException('Exact statement match was not confirmed.');
 $confirmAgainRejected = false;
-try { \\HostPilot\\Payment\\StatementImport::review($pdo,$exactMovementId,'confirm',$adminUserId); } catch (RuntimeException) { $confirmAgainRejected = true; }
+try { \HostPilot\Payment\StatementImport::review($pdo,$exactMovementId,'confirm',$adminUserId); } catch (RuntimeException) { $confirmAgainRejected = true; }
 if (!$confirmAgainRejected) throw new RuntimeException('A reviewed statement movement was allowed to be confirmed twice.');
 $mismatchConfirmRejected = false;
-try { \\HostPilot\\Payment\\StatementImport::review($pdo,$mismatchMovementId,'confirm',$adminUserId); } catch (RuntimeException) { $mismatchConfirmRejected = true; }
+try { \HostPilot\Payment\StatementImport::review($pdo,$mismatchMovementId,'confirm',$adminUserId); } catch (RuntimeException) { $mismatchConfirmRejected = true; }
 if (!$mismatchConfirmRejected) throw new RuntimeException('An amount-mismatched statement movement was confirmed.');
-$manualReview = \\HostPilot\\Payment\\StatementImport::review($pdo,$mismatchMovementId,'reviewed',$adminUserId,'Banka açıklaması kontrol edildi.');
+$manualReview = \HostPilot\Payment\StatementImport::review($pdo,$mismatchMovementId,'reviewed',$adminUserId,'Banka açıklaması kontrol edildi.');
 if (($manualReview['review_status']??'') !== 'reviewed') throw new RuntimeException('Manual review decision was not recorded.');
 if ((int)$pdo->query('SELECT COUNT(*) FROM payment_transactions')->fetchColumn() !== $paymentCountBeforeReview) throw new RuntimeException('Statement review unexpectedly changed payment transactions.');
 
