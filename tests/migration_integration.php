@@ -66,7 +66,7 @@ $pdo->exec("INSERT INTO users (name,email,username,password_hash,role,status,cre
 
 $directory = dirname(__DIR__) . '/database/migrations';
 $files = MigrationRunner::discover($directory);
-if (count($files) !== 30) throw new RuntimeException('Expected 30 SQL migrations; discovered ' . count($files) . '.');
+if (count($files) !== 31) throw new RuntimeException('Expected 31 SQL migrations; discovered ' . count($files) . '.');
 
 // Simulate interruption after the first DDL statement; the migration must safely retry.
 $firstSql = file_get_contents($files[0]['path']);
@@ -82,15 +82,15 @@ try {
     if (!str_contains($exception->getMessage(), 'Explicit administrator confirmation')) throw $exception;
 }
 $applied = MigrationRunner::runPending($pdo, $directory, true);
-if (count($applied) !== 30) throw new RuntimeException('Expected 30 applied migrations; got ' . count($applied) . '.');
+if (count($applied) !== 31) throw new RuntimeException('Expected 31 applied migrations; got ' . count($applied) . '.');
 $appliedCount = (int)$pdo->query('SELECT COUNT(*) FROM migrations')->fetchColumn();
-if ($appliedCount !== 30) throw new RuntimeException('Expected exactly 30 migration tracking rows.');
+if ($appliedCount !== 31) throw new RuntimeException('Expected exactly 31 migration tracking rows.');
 if (MigrationRunner::pending($pdo, $directory) !== []) throw new RuntimeException('Pending migrations remain after successful run.');
 if (MigrationRunner::runPending($pdo, $directory, true) !== []) throw new RuntimeException('Second run was not a no-op.');
 
 if ((int)$pdo->query("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='email_verified_at'")->fetchColumn() !== 1) throw new RuntimeException('Email verification migration did not add email_verified_at to a legacy users table.');
 if ((int)$pdo->query("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='auth_version'")->fetchColumn() !== 1) throw new RuntimeException('Session security migration did not add auth_version to a legacy users table.');
-$requiredTables = ['product_groups','products','product_pricing','orders','order_items','services','invoices','invoice_items','payment_transactions','servers','provisioning_jobs','service_package_changes','email_outbox','domain_registrations','domain_renewals','password_reset_tokens','staff_permissions','staff_departments','email_verification_tokens','security_audit_logs', 'admin_mfa', 'admin_mfa_recovery_codes','customer_mfa','customer_mfa_recovery_codes','privacy_requests','ticket_attachments','payment_reconciliations','payment_refunds'];
+$requiredTables = ['product_groups','products','product_pricing','orders','order_items','services','invoices','invoice_items','payment_transactions','servers','provisioning_jobs','service_package_changes','email_outbox','domain_registrations','domain_renewals','password_reset_tokens','staff_permissions','staff_departments','email_verification_tokens','security_audit_logs', 'admin_mfa', 'admin_mfa_recovery_codes','customer_mfa','customer_mfa_recovery_codes','privacy_requests','ticket_attachments','payment_reconciliations','payment_refunds','payment_statement_imports','payment_statement_movements'];
 $check = $pdo->prepare('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table_name');
 foreach ($requiredTables as $table) {
     $check->execute([':table_name' => $table]);
