@@ -28,9 +28,10 @@ final class RefundLedger
         $owns=!$db->inTransaction();
         if($owns)$db->beginTransaction();
         try{
-            $q=$db->prepare('SELECT pt.*,i.total AS invoice_total,i.amount_paid AS invoice_amount_paid,i.currency AS invoice_currency,i.status AS invoice_status,i.due_at FROM payment_transactions pt JOIN invoices i ON i.id=pt.invoice_id WHERE pt.id=:id FOR UPDATE');
+            $q=$db->prepare('SELECT pt.*,i.total AS invoice_total,i.amount_paid AS invoice_amount_paid,i.currency AS invoice_currency,i.status AS invoice_status,i.user_id AS invoice_user_id,i.due_at FROM payment_transactions pt JOIN invoices i ON i.id=pt.invoice_id WHERE pt.id=:id FOR UPDATE');
             $q->execute([':id'=>$transactionId]);$tx=$q->fetch(PDO::FETCH_ASSOC);
             if(!$tx||!in_array((string)$tx['status'],['success','partially_refunded'],true))throw new RuntimeException('Yalnızca faturaya işlenmiş başarılı tahsilatlara iade kaydı eklenebilir.');
+            if((int)$tx['user_id']!==(int)$tx['invoice_user_id'])throw new RuntimeException('Ödeme işlemi ve fatura müşteri sahipliği eşleşmiyor.');
             if($currency!==(string)$tx['currency']||$currency!==(string)$tx['invoice_currency'])throw new RuntimeException('İade para birimi ödeme ve fatura para birimiyle eşleşmiyor.');
             if(in_array((string)$tx['invoice_status'],['cancelled','refunded'],true))throw new RuntimeException('İptal edilmiş veya tamamen iade edilmiş faturaya yeni iade eklenemez.');
             $sum=$db->prepare('SELECT COALESCE(SUM(amount),0) FROM payment_refunds WHERE payment_transaction_id=:id');
