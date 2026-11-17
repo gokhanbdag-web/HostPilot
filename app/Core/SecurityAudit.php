@@ -42,6 +42,7 @@ final class SecurityAudit
         'payment.manual_refund_confirmed',
         'payment.partial_refund_recorded',
         'payment.finance_report_exported',
+        'payment.statement_imported',
         'server.created',
         'server.connection_tested',
         'server.product_mapping_updated',

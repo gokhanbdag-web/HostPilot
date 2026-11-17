@@ -98,12 +98,12 @@ function installBrowserApp(PDO $admin, string $host, int $port, string $user, st
         [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true]
     );
     $count = (int)$db->query('SELECT COUNT(*) FROM migrations')->fetchColumn();
-    if ($count !== 30) throw new RuntimeException('Fresh browser install did not apply all 30 migrations; found ' . $count . '.');
+    if ($count !== 31) throw new RuntimeException('Fresh browser install did not apply all 31 migrations; found ' . $count . '.');
     $adminCheck = $db->prepare('SELECT role FROM users WHERE username=:username LIMIT 1');
     $adminCheck->execute([':username' => $username]);
     if ($adminCheck->fetchColumn() !== 'super_admin') throw new RuntimeException('Installer did not create the first super administrator.');
     $adminCheck->closeCursor();
-    foreach (['product_groups','products','orders','services','invoices','payment_transactions','servers','email_outbox','domain_registrations','domain_renewals','password_reset_tokens','admin_mfa','admin_mfa_recovery_codes','customer_mfa','customer_mfa_recovery_codes','privacy_requests','ticket_attachments','payment_refunds'] as $table) {
+    foreach (['product_groups','products','orders','services','invoices','payment_transactions','servers','email_outbox','domain_registrations','domain_renewals','password_reset_tokens','admin_mfa','admin_mfa_recovery_codes','customer_mfa','customer_mfa_recovery_codes','privacy_requests','ticket_attachments','payment_refunds','payment_statement_imports','payment_statement_movements'] as $table) {
         $check = $db->prepare('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=:table_name');
         $check->execute([':table_name' => $table]);
         if ((int)$check->fetchColumn() !== 1) throw new RuntimeException('Fresh installer schema is missing table ' . $table . '.');
@@ -125,7 +125,7 @@ function cleanupInstallFiles(string $storage): void
 }
 
 [$cookie, $db] = installBrowserApp($admin, $host, $port, $user, $password, $databaseName, $base, 'ci-installer', 'ci-installer@example.test', '');
-echo 'Root browser installer passed: fresh schema, 30 migrations and first administrator.' . PHP_EOL;
+echo 'Root browser installer passed: fresh schema, 31 migrations and first administrator.' . PHP_EOL;
 
 // Simulate a pre-repair installation and verify the authenticated admin upgrade flow.
 $db->exec('ALTER TABLE invoices DROP FOREIGN KEY fk_invoice_service');
@@ -321,11 +321,11 @@ $firstStatements = \HostPilot\Core\MigrationRunner::splitStatements($firstMigrat
 $partial->exec($firstStatements[0]);
 cleanupInstallFiles($storage);
 [$partialCookie, $partialDb] = installBrowserApp($admin, $host, $port, $user, $password, $partialDatabase, $base, 'ci-partial', 'ci-partial@example.test', '');
-if ((int)$partialDb->query('SELECT COUNT(*) FROM migrations')->fetchColumn() !== 30) {
+if ((int)$partialDb->query('SELECT COUNT(*) FROM migrations')->fetchColumn() !== 31) {
     throw new RuntimeException('Installer did not recover from a partially-created schema.');
 }
 cleanupInstallFiles($storage);
-echo 'Partial-install retry passed: installer completed all 30 migrations after an interrupted first DDL.' . PHP_EOL;
+echo 'Partial-install retry passed: installer completed all 31 migrations after an interrupted first DDL.' . PHP_EOL;
 
 // Verify root/subdirectory-aware browser installation independently.
 $subdirectory = $root . '/ci-subdir';
@@ -333,7 +333,7 @@ if (!mkdir($subdirectory, 0750, true)) throw new RuntimeException('Unable to cre
 file_put_contents($subdirectory . '/index.php', "<?php require dirname(__DIR__) . '/index.php';\n");
 $subDatabase = 'hostpilot_installer_subdir_ci';
 [$subCookie, $subDb] = installBrowserApp($admin, $host, $port, $user, $password, $subDatabase, 'http://127.0.0.1:8080/ci-subdir/', 'ci-subdir', 'ci-subdir@example.test', '/ci-subdir');
-if ((int)$subDb->query('SELECT COUNT(*) FROM migrations')->fetchColumn() !== 30) throw new RuntimeException('Subdirectory installer did not apply all SQL migrations.');
+if ((int)$subDb->query('SELECT COUNT(*) FROM migrations')->fetchColumn() !== 31) throw new RuntimeException('Subdirectory installer did not apply all 31 SQL migrations.');
 cleanupInstallFiles($storage);
 @unlink($subdirectory . '/index.php');
 @rmdir($subdirectory);
