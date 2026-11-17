@@ -63,7 +63,7 @@ try{
     $assert($byCurrency['TRY']['outstanding_amount']==='1329.00','TRY open invoice balances do not reflect refund-restored balances.');
     $assert($byCurrency['USD']['outstanding_amount']==='10.00','USD open invoice balance is incorrect.');
     $assert($byCurrency['TRY']['overdue_amount']==='70.00','Overdue balance should use calendar-day boundaries, not the current time of day.');
-    try{\\HostPilot\\Payment\\FinanceReport::summary($db,'2026-02-30 00:00:00',$to);throw new RuntimeException('Invalid calendar date was accepted.');}catch(\\InvalidArgumentException){}
+    try{\HostPilot\Payment\FinanceReport::summary($db,'2026-02-30 00:00:00',$to);throw new RuntimeException('Invalid calendar date was accepted.');}catch(\InvalidArgumentException){}
 
     $movements=\HostPilot\Payment\FinanceReport::movements($db,$from,$to,100);
     $assert(count($movements)===7,'Expected four capture and three in-period refund movements; older activity or uncollected manual refund leaked in.');
