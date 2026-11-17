@@ -47,7 +47,7 @@ try {
     sort($events);
     $assert($events === ['payment_cancelled', 'payment_failed', 'payment_pending', 'payment_refunded', 'payment_review', 'payment_success'], 'Payment state event types were not stored correctly.');
     $keys = array_column($rows, 'idempotency_key');
-    $assert(count(array_unique($keys)) === 4, 'Different payment states must have distinct idempotency keys.');
+    $assert(count(array_unique($keys)) === 6, 'Different payment states must have distinct idempotency keys.');
     foreach ($rows as $row) {
         $assert(str_contains($row['body'], $invoiceNumber), 'Customer notice omitted the invoice reference.');
         $assert(str_contains($row['body'], '149,90 TRY'), 'Customer notice omitted the formatted amount.');
