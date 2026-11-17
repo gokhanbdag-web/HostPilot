@@ -98,6 +98,12 @@ final class StatementImport
         }
     }
 
+    private static function normalizeAmount(string $amount): string
+    {
+        $parts = explode('.', $amount, 2);
+        return ltrim($parts[0], '0') . '.' . str_pad($parts[1] ?? '', 2, '0', STR_PAD_RIGHT);
+    }
+
     /** @return array{status:string,payment_id:?int,refund_id:?int} */
     private static function findCandidate(PDO $db, array $row): array
     {
