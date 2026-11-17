@@ -47,7 +47,7 @@ final class FinanceReport
             FROM invoices
             WHERE status NOT IN ('paid','cancelled') AND total > amount_paid
             GROUP BY currency");
-        $outstanding->execute([':overdue_today'=>gmdate('Y-m-d H:i:s')]);
+        $outstanding->execute([':overdue_today'=>gmdate('Y-m-d 00:00:00')]);
         foreach ($outstanding->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $currency = (string)$row['currency'];
             $result[$currency] ??= self::emptyCurrency($currency);
@@ -131,12 +131,16 @@ final class FinanceReport
 
     private static function cents(mixed $amount): int
     {
-        return (int)round((float)$amount * 100);
+        $raw=trim((string)$amount);
+        if(!preg_match('/^(-?)([0-9]+)(?:\\.([0-9]{1,2}))?$/D',$raw,$parts))return 0;
+        $cents=((int)$parts[2])*100+(int)str_pad($parts[3]??'',2,'0',STR_PAD_RIGHT);
+        return ($parts[1]??'')==='-'?-$cents:$cents;
     }
 
     private static function money(int $cents): string
     {
-        return number_format($cents / 100, 2, '.', '');
+        $absolute=abs($cents);
+        return ($cents<0?'-':'').number_format(intdiv($absolute,100),0,'.','').'.'.str_pad((string)($absolute%100),2,'0',STR_PAD_LEFT);
     }
 
     private static function assertRange(string $from, string $toExclusive): void
