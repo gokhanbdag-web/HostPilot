@@ -211,6 +211,7 @@ if ($requestPath === '/admin/services/terminate' && $method === 'POST') { $serve
 if ($requestPath === '/admin/payments' && in_array($method, ['GET','POST'], true)) { $payment->adminSettings(); exit; }
 if ($requestPath === '/admin/payment-transactions' && $method === 'GET') { $payment->adminTransactions(); exit; }
 if ($requestPath === '/admin/payment-transactions/reconcile' && $method === 'POST') { $payment->adminReconcile(); exit; }
+if ($requestPath === '/admin/payment-transactions/refund' && $method === 'POST') { $payment->adminRecordRefund(); exit; }
 if (preg_match('#^/client/invoices/([0-9]+)$#', $requestPath, $invoiceDetailMatch) && $method === 'GET') { $catalog->clientInvoiceDetail((int)$invoiceDetailMatch[1]); exit; }
 if (preg_match('#^/client/invoices/([0-9]+)/pay$#', $requestPath, $payInvoiceMatch) && in_array($method, ['GET','POST'], true)) { $payment->payInvoice((int)$payInvoiceMatch[1]); exit; }
 if ($requestPath === '/payment/paytr/callback' && $method === 'POST') { $payment->paytrCallback(); exit; }
