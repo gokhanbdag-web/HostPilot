@@ -89,7 +89,7 @@ final class PaymentController
         $toRaw=trim((string)($_GET['to']??$today->format('Y-m-d')));
         $from=\DateTimeImmutable::createFromFormat('!Y-m-d',$fromRaw,new \DateTimeZone('UTC'));
         $to=\DateTimeImmutable::createFromFormat('!Y-m-d',$toRaw,new \DateTimeZone('UTC'));
-        $valid=$from!==false&&$to!==false&&$from->format('Y-m-d')===$fromRaw&&$to->format('Y-m-d')===$toRaw&&$from<=$to&&($to->getTimestamp()-$from->getTimestamp())<=366*86400;
+        $valid=$from!==false&&$to!==false&&$from->format('Y-m-d')===$fromRaw&&$to->format('Y-m-d')===$toRaw&&$from<=$to&&($to->getTimestamp()-$from->getTimestamp())<=365*86400;
         if(!$valid)return [$defaultFrom->format('Y-m-d'),$today->format('Y-m-d'),$today->modify('+1 day')->format('Y-m-d'),'Geçersiz tarih aralığı. Başlangıç ve bitiş tarihlerini kontrol edin.'];
         return [$fromRaw,$toRaw,$to->modify('+1 day')->format('Y-m-d'),''];
     }
