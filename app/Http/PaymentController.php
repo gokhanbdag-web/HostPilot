@@ -90,6 +90,9 @@ final class PaymentController
         $rows=$this->db->query("SELECT pt.id,pt.invoice_id,pt.gateway,pt.gateway_transaction_id,pt.status,pt.currency,pt.amount,pt.response_code,pt.safe_message,pt.created_at,i.invoice_number,u.name,u.email
             FROM payment_transactions pt JOIN invoices i ON i.id=pt.invoice_id JOIN users u ON u.id=pt.user_id
             ORDER BY pt.created_at DESC LIMIT 500")->fetchAll();
+        $refundHistory=$this->db->query('SELECT pr.payment_transaction_id,pr.amount,pr.currency,pr.provider_reference,pr.reason,pr.created_at,u.name AS admin_name FROM payment_refunds pr JOIN users u ON u.id=pr.admin_user_id ORDER BY pr.id DESC LIMIT 1000')->fetchAll(PDO::FETCH_ASSOC);
+        $refundsByTransaction=[];
+        foreach($refundHistory as $refundRow)$refundsByTransaction[(int)$refundRow['payment_transaction_id']][]=$refundRow;
         $notice=(string)($_SESSION['hostpilot_payment_reconcile_notice']??'');$error=(string)($_SESSION['hostpilot_payment_reconcile_error']??'');
         unset($_SESSION['hostpilot_payment_reconcile_notice'],$_SESSION['hostpilot_payment_reconcile_error']);
         $canReconcile=in_array((Auth::user()['role']??''),['admin','super_admin'],true);
@@ -102,6 +105,13 @@ final class PaymentController
         if(!$rows)echo '<tr><td colspan="6">Henüz ödeme işlemi bulunmuyor.</td></tr>';
         foreach($rows as $v){
             echo '<tr><td>'.date('d.m.Y H:i',strtotime($v['created_at'])).'</td><td>#'.$this->e($v['invoice_number']).'<small>'.$this->e($v['name']).' · '.$this->e($v['email']).'</small></td><td>'.$this->e(strtoupper($v['gateway'])).'</td><td>'.number_format((float)$v['amount'],2,',','.').' '.$this->e($v['currency']).'</td><td>'.$this->e($this->transactionStatus($v['status'])).'<small>'.$this->e((string)$v['response_code']).'</small></td><td>'.$this->e((string)($v['gateway_transaction_id']??'—')).'<small>'.$this->e((string)($v['safe_message']??'')).'</small></td></tr>';
+            if(!empty($refundsByTransaction[(int)$v['id']])){
+                $refundedTotal=0.0;
+                foreach($refundsByTransaction[(int)$v['id']] as $refundRow)$refundedTotal+=(float)$refundRow['amount'];
+                echo '<tr><td colspan="6"><b>Toplam iade: '.number_format($refundedTotal,2,',','.').' '.$this->e((string)$v['currency']).'</b>';
+                foreach($refundsByTransaction[(int)$v['id']] as $refundRow)echo '<p>'.number_format((float)$refundRow['amount'],2,',','.').' '.$this->e((string)$refundRow['currency']).' · '.date('d.m.Y H:i',strtotime($refundRow['created_at'])).' · '.$this->e((string)$refundRow['provider_reference']).' · '.$this->e((string)$refundRow['reason']).' · '.$this->e((string)$refundRow['admin_name']).'</p>';
+                echo '</td></tr>';
+            }
             if($canReconcile&&$v['status']==='review'){
                 echo '<tr><td colspan="6"><form method="post" action="'.$this->url('/admin/payment-transactions/reconcile').'" style="display:grid;gap:9px;padding:12px;background:#f6f8fc;border-radius:8px">';
                 echo '<input type="hidden" name="_token" value="'.$this->e($csrf).'"><input type="hidden" name="payment_transaction_id" value="'.(int)$v['id'].'">';
