@@ -31,7 +31,7 @@ final class PaymentController
         $this->pageStart('Finansal hareket raporu');
         echo '<div class="admin"><aside><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a href="'.$this->url('/admin').'">← Kontrol merkezi</a><a class="active" href="'.$this->url('/admin/finance').'">Finans raporları</a><a href="'.$this->url('/admin/payment-transactions').'">Ödeme işlemleri</a><a href="'.$this->url('/admin/payments').'">Ödeme ayarları</a><a href="'.$this->url('/admin/invoices').'">Faturalar</a></aside><main><header><small>FİNANS / MUTABAKAT</small><h1>Finansal hareket raporu</h1><p>Tahsilat, sağlayıcıda tamamlanmış iadeler, açık fatura bakiyeleri ve manuel inceleme kayıtları. Tutarlar para birimine göre ayrı hesaplanır.</p></header>';
         if($rangeError!=='')echo '<div class="alert">'.$this->e($rangeError).' Varsayılan son 30 günlük aralık gösteriliyor.</div>';
-        echo '<section class="box"><form method="get" action="'.$this->url('/admin/finance').'" style="display:flex;gap:12px;align-items:end;flex-wrap:wrap"><label>Başlangıç tarihi<input type="date" name="from" value="'.$this->e($from).'" required></label><label>Bitiş tarihi<input type="date" name="to" value="'.$this->e($to).'" required></label><button class="button" type="submit">Raporu görüntüle</button><a class="button" href="'.$this->url('/admin/finance/export').'?from='.rawurlencode($from).'&to='.rawurlencode($to).'">CSV indir</a></form><p class="muted">En fazla 366 günlük aralık. Tahsilat ve iade hareketleri kendi gerçekleşme tarihlerine göre raporlanır.</p></section>';
+        echo '<section class="box"><form method="get" action="'.$this->url('/admin/finance').'" style="display:flex;gap:12px;align-items:end;flex-wrap:wrap"><label>Başlangıç tarihi<input type="date" name="from" value="'.$this->e($from).'" required></label><label>Bitiş tarihi<input type="date" name="to" value="'.$this->e($to).'" required></label><button class="button" type="submit">Raporu görüntüle</button><a class="button" href="'.$this->url('/admin/finance/export').'?from='.rawurlencode($from).'&to='.rawurlencode($to).'">CSV indir</a></form><p class="muted">En fazla 366 günlük aralık. Tahsilat kayıtları ödeme işleminin oluşturulma zamanını, iadeler iade kaydının zamanını kullanır; gerçek banka valör zamanı bu sürümde saklanmaz. CSV en fazla 5.000 hareket içerir.</p></section>';
         echo '<section class="box"><h2>Seçili dönemin nakit hareketleri</h2>';
         if(!$summary)echo '<p class="muted">Seçilen aralıkta finansal hareket veya açık fatura bakiyesi bulunamadı.</p>';
         foreach($summary as $row){
@@ -45,7 +45,7 @@ final class PaymentController
             echo '<div><small class="muted">Manuel inceleme · '.(int)$row['review_count'].'</small><h2>'.number_format((float)$row['review_amount'],2,',','.').' '.$currency.'</h2></div>';
             echo '</div></div>';
         }
-        echo '</section><section class="box"><h2>Finansal hareket dökümü</h2><p class="muted">Son 150 kayıt. Tahsilatlar ve iade kayıtları ayrı hareketlerdir; aynı işlem birden fazla satırda görünebilir.</p><div style="overflow-x:auto"><table><thead><tr><th>Tarih</th><th>Tür</th><th>Fatura</th><th>Sağlayıcı</th><th>Referans</th><th>Tutar</th><th>Detay</th></tr></thead><tbody>';
+        echo '</section><section class="box"><h2>Finansal hareket dökümü</h2><p class="muted">Son 150 kayıt. Tahsilatlar ve iade kayıtları ayrı hareketlerdir; aynı işlem birden fazla satırda görünebilir.</p><div style="overflow-x:auto"><table><thead><tr><th>Kayıt zamanı UTC</th><th>Tür</th><th>Fatura</th><th>Sağlayıcı</th><th>Referans</th><th>Tutar</th><th>Detay</th></tr></thead><tbody>';
         if(!$movements)echo '<tr><td colspan="7">Hareket bulunamadı.</td></tr>';
         foreach($movements as $movement){
             $type=$movement['movement_type']==='refund'?'İade':'Tahsilat';
@@ -73,7 +73,7 @@ final class PaymentController
         $out=fopen('php://output','wb');
         if($out===false){http_response_code(500);return;}
         fwrite($out,"\xEF\xBB\xBF");
-        fputcsv($out,['Tarih UTC','Hareket türü','Fatura','Sağlayıcı','Sağlayıcı referansı','Tutar','Para birimi','Açıklama']);
+        fputcsv($out,['İşlem kayıt zamanı UTC','Hareket türü','Fatura','Sağlayıcı','Sağlayıcı referansı','Tutar','Para birimi','Açıklama']);
         foreach($rows as $row){
             $values=[(string)$row['occurred_at'],$row['movement_type']==='refund'?'İade':'Tahsilat',(string)$row['invoice_number'],strtoupper((string)$row['gateway']),(string)$row['provider_reference'],number_format((float)$row['amount'],2,'.',''),(string)$row['currency'],(string)$row['detail']];
             fputcsv($out,array_map([$this,'csvSafeValue'],$values));
