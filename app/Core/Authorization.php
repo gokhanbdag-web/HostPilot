@@ -130,6 +130,7 @@ final class Authorization
         if ($path === '/admin/payments' && in_array($method, ['GET', 'POST'], true)) return 'payments.manage';
         if (in_array($path, ['/admin/payment-transactions','/admin/finance','/admin/finance/export','/admin/finance/import'], true) && $method === 'GET') return 'payments.view';
         if ($path === '/admin/finance/import' && $method === 'POST') return 'payments.manage';
+        if ($path === '/admin/finance/import/movements/review' && $method === 'POST') return 'payments.manage';
         if ($path === '/admin/payment-transactions/reconcile' && $method === 'POST') return 'payments.reconcile';
         if ($path === '/admin/products' && in_array($method, ['GET', 'POST'], true)) return 'catalog.manage';
         if ($path === '/admin/orders' && $method === 'GET') return 'orders.view';
