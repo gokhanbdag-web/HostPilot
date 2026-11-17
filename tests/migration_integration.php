@@ -115,7 +115,7 @@ $verified=$pdo->prepare("SELECT status,email_verified_at FROM users WHERE id=:id
 $verified->execute([':id'=>$verificationUserId]);
 $verifiedRow=$verified->fetch(PDO::FETCH_ASSOC);
 if (($verifiedRow['status']??'')!=='active'||empty($verifiedRow['email_verified_at'])) throw new RuntimeException('Email verification did not activate the pending customer.');
-echo 'MySQL/MariaDB migration integration passed: 30 migrations, customer/admin MFA and refund ledger tables, staff defaults, partial-DDL retry, confirmation guard, tracking and idempotent second run.' . PHP_EOL;
+echo 'MySQL/MariaDB migration integration passed: 31 migrations, customer/admin MFA and refund ledger tables, staff defaults, partial-DDL retry, confirmation guard, tracking and idempotent second run.' . PHP_EOL;
 
 // Compare the SQL migration path with the retained legacy PHP migration path
 // on an independent clean schema. This remains an ephemeral CI-only database.
