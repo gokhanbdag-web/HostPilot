@@ -62,15 +62,25 @@ final class PaymentController
 
     private function flagStalePendingAttempts(?int $invoiceId=null):int
     {
-        // A timeout is ambiguous: never release the invoice for another charge automatically.
-        // Move old sessions to manual review so an administrator can verify provider-side state.
+        // A timeout is ambiguous: lock each row and enqueue its review notice atomically.
         $now=gmdate('Y-m-d H:i:s');
-        $cutoff=(new \DateTimeImmutable('now',new \DateTimeZone('UTC')))->modify('-30 minutes')->format('Y-m-d H:i:s');
-        $sql="UPDATE payment_transactions SET status='review',response_code='stale_pending_review',safe_message='Ödeme oturumu 30 dakikadan uzun süredir sonuçlanmadı. Sağlayıcı panelinde kontrol edilmelidir.',updated_at=:updated WHERE status='pending' AND created_at<=:cutoff";
-        $params=[':updated'=>$now,':cutoff'=>$cutoff];
+        $cutoff=(new \\DateTimeImmutable('now',new \\DateTimeZone('UTC')))->modify('-30 minutes')->format('Y-m-d H:i:s');
+        $sql="SELECT id FROM payment_transactions WHERE status='pending' AND created_at<=:cutoff";
+        $params=[':cutoff'=>$cutoff];
         if($invoiceId!==null){$sql.=' AND invoice_id=:invoice_id';$params[':invoice_id']=$invoiceId;}
-        $statement=$this->db->prepare($sql);$statement->execute($params);
-        return $statement->rowCount();
+        $this->db->beginTransaction();
+        try{
+            $select=$this->db->prepare($sql.' ORDER BY id FOR UPDATE');$select->execute($params);
+            $ids=array_map('intval',$select->fetchAll(PDO::FETCH_COLUMN));
+            $changed=0;
+            $update=$this->db->prepare("UPDATE payment_transactions SET status='review',response_code='stale_pending_review',safe_message='Ödeme oturumu 30 dakikadan uzun süredir sonuçlanmadı. Sağlayıcı panelinde kontrol edilmelidir.',updated_at=:updated WHERE id=:id AND status='pending'");
+            foreach($ids as $id){
+                $update->execute([':updated'=>$now,':id'=>$id]);
+                if($update->rowCount()===1){$changed++;$this->queuePaymentStatusForTransaction($id,'review');}
+            }
+            $this->db->commit();
+            return $changed;
+        }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();throw $e;}
     }
 
     public function adminTransactions():void
@@ -239,6 +249,7 @@ final class PaymentController
                 $ins=$this->db->prepare("INSERT INTO payment_transactions(invoice_id,user_id,gateway,idempotency_key,status,currency,amount,request_reference,created_at,updated_at) VALUES(:invoice,:user,:gateway,:key,'pending',:currency,:amount,:reference,:created,:updated)");
                 $ins->execute([':invoice'=>$invoiceId,':user'=>$user['id'],':gateway'=>$gateway,':key'=>bin2hex(random_bytes(24)),':currency'=>$invoice['currency'],':amount'=>$amount,':reference'=>$ref,':created'=>$now,':updated'=>$now]);
                 $txId=(int)$this->db->lastInsertId();
+                $this->queuePaymentStatusForTransaction($txId,'pending');
                 $this->db->commit();
                 if($gateway==='paytr')$this->startPaytr($txId,$ref,$invoice,$user,$amount,$v);
                 else $this->startIyzico($txId,$ref,$invoice,$user,$amount,$v);
@@ -424,6 +435,7 @@ final class PaymentController
                 // retain a visible manual-reconciliation state, and never silently lose the capture.
                 $review=$this->db->prepare("UPDATE payment_transactions SET status='review',response_code='overpayment_review',safe_message=:message,updated_at=:updated WHERE id=:id");
                 $review->execute([':message'=>'Sağlayıcı ödemeyi onayladı ancak fatura bakiyesi yetersiz. Manuel iade / mutabakat gerekiyor.',':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$tx['id']]);
+                $this->queuePaymentStatusForTransaction((int)$tx['id'],'review');
                 $this->db->commit();
                 SecurityAudit::record($this->db,'payment.transaction_reviewed',null,['resource_id'=>(int)$tx['id'],'action'=>'review']);
                 return;
@@ -433,13 +445,12 @@ final class PaymentController
             $u->execute([':paid'=>$newPaid,':status'=>$newStatus,':paid_at'=>$newStatus==='paid'?$now:null,':updated'=>$now,':id'=>$invoice['id']]);
             $p=$this->db->prepare("UPDATE payment_transactions SET status='success',gateway_transaction_id=:gateway_id,response_code='success',safe_message=:message,updated_at=:updated WHERE id=:id");
             $p->execute([':gateway_id'=>$gatewayId,':message'=>$message,':updated'=>$now,':id'=>$tx['id']]);
+            $this->queuePaymentStatusForTransaction((int)$tx['id'],'success');
             if($reconciliation!==null){
                 $record=$this->db->prepare("INSERT INTO payment_reconciliations(payment_transaction_id,admin_user_id,decision,provider_reference,amount,currency,reason,created_at) VALUES(:tx,:admin,:decision,:reference,:amount,:currency,:reason,:created)");
                 $record->execute([':tx'=>$tx['id'],':admin'=>$reconciliation['admin_user_id'],':decision'=>$reconciliation['decision'],':reference'=>$reconciliation['provider_reference'],':amount'=>$tx['amount'],':currency'=>$tx['currency'],':reason'=>$reconciliation['reason'],':created'=>$now]);
             }
             if($newStatus==='paid'){
-                $customerQuery=$this->db->prepare('SELECT name,email FROM users WHERE id=:id LIMIT 1');$customerQuery->execute([':id'=>$invoice['user_id']]);$invoiceCustomer=$customerQuery->fetch();
-                if($invoiceCustomer)(new EmailService($this->db,$this->applicationKey))->queueInvoiceNotice((string)$invoiceCustomer['email'],(string)$invoiceCustomer['name'],(string)$invoice['invoice_number'],(float)$invoice['total'],(string)$invoice['currency'],'','paid',(int)$invoice['id']);
                 $this->db->prepare("UPDATE orders SET status='paid',updated_at=:updated WHERE id=:id")->execute([':updated'=>$now,':id'=>$invoice['order_id']]);
                 $packageInvoice=$this->db->prepare('SELECT id FROM service_package_changes WHERE invoice_id=:invoice LIMIT 1');$packageInvoice->execute([':invoice'=>$invoice['id']]);$isPackageInvoice=(bool)$packageInvoice->fetchColumn();
                 $exists=$this->db->prepare('SELECT COUNT(*) FROM services WHERE order_id=:id');$exists->execute([':id'=>$invoice['order_id']]);
@@ -483,18 +494,34 @@ final class PaymentController
         return (new \DateTimeImmutable('today',new \DateTimeZone('UTC')))->modify($modify[$cycle])->format('Y-m-d');
     }
 
+    private function queuePaymentStatusForTransaction(int $id,string $event):void
+    {
+        if(!in_array($event,['pending','success','review','failed'],true)||$id<1)return;
+        $q=$this->db->prepare('SELECT pt.id,pt.amount,i.invoice_number,i.currency,u.name,u.email FROM payment_transactions pt JOIN invoices i ON i.id=pt.invoice_id JOIN users u ON u.id=pt.user_id WHERE pt.id=:id LIMIT 1');
+        $q->execute([':id'=>$id]);$row=$q->fetch(PDO::FETCH_ASSOC);
+        if(!$row)return;
+        (new EmailService($this->db,$this->applicationKey))->queuePaymentStatusNotice((string)$row['email'],(string)$row['name'],(string)$row['invoice_number'],(float)$row['amount'],(string)$row['currency'],$event,(int)$row['id']);
+    }
+
     private function updateTransaction(int $id,array $fields):void
     {
         $allowed=['status','gateway_transaction_id','request_reference','response_code','safe_message'];
         $sets=[];$params=[':id'=>$id];foreach($fields as $k=>$v)if(in_array($k,$allowed,true)){$sets[]=$k.'=:'.$k;$params[':'.$k]=$v;}
-        if(!$sets)return;$sets[]='updated_at=:updated';$params[':updated']=gmdate('Y-m-d H:i:s');
-        $where=' WHERE id=:id';if(isset($fields['status'])&&$fields['status']!=='success')$where.=" AND status NOT IN ('success','cancelled','refunded','review')";$q=$this->db->prepare('UPDATE payment_transactions SET '.implode(',',$sets).$where);$q->execute($params);
-        if(($fields['status']??'')==='failed')SecurityAudit::record($this->db,'payment.transaction_failed',null,['resource_id'=>$id,'action'=>'failed']);
-        if(($fields['status']??'')==='failed'){
-            $notice=$this->db->prepare('SELECT i.id,i.invoice_number,i.total,i.currency,i.due_at,u.email,u.name FROM payment_transactions t JOIN invoices i ON i.id=t.invoice_id JOIN users u ON u.id=t.user_id WHERE t.id=:id LIMIT 1');
-            $notice->execute([':id'=>$id]);$invoice=$notice->fetch();
-            if($invoice)(new EmailService($this->db,$this->applicationKey))->queueInvoiceNotice((string)$invoice['email'],(string)$invoice['name'],(string)$invoice['invoice_number'],(float)$invoice['total'],(string)$invoice['currency'],'','failed',$id);
-        }
+        if(!$sets)return;
+        $sets[]='updated_at=:updated';$params[':updated']=gmdate('Y-m-d H:i:s');
+        $ownsTransaction=!$this->db->inTransaction();
+        if($ownsTransaction)$this->db->beginTransaction();
+        try{
+            $where=' WHERE id=:id';
+            if(isset($fields['status'])&&$fields['status']!=='success')$where.=" AND status NOT IN ('success','cancelled','refunded','review')";
+            $q=$this->db->prepare('UPDATE payment_transactions SET '.implode(',',$sets).$where);$q->execute($params);
+            if($q->rowCount()===1&&isset($fields['status'])){
+                $event=(string)$fields['status'];
+                if(in_array($event,['pending','review','failed'],true))$this->queuePaymentStatusForTransaction($id,$event);
+                if($event==='failed')SecurityAudit::record($this->db,'payment.transaction_failed',null,['resource_id'=>$id,'action'=>'failed']);
+            }
+            if($ownsTransaction)$this->db->commit();
+        }catch(Throwable $e){if($ownsTransaction&&$this->db->inTransaction())$this->db->rollBack();throw $e;}
     }
 
     private function settings():array
