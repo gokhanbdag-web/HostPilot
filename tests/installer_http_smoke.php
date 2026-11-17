@@ -98,7 +98,7 @@ function installBrowserApp(PDO $admin, string $host, int $port, string $user, st
         [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true]
     );
     $count = (int)$db->query('SELECT COUNT(*) FROM migrations')->fetchColumn();
-    if ($count !== 31) throw new RuntimeException('Fresh browser install did not apply all 32 migrations; found ' . $count . '.');
+    if ($count !== 32) throw new RuntimeException('Fresh browser install did not apply all 32 migrations; found ' . $count . '.');
     $adminCheck = $db->prepare('SELECT role FROM users WHERE username=:username LIMIT 1');
     $adminCheck->execute([':username' => $username]);
     if ($adminCheck->fetchColumn() !== 'super_admin') throw new RuntimeException('Installer did not create the first super administrator.');
@@ -333,7 +333,7 @@ if (!mkdir($subdirectory, 0750, true)) throw new RuntimeException('Unable to cre
 file_put_contents($subdirectory . '/index.php', "<?php require dirname(__DIR__) . '/index.php';\n");
 $subDatabase = 'hostpilot_installer_subdir_ci';
 [$subCookie, $subDb] = installBrowserApp($admin, $host, $port, $user, $password, $subDatabase, 'http://127.0.0.1:8080/ci-subdir/', 'ci-subdir', 'ci-subdir@example.test', '/ci-subdir');
-if ((int)$subDb->query('SELECT COUNT(*) FROM migrations')->fetchColumn() !== 31) throw new RuntimeException('Subdirectory installer did not apply all 31 SQL migrations.');
+if ((int)$subDb->query('SELECT COUNT(*) FROM migrations')->fetchColumn() !== 32) throw new RuntimeException('Subdirectory installer did not apply all 31 SQL migrations.');
 cleanupInstallFiles($storage);
 @unlink($subdirectory . '/index.php');
 @rmdir($subdirectory);
