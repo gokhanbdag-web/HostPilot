@@ -16,12 +16,12 @@ $ids=[];
 try{
     foreach(['admin','customer'] as $role){$insertUser->execute([':name'=>'Refund Test '.$role,':email'=>"refund-$role-$tag@example.test",':username'=>"refund-$role-$tag",':role'=>$role,':created'=>$now,':updated'=>$now]);$ids[$role]=(int)$db->lastInsertId();}
     $order=$db->prepare("INSERT INTO orders(order_number,user_id,status,currency,subtotal,tax_total,total,created_at,updated_at) VALUES(:number,:user,'complete','TRY',100,0,100,:created,:updated)");
-    $invoice=$db->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,status,currency,subtotal,tax_total,total,amount_paid,issued_at,due_at,paid_at,created_at,updated_at) VALUES(:number,:order,:user,'paid','TRY',:total,0,:total,:paid,:issued,NULL,:paid_at,:created,:updated)");
+    $invoice=$db->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,status,currency,subtotal,tax_total,total,amount_paid,issued_at,due_at,paid_at,created_at,updated_at) VALUES(:number,:order,:user,'paid','TRY',:subtotal,0,:total,:paid,:issued,NULL,:paid_at,:created,:updated)");
     $tx=$db->prepare("INSERT INTO payment_transactions(invoice_id,user_id,gateway,idempotency_key,status,currency,amount,request_reference,created_at,updated_at) VALUES(:invoice,:user,'paytr',:key,'success','TRY',:amount,:reference,:created,:updated)");
     $create=static function(float $amount)use($db,$order,$invoice,$tx,$ids,$tag,$now):int{
         $suffix=bin2hex(random_bytes(3));
         $order->execute([':number'=>"RFO-$tag-$suffix",':user'=>$ids['customer'],':created'=>$now,':updated'=>$now]);$orderId=(int)$db->lastInsertId();
-        $invoice->execute([':number'=>"RFI-$tag-$suffix",':order'=>$orderId,':user'=>$ids['customer'],':total'=>number_format($amount,2,'.',''),':paid'=>number_format($amount,2,'.',''),':paid_at'=>$now,':issued'=>$now,':created'=>$now,':updated'=>$now]);$invoiceId=(int)$db->lastInsertId();
+        $invoice->execute([':number'=>"RFI-$tag-$suffix",':order'=>$orderId,':user'=>$ids['customer'],':subtotal'=>number_format($amount,2,'.',''),':total'=>number_format($amount,2,'.',''),':paid'=>number_format($amount,2,'.',''),':paid_at'=>$now,':issued'=>$now,':created'=>$now,':updated'=>$now]);$invoiceId=(int)$db->lastInsertId();
         $tx->execute([':invoice'=>$invoiceId,':user'=>$ids['customer'],':key'=>'refund-'.$tag.'-'.$suffix,':amount'=>number_format($amount,2,'.',''),':reference'=>'gateway-'.$suffix,':created'=>$now,':updated'=>$now]);
         return (int)$db->lastInsertId();
     };
