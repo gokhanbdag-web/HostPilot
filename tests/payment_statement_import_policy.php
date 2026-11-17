@@ -20,7 +20,7 @@ $checks=[
  'CSV imports require CSRF validation'=>str_contains($controller,'Auth::verifyCsrf'),
  'CSV imports are audited'=>str_contains($controller,"payment.statement_imported")&&str_contains($audit,"'payment.statement_imported'"),
  'admin import route is registered'=>str_contains($index,"'/admin/finance/import'"),
- 'route uses existing payment view permission'=>str_contains($auth,"'/admin/finance/import'"),
+ 'route uses existing payment view permission'=>str_contains($auth,"'/admin/finance/import'")&&str_contains($auth,"$path === '/admin/finance/import' && $method === 'POST'"),
 ];
 foreach($checks as $label=>$ok){if(!$ok)throw new RuntimeException('FAIL '.$label);echo 'PASS '.$label.PHP_EOL;}
 echo "HostPilot statement import policy tests passed.\n";
