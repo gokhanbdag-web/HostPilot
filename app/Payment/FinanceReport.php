@@ -145,8 +145,8 @@ final class FinanceReport
 
     private static function assertRange(string $from, string $toExclusive): void
     {
-        $fromDate=\\DateTimeImmutable::createFromFormat('!Y-m-d H:i:s',$from,new \\DateTimeZone('UTC'));
-        $toDate=\\DateTimeImmutable::createFromFormat('!Y-m-d H:i:s',$toExclusive,new \\DateTimeZone('UTC'));
+        $fromDate=\DateTimeImmutable::createFromFormat('!Y-m-d H:i:s',$from,new \DateTimeZone('UTC'));
+        $toDate=\DateTimeImmutable::createFromFormat('!Y-m-d H:i:s',$toExclusive,new \DateTimeZone('UTC'));
         if (!preg_match('/^\\d{4}-\\d{2}-\\d{2} 00:00:00$/D',$from)
             || !preg_match('/^\\d{4}-\\d{2}-\\d{2} 00:00:00$/D',$toExclusive)
             || !$fromDate || !$toDate
