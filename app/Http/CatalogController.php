@@ -27,7 +27,7 @@ final class CatalogController
     {
         $q=$this->db->prepare("SELECT p.*,g.name AS group_name FROM products p LEFT JOIN product_groups g ON g.id=p.group_id WHERE p.slug=:slug AND p.status='active' LIMIT 1");$q->execute([':slug'=>$slug]);$p=$q->fetch();
         if(!$p){http_response_code(404);echo 'Ürün bulunamadı.';return;}
-        $prices=$this->db->prepare('SELECT billing_cycle,price,currency,setup_fee FROM product_pricing WHERE product_id=:id AND is_active=1 ORDER BY FIELD(billing_cycle,\\'monthly\\',\\'quarterly\\',\\'semiannually\\',\\'annually\\',\\'biennially\\',\\'triennially\\')');$prices->execute([':id'=>$p['id']]);$rows=$prices->fetchAll();
+        $prices=$this->db->prepare("SELECT billing_cycle,price,currency,setup_fee FROM product_pricing WHERE product_id=:id AND is_active=1 ORDER BY FIELD(billing_cycle,'monthly','quarterly','semiannually','annually','biennially','triennially')");$prices->execute([':id'=>$p['id']]);$rows=$prices->fetchAll();
         $cartCount=count($this->cartSession());
         $this->start($p['name']);
         echo '<main class="detail"><a class="brand" href="'.$this->url('/').'">HOST<span>PILOT</span></a><nav>'.$this->publicPageLinks().'<a href="'.$this->url('/cart').'">Sepet ('.$cartCount.')</a><a href="'.$this->url('/knowledgebase').'">Yardım merkezi</a></nav><a class="back" href="'.$this->url('/').'">← Tüm paketler</a><section class="productdetail"><small>'.$this->e($p['group_name']??'HİZMET PAKETİ').'</small><h1>'.$this->e($p['name']).'</h1><div class="description">'.nl2br($this->e((string)$p['description'])).'</div><h2>Faturalandırma dönemi seçin</h2>';
