@@ -61,6 +61,8 @@ jobs:
         run: php tests/payment_statement_import_policy.php
       - name: Test payment statement import parser
         run: php tests/payment_statement_import_parser.php
+      - name: Test provider report adapters
+        run: php tests/payment_statement_import_parser.php
       - name: Test payment statement review policy
         run: php tests/payment_statement_review_policy.php
       - name: Test hosting transport SSRF policy
