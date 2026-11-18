@@ -264,8 +264,10 @@ try {
     $assert(str_contains($cartPageBeforeCheckout['body'],'235,00')&&str_contains($cartPageBeforeCheckout['body'],'15,00'),
         'cart re-reads current product pricing and setup fees');
     $cartCheckout=$request('/order/create',$cookieA,'POST',['_token'=>$getToken($cartPageBeforeCheckout['body'])]);
-    $assert($cartCheckout['status']===200&&str_contains($cartCheckout['body'],'Faturalarım'),
-        'customer can create one consolidated order and invoice from multiple cart items');
+    if($cartCheckout['status']!==200||!str_contains($cartCheckout['body'],'Faturalarım')){
+        throw new RuntimeException('Cart checkout HTTP failure; status='.$cartCheckout['status'].'; body='.substr(strip_tags($cartCheckout['body']),0,1200).'; server-log='.(is_file($serverLog)?substr((string)file_get_contents($serverLog),-6000):'missing'));
+    }
+    $assert(true,'customer can create one consolidated order and invoice from multiple cart items');
     $cartOrderQuery=$pdo->prepare('SELECT id,subtotal,total,currency FROM orders WHERE user_id=:user ORDER BY id DESC LIMIT 1');
     $cartOrderQuery->execute([':user'=>$a]);$cartOrder=$cartOrderQuery->fetch(PDO::FETCH_ASSOC);
     $cartOrderItems=$pdo->prepare('SELECT COUNT(*) AS item_count,SUM(unit_price) AS unit_total,SUM(line_total) AS line_total FROM order_items WHERE order_id=:id');
