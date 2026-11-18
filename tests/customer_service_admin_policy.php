@@ -18,6 +18,7 @@ $statusAction=substr($admin,$customerEnd,$statusEnd-$customerEnd);
 $serviceView=substr($server,$serviceStart,$serviceEnd-$serviceStart);
 $checks=[
     'Customer list links to customer detail pages'=>str_contains($admin,'/admin/customers/')&&str_contains($admin,'href='),
+    'Customer and service lists exclude demo fixture records'=>str_contains($admin,"demo.musteri%@example.invalid")&&str_contains($server,"o.order_number NOT LIKE 'DEMO-%'"),
     'Customer detail shows orders invoices services and tickets'=>str_contains($customerView,'FROM orders')&&str_contains($customerView,'FROM invoices')&&str_contains($customerView,'FROM services')&&str_contains($customerView,'FROM tickets'),
     'Customer detail excludes demo fixtures'=>str_contains($customerView,"NOT LIKE 'DEMO-%'")&&str_contains($customerView,"DEMO-TKT-%"),
     'Only administrators can change customer status'=>str_contains($statusAction,"['super_admin','admin']")&&str_contains($statusAction,'Auth::verifyCsrf'),
