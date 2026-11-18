@@ -462,15 +462,17 @@ final class CronController
                 $period=(string)$service['next_due_date'];
                 $next=$this->advanceBillingDate($period,(string)$service['billing_cycle']);
                 if($next===null)throw new \RuntimeException('Desteklenmeyen hizmet faturalandırma dönemi.');
+                $taxLine=TaxCalculator::line(TaxCalculator::toCents($service['amount']),TaxCalculator::settings($this->db));
+                $subtotal=TaxCalculator::decimal($taxLine['subtotal_cents']);$taxTotal=TaxCalculator::decimal($taxLine['tax_cents']);$grandTotal=TaxCalculator::decimal($taxLine['total_cents']);
                 $number='HPF'.gmdate('ymd').strtoupper(bin2hex(random_bytes(4)));
                 $dueAt=(new \DateTimeImmutable($now,new \DateTimeZone('UTC')))->modify('+'.$grace.' days')->format('Y-m-d H:i:s');
                 $invoice=$this->db->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,service_id,service_period_start,status,currency,subtotal,tax_total,total,amount_paid,issued_at,due_at,created_at,updated_at) SELECT :number,:order_id,s.user_id,:service,:period,'unpaid',o.currency,:amount,0,:total,0,:issued,:due,:created,:updated FROM services s JOIN orders o ON o.id=s.order_id WHERE s.id=:id");
-                $invoice->execute([':number'=>$number,':order_id'=>$service['order_id'],':service'=>$service['id'],':period'=>$period,':amount'=>$service['amount'],':total'=>$service['amount'],':issued'=>$now,':due'=>$dueAt,':created'=>$now,':updated'=>$now,':id'=>$service['id']]);
+                $invoice->execute([':number'=>$number,':order_id'=>$service['order_id'],':service'=>$service['id'],':period'=>$period,':subtotal'=>$subtotal,':tax'=>$taxTotal,':total'=>$grandTotal,':issued'=>$now,':due'=>$dueAt,':created'=>$now,':updated'=>$now,':id'=>$service['id']]);
                 $invoiceId=(int)$this->db->lastInsertId();
-                $line=$this->db->prepare("INSERT INTO invoice_items(invoice_id,description,quantity,unit_price,tax_rate,tax_amount,line_total,created_at) VALUES(:invoice,:description,1,:price,0,0,:total,:created)");
-                $line->execute([':invoice'=>$invoiceId,':description'=>$service['product_name'].' · Hizmet yenileme '.$period,':price'=>$service['amount'],':total'=>$service['amount'],':created'=>$now]);
+                $line=$this->db->prepare("INSERT INTO invoice_items(invoice_id,description,quantity,unit_price,tax_rate,tax_amount,line_total,created_at) VALUES(:invoice,:description,1,:price,:rate,:tax,:total,:created)");
+                $line->execute([':invoice'=>$invoiceId,':description'=>$service['product_name'].' · Hizmet yenileme '.$period,':price'=>$subtotal,':rate'=>$taxLine['tax_rate'],':tax'=>$taxTotal,':total'=>$grandTotal,':created'=>$now]);
                 $this->db->prepare("UPDATE services SET next_due_date=:next,updated_at=:updated WHERE id=:id")->execute([':next'=>$next,':updated'=>$now,':id'=>$service['id']]);
-                (new EmailService($this->db,$this->applicationKey))->queueInvoiceNotice((string)$service['email'],(string)$service['customer_name'],$number,(float)$service['amount'],(string)$service['currency'],$dueAt,'created',$invoiceId);
+                (new EmailService($this->db,$this->applicationKey))->queueInvoiceNotice((string)$service['email'],(string)$service['customer_name'],$number,(float)$grandTotal,(string)$service['currency'],$dueAt,'created',$invoiceId);
             }
             $this->db->commit();
 
