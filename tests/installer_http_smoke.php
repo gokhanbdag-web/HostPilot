@@ -69,6 +69,21 @@ function installBrowserApp(PDO $admin, string $host, int $port, string $user, st
     if (statusCode($headers) !== 200) throw new RuntimeException('Installer GET failed: HTTP ' . statusCode($headers));
     $cookie = cookieFromHeaders($headers);
     if ($cookie === '') throw new RuntimeException('Installer did not create a session cookie.');
+    $setCookieHeaders = array_values(array_filter($headers, static fn(string $header): bool => stripos($header, 'Set-Cookie:') === 0));
+    $sessionSetCookie = implode("\n", $setCookieHeaders);
+    if (!preg_match('/;\s*httponly(?:;|$)/i', $sessionSetCookie)) {
+        throw new RuntimeException('Installer session cookie must be HttpOnly.');
+    }
+    if (!preg_match('/;\s*samesite=lax(?:;|$)/i', $sessionSetCookie)) {
+        throw new RuntimeException('Installer session cookie must use SameSite=Lax.');
+    }
+    $expectedCookiePath = $expectedBasePath !== '' ? $expectedBasePath : '/';
+    if (!preg_match('/;\s*path=' . preg_quote($expectedCookiePath, '/') . '(?:;|$)/i', $sessionSetCookie)) {
+        throw new RuntimeException('Installer session cookie path does not match the installation path.');
+    }
+    if (preg_match('/;\s*secure(?:;|$)/i', $sessionSetCookie)) {
+        throw new RuntimeException('HTTP installer smoke test must not mark a non-HTTPS cookie Secure.');
+    }
     $form = [
         '_token' => csrfFromHtml($page),
         'business_model' => 'single',
@@ -103,6 +118,11 @@ function installBrowserApp(PDO $admin, string $host, int $port, string $user, st
     $adminCheck->execute([':username' => $username]);
     if ($adminCheck->fetchColumn() !== 'super_admin') throw new RuntimeException('Installer did not create the first super administrator.');
     $adminCheck->closeCursor();
+    $expectedStorageDeny = "<IfModule mod_authz_core.c>\nRequire all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\nDeny from all\n</IfModule>\n";
+    $actualStorageDeny = is_file($storage . '/.htaccess') ? file_get_contents($storage . '/.htaccess') : false;
+    if ($actualStorageDeny !== $expectedStorageDeny) {
+        throw new RuntimeException('Installer must write a valid multiline Apache deny rule for storage.');
+    }
     foreach (['product_groups','products','orders','services','invoices','payment_transactions','servers','email_outbox','domain_registrations','domain_renewals','password_reset_tokens','admin_mfa','admin_mfa_recovery_codes','customer_mfa','customer_mfa_recovery_codes','privacy_requests','ticket_attachments','payment_refunds','payment_statement_imports','payment_statement_movements'] as $table) {
         $check = $db->prepare('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=:table_name');
         $check->execute([':table_name' => $table]);
