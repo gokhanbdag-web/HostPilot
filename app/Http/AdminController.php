@@ -237,6 +237,7 @@ final class AdminController
                         }
                     }
                 }
+            }
         }
         $m=$this->db->prepare('SELECT m.*,u.name FROM ticket_messages m JOIN users u ON u.id=m.user_id WHERE m.ticket_id=:id ORDER BY m.created_at,m.id');
         $notes=$this->db->prepare('SELECT n.note,n.created_at,u.name FROM ticket_internal_notes n JOIN users u ON u.id=n.user_id WHERE n.ticket_id=:id ORDER BY n.created_at,n.id');
