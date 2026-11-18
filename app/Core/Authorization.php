@@ -114,6 +114,8 @@ final class Authorization
             return null;
         }
         if ($path === '/admin/logout' && $method === 'POST') return 'admin.logout';
+        if ($path === '/admin/integrations' && $method === 'GET') return 'integrations.manage';
+        if ($path === '/admin/themes' && $method === 'GET') return 'themes.manage';
         if ($path === '/admin/settings' && in_array($method, ['GET', 'POST'], true)) return 'email.settings.manage';
         if ($path === '/admin/email-queue' && in_array($method, ['GET', 'POST'], true)) return 'email.queue.manage';
         if (in_array($path, ['/admin/updates', '/admin/updates/status'], true) && $method === 'GET') return 'system.update';
