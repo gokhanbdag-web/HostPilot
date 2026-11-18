@@ -76,6 +76,50 @@ final class StatementImport
         };
     }
 
+    /** Parse the official iyzico daily reporting API response. */
+    private static function parseIyzicoJson(string $contents): array
+    {
+        if ($contents === '' || strlen($contents) > self::MAX_FILE_BYTES) throw new RuntimeException('iyzico JSON raporu boş veya 2 MB sınırını aşıyor.');
+        if (str_contains($contents, "\0") || preg_match('//u', $contents) !== 1) throw new RuntimeException('iyzico JSON raporu geçerli UTF-8 olmalıdır.');
+        try { $decoded = json_decode($contents, true, 64, JSON_THROW_ON_ERROR); }
+        catch (\JsonException $exception) { throw new RuntimeException('iyzico raporu geçerli JSON değil.', 0, $exception); }
+        if (!is_array($decoded) || strtolower((string)($decoded['status'] ?? '')) !== 'success' || !isset($decoded['transactions']) || !is_array($decoded['transactions']) || !array_is_list($decoded['transactions'])) {
+            throw new RuntimeException('iyzico rapor yanıtı başarılı değil veya işlem listesi bulunamadı.');
+        }
+        if ($decoded['transactions'] === [] || count($decoded['transactions']) > self::MAX_ROWS) throw new RuntimeException('iyzico raporu boş veya 5.000 hareket sınırını aşıyor.');
+        $rows = [];
+        foreach ($decoded['transactions'] as $index => $transaction) {
+            if (!is_array($transaction)) throw new RuntimeException('iyzico işlem kaydı geçersiz.');
+            $providerType = strtoupper(trim((string)($transaction['transactionType'] ?? '')));
+            $type = match ($providerType) {
+                'PAYMENT' => ((int)($transaction['transactionStatus'] ?? 0) === 2 ? 'capture' : 'unknown'),
+                'REFUND' => 'refund',
+                default => 'unknown',
+            };
+            $reference = $type === 'refund'
+                ? trim((string)($transaction['transactionId'] ?? $transaction['paymentTxId'] ?? ''))
+                : trim((string)($transaction['paymentId'] ?? ''));
+            $currency = strtoupper(trim((string)($transaction['transactionCurrency'] ?? '')));
+            $amountValue = $type === 'refund'
+                ? (string)($transaction['price'] ?? '')
+                : (string)($transaction['paidPrice'] ?? $transaction['price'] ?? '');
+            $amount = trim($amountValue);
+            if ($reference === '' || strlen($reference) > 190 || !preg_match('/^[A-Z]{3}$/D', $currency)) {
+                throw new RuntimeException('iyzico API işlem '.($index + 1).' referans veya para birimi alanı geçersiz.');
+            }
+            if (!preg_match('/^(?:0|[1-9][0-9]{0,9})(?:\.[0-9]{1,2})?$/D', $amount)) {
+                throw new RuntimeException('iyzico API işlem '.($index + 1).' tutarı geçersiz.');
+            }
+            $date = self::providerDateToUtc(trim((string)($transaction['transactionDate'] ?? '')), $index + 1, 'iyzico');
+            $rows[] = [
+                'date'=>$date,'reference'=>$reference,
+                'description'=>'iyzico API '.strtolower($providerType),
+                'amount'=>$amount,'currency'=>$currency,'type'=>$type,
+            ];
+        }
+        return $rows;
+    }
+
     /** @return list<array{date:string,reference:string,description:string,amount:string,currency:string,type:string}> */
     private static function parseIyzicoCsv(string $contents): array
     {
