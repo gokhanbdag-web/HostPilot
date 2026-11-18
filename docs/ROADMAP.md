@@ -42,7 +42,8 @@
 ## Phase 3 — Catalog, storefront, and order lifecycle
 - [x] Product groups, products, initial pricing and billing-cycle records (multiple price editing and configurable options remain pending).
 - [x] Initial catalogue storefront and product detail pages (theme registry and multiple themes remain pending).
-- [ ] CMS pages and menus.
+- [x] CMS page management with public slug routes, SEO metadata, draft/published workflow and admin audit events.
+- [ ] Menu management.
 - [x] Public knowledge base search, category filters, article detail pages and privacy-conscious feedback.
 - [x] Administrator knowledge-base article CRUD, draft/published workflow and audit events.
 - [x] Single-product pending order creation, customer order history, and staff order listing (cart, payment checkout, coupons remain pending).
