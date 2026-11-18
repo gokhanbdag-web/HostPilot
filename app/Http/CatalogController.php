@@ -3,6 +3,7 @@ declare(strict_types=1);
 namespace HostPilot\Http;
 use HostPilot\Core\Auth;
 use HostPilot\Core\SecretVault;
+use HostPilot\Core\TaxCalculator;
 use PDO;
 use Throwable;
 
