@@ -84,7 +84,9 @@ final class AdminWorkspaceController
         $values = [];
         foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $row) {
             // Secret values are never decrypted or rendered; only their presence is exposed.
-            $values[(string)$row['setting_key']] = (int)$row['is_secret'] === 1
+            $key = (string)$row['setting_key'];
+            $sensitive = (int)$row['is_secret'] === 1 || preg_match('/(?:secret|password|api_key|merchant_key|salt|_enc)$/i', $key) === 1;
+            $values[$key] = $sensitive
                 ? ((string)$row['setting_value'] !== '' ? '[configured]' : '')
                 : (string)$row['setting_value'];
         }
