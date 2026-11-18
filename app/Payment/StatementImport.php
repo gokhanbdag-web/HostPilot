@@ -62,13 +62,154 @@ final class StatementImport
         }
     }
 
+    /**
+     * Parse provider-native exports into the canonical movement shape.
+     * PayTR's official transaction detail endpoint returns JSON; iyzico SFTP reports are CSV.
+     */
+    public static function parseUpload(string $source, string $contents): array
+    {
+        return match ($source) {
+            'bank' => self::parseCsv($contents),
+            'paytr' => self::parsePaytrJson($contents),
+            'iyzico' => self::parseIyzicoCsv($contents),
+            default => throw new RuntimeException('Ekstre kaynağı geçersiz.'),
+        };
+    }
+
+    /** @return list<array{date:string,reference:string,description:string,amount:string,currency:string,type:string}> */
+    public static function parsePaytrJson(string $contents): array
+    {
+        self::assertFileContents($contents, 'PayTR JSON');
+        $data = json_decode(preg_replace('/^\\xEF\\xBB\\xBF/', '', $contents) ?? $contents, true, 64, JSON_THROW_ON_ERROR);
+        if (!is_array($data) || ($data['status'] ?? '') !== 'success') {
+            throw new RuntimeException('PayTR dosyası başarılı bir Satış ve İade İşlem Dökümü yanıtı değil.');
+        }
+        $records = null;
+        foreach (['transactions', 'islemler', 'data', 'result', 'details', 'islem_detaylari'] as $key) {
+            if (isset($data[$key]) && is_array($data[$key])) {
+                $records = array_is_list($data[$key]) ? $data[$key] : null;
+                if ($records !== null) break;
+            }
+        }
+        if ($records === null && array_is_list($data)) $records = $data;
+        if ($records === null) {
+            foreach (['islem_tipi','siparis_no','islem_tarihi','islem_tutari','para_birimi'] as $key) {
+                if (!array_key_exists($key, $data)) throw new RuntimeException('PayTR işlem listesi bulunamadı veya dosya biçimi tanınmadı.');
+            }
+            $records = [$data];
+        }
+        if ($records === [] || count($records) > self::MAX_ROWS) throw new RuntimeException('PayTR raporu boş veya 5.000 hareket sınırını aşıyor.');
+        $rows = [];
+        foreach ($records as $index => $record) {
+            if (!is_array($record)) throw new RuntimeException('PayTR raporunda geçersiz kayıt bulundu.');
+            $typeCode = strtoupper(trim((string)($record['islem_tipi'] ?? '')));
+            $type = match ($typeCode) { 'S' => 'capture', 'I' => 'refund', default => 'unknown' };
+            $currency = strtoupper(trim((string)($record['para_birimi'] ?? '')));
+            if ($currency === 'TL') $currency = 'TRY';
+            $date = self::providerDate((string)($record['islem_tarihi'] ?? ''));
+            $reference = trim((string)($record['siparis_no'] ?? ''));
+            $amount = self::providerAmount((string)($record['islem_tutari'] ?? ''));
+            if ($reference === '' || strlen($reference) > 190 || !preg_match('/^[A-Z]{3}$/D', $currency)) {
+                throw new RuntimeException('PayTR raporu satır '.($index+1).' referans veya para birimi alanı geçersiz.');
+            }
+            $description = 'PayTR '.($typeCode === 'S' ? 'satış' : ($typeCode === 'I' ? 'iade' : 'tanımsız hareket'));
+            $paymentType = trim((string)($record['odeme_tipi'] ?? ''));
+            if ($paymentType !== '') $description .= ' · '.substr($paymentType, 0, 40);
+            $rows[] = ['date'=>$date,'reference'=>$reference,'description'=>$description,'amount'=>$amount,'currency'=>$currency,'type'=>$type];
+        }
+        return $rows;
+    }
+
+    /** @return list<array{date:string,reference:string,description:string,amount:string,currency:string,type:string}> */
+    public static function parseIyzicoCsv(string $contents): array
+    {
+        self::assertFileContents($contents, 'iyzico CSV');
+        $contents = preg_replace('/^\\xEF\\xBB\\xBF/', '', $contents) ?? $contents;
+        $firstLine = strtok($contents, "\\r\\n");
+        if (!is_string($firstLine) || $firstLine === '') throw new RuntimeException('iyzico CSV başlık satırı bulunamadı.');
+        $delimiters = [',' => substr_count($firstLine, ','), ';' => substr_count($firstLine, ';'), "\\t" => substr_count($firstLine, "\\t")];
+        arsort($delimiters);
+        $delimiter = (string)array_key_first($delimiters);
+        if (($delimiters[$delimiter] ?? 0) < 2) throw new RuntimeException('iyzico CSV ayıracı tanınamadı.');
+        $stream = fopen('php://temp', 'w+b');
+        if ($stream === false) throw new RuntimeException('iyzico CSV okunamadı.');
+        try {
+            fwrite($stream, $contents);
+            rewind($stream);
+            $header = fgetcsv($stream, 0, $delimiter, '"', '\\\\');
+            if (!is_array($header)) throw new RuntimeException('iyzico CSV başlıkları okunamadı.');
+            $header = array_map(static fn($v): string => strtolower(trim((string)$v)), $header);
+            $positions = [];
+            foreach ($header as $index => $name) $positions[$name] = $index;
+            foreach (['transactiondate','transactiontype','paymentid','transactioncurrency'] as $required) {
+                if (!array_key_exists($required, $positions)) throw new RuntimeException('iyzico SFTP raporu zorunlu alanı içermiyor: '.$required);
+            }
+            if (!isset($positions['paidprice']) && !isset($positions['price'])) throw new RuntimeException('iyzico SFTP raporunda paidPrice veya price alanı bulunamadı.');
+            $rows = [];
+            $line = 1;
+            while (($values = fgetcsv($stream, 0, $delimiter, '"', '\\\\')) !== false) {
+                $line++;
+                if ($values === [null] || $values === []) continue;
+                if (count($rows) >= self::MAX_ROWS) throw new RuntimeException('iyzico raporu 5.000 hareket sınırını aşıyor.');
+                $get = static function (string $key) use ($positions, $values): string {
+                    return isset($positions[$key]) ? trim((string)($values[$positions[$key]] ?? '')) : '';
+                };
+                $date = self::providerDate($get('transactiondate'));
+                $providerType = strtolower($get('transactiontype'));
+                $type = match ($providerType) { 'auth','postauth' => 'capture', 'refund' => 'refund', default => 'unknown' };
+                $reference = $providerType === 'refund'
+                    ? ($get('refundconversationid') !== '' ? $get('refundconversationid') : ($get('paymenttxid') !== '' ? $get('paymenttxid') : $get('paymentid')))
+                    : $get('paymentid');
+                $currency = strtoupper($get('transactioncurrency'));
+                $amount = self::providerAmount($get('paidprice') !== '' ? $get('paidprice') : $get('price'));
+                if ($reference === '' || strlen($reference) > 190 || !preg_match('/^[A-Z]{3}$/D', $currency)) {
+                    throw new RuntimeException('iyzico CSV satır '.$line.' referans veya para birimi alanı geçersiz.');
+                }
+                $rows[] = [
+                    'date'=>$date,'reference'=>$reference,
+                    'description'=>'iyzico '.substr($providerType, 0, 40).' · ödeme '.substr($get('paymentid'), 0, 80),
+                    'amount'=>$amount,'currency'=>$currency,'type'=>$type,
+                ];
+            }
+            if ($rows === []) throw new RuntimeException('iyzico CSV içinde içe aktarılacak hareket bulunamadı.');
+            return $rows;
+        } finally {
+            fclose($stream);
+        }
+    }
+
+    private static function assertFileContents(string $contents, string $label): void
+    {
+        if ($contents === '' || strlen($contents) > self::MAX_FILE_BYTES) throw new RuntimeException($label.' dosyası boş veya 2 MB sınırını aşıyor.');
+        if (str_contains($contents, "\\0") || preg_match('//u', $contents) !== 1) throw new RuntimeException($label.' dosyası geçerli UTF-8 metin olmalıdır.');
+    }
+
+    private static function providerAmount(string $amount): string
+    {
+        $amount = trim($amount);
+        if (!preg_match('/^(?:0|[1-9][0-9]{0,9})(?:\\.[0-9]{1,2})?$/D', $amount)) throw new RuntimeException('Sağlayıcı raporunda tutar biçimi geçersiz.');
+        return self::normalizeAmount($amount);
+    }
+
+    private static function providerDate(string $value): string
+    {
+        $value = trim($value);
+        if ($value === '') throw new RuntimeException('Sağlayıcı raporunda işlem tarihi bulunamadı.');
+        try {
+            $date = new \\DateTimeImmutable($value, new \\DateTimeZone('UTC'));
+            return $date->setTimezone(new \\DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+        } catch (\\Throwable) {
+            throw new RuntimeException('Sağlayıcı raporunda işlem tarihi tanınamadı.');
+        }
+    }
+
     /** Import rows and create match suggestions only; never changes payment or invoice state. */
     public static function import(PDO $db, string $source, string $filename, string $contents, int $userId): array
     {
         if (!in_array($source, ['bank','paytr','iyzico'], true)) throw new RuntimeException('Kaynak türü geçersiz.');
         $filename = trim(basename($filename));
         if ($filename === '' || strlen($filename) > 190 || $userId < 1) throw new RuntimeException('Dosya veya kullanıcı bilgisi geçersiz.');
-        $rows = self::parseCsv($contents);
+        $rows = self::parseUpload($source, $contents);
         $hash = hash('sha256', $contents);
         try {
             $db->beginTransaction();
