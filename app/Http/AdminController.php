@@ -139,21 +139,46 @@ final class AdminController
         if (!Auth::check()) $this->redirect('/admin/login');
         $user=Auth::user();
         if (!in_array($user['role'], ['super_admin','admin','staff'], true)) { http_response_code(403); echo 'Yetkisiz erişim.'; return; }
-        $orders=$this->db->query("SELECT COUNT(*) AS total,COALESCE(SUM(total),0) AS amount FROM orders WHERE order_number LIKE 'DEMO-%'")->fetch();
-        $invoices=$this->db->query("SELECT status,COUNT(*) AS total,COALESCE(SUM(total),0) AS amount FROM invoices WHERE invoice_number LIKE 'DEMO-%' GROUP BY status")->fetchAll();
-        $services=$this->db->query("SELECT status,COUNT(*) AS total FROM services WHERE order_id IN (SELECT id FROM orders WHERE order_number LIKE 'DEMO-%') GROUP BY status")->fetchAll();
-        $products=$this->db->query("SELECT oi.product_name,SUM(oi.quantity) AS quantity,SUM(oi.line_total) AS amount FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.order_number LIKE 'DEMO-%' GROUP BY oi.product_id,oi.product_name ORDER BY amount DESC LIMIT 10")->fetchAll();
-        $this->startPage('Demo raporları');
-        echo '<div class="layout"><aside class="sidebar"><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a class="nav-item" href="'.$this->url('/admin').'">▦ Genel Bakış</a><a class="nav-item active" href="'.$this->url('/admin/reports').'">▥ Raporlar</a></aside><main class="main"><header class="topbar"><div><small>YÖNETİM / RAPORLAR</small><h1>Demo işletme raporları</h1></div><a class="logout" href="'.$this->url('/admin').'">Kontrol merkezi</a></header><div class="notice"><strong>ÖRNEK RAPOR:</strong> Yalnızca DEMO- ile başlayan siparişlerden hesaplanır. Ciro ve tahsilat gerçek finansal veri değildir.</div><section class="cards"><article class="metric"><span>Demo sipariş</span><strong>'.number_format((int)$orders['total'],0,',','.').'</strong><small>Örnek sipariş adedi</small></article><article class="metric"><span>Demo sipariş tutarı</span><strong>'.number_format((float)$orders['amount'],2,',','.').' ₺</strong><small>Gerçek satış değildir</small></article><article class="metric"><span>Demo fatura</span><strong>'.number_format(array_sum(array_map(static fn($r)=>(int)$r['total'],$invoices)),0,',','.').'</strong><small>Örnek fatura adedi</small></article><article class="metric"><span>Demo hizmet</span><strong>'.number_format(array_sum(array_map(static fn($r)=>(int)$r['total'],$services)),0,',','.').'</strong><small>Örnek hizmet kaydı</small></article></section><section class="columns"><article class="panel"><h3>Fatura dağılımı</h3>';
-        if(!$invoices)echo '<p>Demo fatura kaydı henüz yok.</p>';
-        foreach($invoices as $row)echo '<div class="status"><span>'.$this->e((string)$row['status']).'</span><strong>'.(int)$row['total'].' · '.number_format((float)$row['amount'],2,',','.').' ₺</strong></div>';
-        echo '</article><article class="panel"><h3>Hizmet durumları</h3>';
-        if(!$services)echo '<p>Demo hizmet kaydı henüz yok.</p>';
-        foreach($services as $row)echo '<div class="status"><span>'.$this->e((string)$row['status']).'</span><strong>'.(int)$row['total'].'</strong></div>';
-        echo '</article></section><article class="panel roadmap"><h3>En çok sipariş edilen ürünler</h3>';
-        if(!$products)echo '<p>Henüz ürün siparişi yok.</p>';
-        foreach($products as $row)echo '<div class="status"><span>'.$this->e((string)$row['product_name']).'</span><strong>'.(int)$row['quantity'].' adet · '.number_format((float)$row['amount'],2,',','.').' ₺</strong></div>';
-        echo '</article></main></div>';$this->endPage();
+
+        // Exclude opt-in demo fixtures and keep every monetary aggregate separated by currency.
+        $customers=(int)$this->db->query("SELECT COUNT(*) FROM users WHERE role='customer'")->fetchColumn();
+        $orders=(int)$this->db->query("SELECT COUNT(*) FROM orders WHERE order_number NOT LIKE 'DEMO-%'")->fetchColumn();
+        $services=(int)$this->db->query("SELECT COUNT(*) FROM services s LEFT JOIN orders o ON o.id=s.order_id WHERE o.id IS NULL OR o.order_number NOT LIKE 'DEMO-%'")->fetchColumn();
+        $openTickets=(int)$this->db->query("SELECT COUNT(*) FROM tickets WHERE status<>'closed'")->fetchColumn();
+
+        $ordersByCurrency=$this->db->query("SELECT currency,COUNT(*) AS order_count,COALESCE(SUM(subtotal),0) AS subtotal,COALESCE(SUM(tax_total),0) AS tax_total,COALESCE(SUM(total),0) AS total FROM orders WHERE order_number NOT LIKE 'DEMO-%' GROUP BY currency ORDER BY currency")->fetchAll(PDO::FETCH_ASSOC);
+        $financeByCurrency=$this->db->query("SELECT currency,COUNT(*) AS invoice_count,COALESCE(SUM(total),0) AS billed,COALESCE(SUM(amount_paid),0) AS collected,COALESCE(SUM(GREATEST(total-amount_paid,0)),0) AS outstanding FROM invoices WHERE invoice_number NOT LIKE 'DEMO-%' GROUP BY currency ORDER BY currency")->fetchAll(PDO::FETCH_ASSOC);
+        $invoiceStatuses=$this->db->query("SELECT currency,status,COUNT(*) AS item_count,COALESCE(SUM(total),0) AS total,COALESCE(SUM(amount_paid),0) AS paid FROM invoices WHERE invoice_number NOT LIKE 'DEMO-%' GROUP BY currency,status ORDER BY currency,status")->fetchAll(PDO::FETCH_ASSOC);
+        $serviceStatuses=$this->db->query("SELECT s.status,COUNT(*) AS item_count FROM services s LEFT JOIN orders o ON o.id=s.order_id WHERE o.id IS NULL OR o.order_number NOT LIKE 'DEMO-%' GROUP BY s.status ORDER BY s.status")->fetchAll(PDO::FETCH_ASSOC);
+        $ticketStatuses=$this->db->query("SELECT status,COUNT(*) AS item_count FROM tickets GROUP BY status ORDER BY status")->fetchAll(PDO::FETCH_ASSOC);
+        $topProducts=$this->db->query("SELECT o.currency,oi.product_name,SUM(oi.quantity) AS quantity,COALESCE(SUM(oi.line_total),0) AS amount FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.order_number NOT LIKE 'DEMO-%' GROUP BY o.currency,oi.product_id,oi.product_name ORDER BY o.currency,amount DESC LIMIT 30")->fetchAll(PDO::FETCH_ASSOC);
+        $customerGrowth=$this->db->query("SELECT DATE_FORMAT(created_at,'%Y-%m') AS month,COUNT(*) AS total FROM users WHERE role='customer' AND created_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 6 MONTH) GROUP BY DATE_FORMAT(created_at,'%Y-%m') ORDER BY month")->fetchAll(PDO::FETCH_ASSOC);
+
+        $money=static fn(mixed $amount,string $currency):string=>number_format((float)$amount,2,',','.').' '.htmlspecialchars($currency,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');
+        $this->startPage('İşletme raporları');
+        echo '<div class="layout"><aside class="sidebar"><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a class="nav-item" href="'.$this->url('/admin').'">▦ Genel Bakış</a><a class="nav-item active" href="'.$this->url('/admin/reports').'">▥ İşletme Raporları</a><a class="nav-item" href="'.$this->url('/admin/finance').'">₺ Finans hareketleri</a></aside><main class="main"><header class="topbar"><div><small>YÖNETİM / RAPORLAR</small><h1>İşletme raporları</h1><p>Gerçek sipariş, fatura, hizmet ve destek kayıtlarından hesaplanır.</p></div><a class="logout" href="'.$this->url('/admin').'">Kontrol merkezi</a></header><div class="notice">DEMO- ile başlayan örnek sipariş ve faturalar bu raporlara dahil edilmez. Farklı para birimleri birbirine çevrilmeden ayrı gösterilir.</div><section class="cards"><article class="metric"><span>Müşteriler</span><strong>'.number_format($customers,0,',','.').'</strong><small>Kayıtlı müşteri hesabı</small></article><article class="metric"><span>Gerçek siparişler</span><strong>'.number_format($orders,0,',','.').'</strong><small>Demo siparişler hariç</small></article><article class="metric"><span>Hizmet kayıtları</span><strong>'.number_format($services,0,',','.').'</strong><small>Demo siparişlere bağlı hizmetler hariç</small></article><article class="metric"><span>Açık destek talepleri</span><strong>'.number_format($openTickets,0,',','.').'</strong><small>Kapatılmamış talepler</small></article></section>';
+        echo '<section class="panel"><h3>Fatura ve tahsilat özeti · Para birimine göre</h3><div class="tablewrap"><table><thead><tr><th>Para birimi</th><th>Fatura</th><th>Faturalanan</th><th>Tahsil edilen</th><th>Açık bakiye</th></tr></thead><tbody>';
+        if(!$financeByCurrency)echo '<tr><td colspan="5">Henüz gerçek fatura kaydı yok.</td></tr>';
+        foreach($financeByCurrency as $row)echo '<tr><td>'.$this->e((string)$row['currency']).'</td><td>'.(int)$row['invoice_count'].'</td><td>'.$money($row['billed'],(string)$row['currency']).'</td><td>'.$money($row['collected'],(string)$row['currency']).'</td><td>'.$money($row['outstanding'],(string)$row['currency']).'</td></tr>';
+        echo '</tbody></table></div></section><section class="columns"><article class="panel"><h3>Sipariş özeti · Para birimine göre</h3>';
+        if(!$ordersByCurrency)echo '<p>Henüz gerçek sipariş kaydı yok.</p>';
+        foreach($ordersByCurrency as $row)echo '<div class="status"><span>'.$this->e((string)$row['currency']).' · '.(int)$row['order_count'].' sipariş</span><strong>'.$money($row['total'],(string)$row['currency']).'</strong></div>';
+        echo '</article><article class="panel"><h3>Fatura durumları</h3>';
+        if(!$invoiceStatuses)echo '<p>Henüz fatura kaydı yok.</p>';
+        foreach($invoiceStatuses as $row)echo '<div class="status"><span>'.$this->e((string)$row['currency']).' · '.$this->e((string)$row['status']).'</span><strong>'.(int)$row['item_count'].' · '.$money($row['total'],(string)$row['currency']).'</strong></div>';
+        echo '</article></section><section class="columns"><article class="panel"><h3>Hizmet durumları</h3>';
+        if(!$serviceStatuses)echo '<p>Henüz hizmet kaydı yok.</p>';
+        foreach($serviceStatuses as $row)echo '<div class="status"><span>'.$this->e((string)$row['status']).'</span><strong>'.(int)$row['item_count'].'</strong></div>';
+        echo '</article><article class="panel"><h3>Destek talepleri</h3>';
+        if(!$ticketStatuses)echo '<p>Henüz destek talebi yok.</p>';
+        foreach($ticketStatuses as $row)echo '<div class="status"><span>'.$this->e((string)$row['status']).'</span><strong>'.(int)$row['item_count'].'</strong></div>';
+        echo '</article></section><section class="columns"><article class="panel"><h3>Yeni müşteri kayıtları · Son 6 ay</h3>';
+        if(!$customerGrowth)echo '<p>Bu dönemde yeni müşteri kaydı yok.</p>';
+        foreach($customerGrowth as $row)echo '<div class="status"><span>'.$this->e((string)$row['month']).'</span><strong>'.(int)$row['total'].'</strong></div>';
+        echo '</article><article class="panel"><h3>En çok sipariş edilen ürünler · Para birimine göre</h3>';
+        if(!$topProducts)echo '<p>Henüz ürün siparişi yok.</p>';
+        foreach($topProducts as $row)echo '<div class="status"><span>'.$this->e((string)$row['product_name']).'<small>'.$this->e((string)$row['currency']).' · '.(int)$row['quantity'].' adet</small></span><strong>'.$money($row['amount'],(string)$row['currency']).'</strong></div>';
+        echo '</article></section></main></div>';$this->endPage();
     }
 
     public function tickets(): void
