@@ -301,14 +301,14 @@ final class CatalogController
     private function moneyCents(mixed $amount):int
     {
         $raw=trim((string)$amount);
-        if(!preg_match('/^(?:0|[1-9][0-9]*)(?:\\.[0-9]{1,2})?$/D',$raw))throw new \\RuntimeException('Fiyat değeri geçersiz.');
+        if(!preg_match('/^(?:0|[1-9][0-9]*)(?:\\.[0-9]{1,2})?$/D',$raw))throw new \RuntimeException('Fiyat değeri geçersiz.');
         [$whole,$fraction]=array_pad(explode('.',$raw,2),2,'');
         return ((int)$whole*100)+(int)str_pad($fraction,2,'0');
     }
 
     private function moneyDecimal(int $cents):string
     {
-        if($cents<0)throw new \\RuntimeException('Tutar negatif olamaz.');
+        if($cents<0)throw new \RuntimeException('Tutar negatif olamaz.');
         return intdiv($cents,100).'.'.str_pad((string)($cents%100),2,'0',STR_PAD_LEFT);
     }
 
