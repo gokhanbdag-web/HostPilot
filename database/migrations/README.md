@@ -8,11 +8,11 @@ Use a unique, monotonically increasing filename in YYYYMMDD_NNNN_short_descripti
 
 ## Current inventory
 
-There are 35 SQL migration files:
+There are 36 SQL migration files:
 - 17 historical migrations converted from app/Core/Schema.php.
 - Two standalone migrations for password reset tokens and admin first/last names.
 - One forward repair migration for a legacy invoice/service foreign-key omission.
-- Fifteen additional forward migrations covering staff permissions, customer verification and MFA, audit/privacy, ticket attachments, payment reconciliation/refunds, statement imports/review, and private support-ticket notes, department-scoped ticket assignments, and configurable support departments.
+- Sixteen additional forward migrations covering staff permissions, customer verification and MFA, audit/privacy, ticket attachments, payment reconciliation/refunds, statement imports/review, and private support-ticket notes, department-scoped ticket assignments, configurable support departments, and knowledge-base feedback.
 
 The original PHP migration implementations remain in app/Core/Schema.php and the two standalone migration classes as compatibility references and as the independent schema-parity test baseline. The public front controller no longer executes schema migrations automatically on every request.
 
@@ -69,3 +69,5 @@ These tests validate the migration and backup mechanisms. They are not a substit
 - `20261118_0002_ticket_assignments.sql`: stores one current staff assignment per ticket, with foreign keys to the ticket, assignee and assigning operator.
 
 - `20261118_0003_support_departments.sql`: creates the active/inactive support department registry and seeds the four original department names for existing installations.
+
+- `20261118_0004_knowledgebase_feedback.sql`: stores one changeable helpful/not-helpful vote per browser session and article, without storing visitor IP addresses.
