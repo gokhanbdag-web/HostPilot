@@ -40,7 +40,7 @@ Dates must be UTC YYYY-MM-DD HH:MM:SS; amount uses a dot decimal separator; type
 
 ## On-demand API retrieval
 
-Administrators can optionally fetch reports from the same encrypted credentials already stored in Payment Settings. PayTR uses its official transaction-detail report endpoint and is limited to a maximum three-day range. iyzico uses its official daily transaction reporting API, including page-by-page retrieval, and is limited to seven days per action. The requests run only after an administrator submits the CSRF-protected form; no scheduled or background provider calls are made. The API response is imported through the same parser, duplicate-file check and suggestion-only matching flow. Test/live iyzico endpoint selection follows the saved payment setting.
+Administrators can optionally fetch reports from the same encrypted credentials already stored in Payment Settings. PayTR uses its official transaction-detail report endpoint and is limited to a maximum three-day range. iyzico uses its official daily transaction reporting API, including page-by-page retrieval, and is limited to seven days and 50 API pages per action. The requests run only after an administrator submits the CSRF-protected form; no scheduled or background provider calls are made. The API response is imported through the same parser, duplicate-file check and suggestion-only matching flow. Test/live iyzico endpoint selection follows the saved payment setting.
 
 ## Safety and limitations
 
