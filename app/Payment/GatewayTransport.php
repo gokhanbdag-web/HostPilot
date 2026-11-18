@@ -54,7 +54,7 @@ final class GatewayTransport
     public static function buildIyzicoAuthorization(string $path,string $body,string $apiKey,string $secretKey,string $randomKey):string
     {
         $signature=hash_hmac('sha256',$randomKey.$path.$body,$secretKey);
-        return 'IYZWSv2 '.base64_encode('apiKey:'.$apiKey.'&randomKey:'.$randomKey.'&signature='.$signature);
+        return 'IYZWSv2 '.base64_encode('apiKey:'.$apiKey.'&randomKey:'.$randomKey.'&signature:'.$signature);
     }
 
     /**
