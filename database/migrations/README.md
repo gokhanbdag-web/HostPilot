@@ -8,11 +8,11 @@ Use a unique, monotonically increasing filename in YYYYMMDD_NNNN_short_descripti
 
 ## Current inventory
 
-There are 33 SQL migration files:
+There are 34 SQL migration files:
 - 17 historical migrations converted from app/Core/Schema.php.
 - Two standalone migrations for password reset tokens and admin first/last names.
 - One forward repair migration for a legacy invoice/service foreign-key omission.
-- Thirteen additional forward migrations covering staff permissions, customer verification and MFA, audit/privacy, ticket attachments, payment reconciliation/refunds, statement imports/review, and private support-ticket notes.
+- Fourteen additional forward migrations covering staff permissions, customer verification and MFA, audit/privacy, ticket attachments, payment reconciliation/refunds, statement imports/review, and private support-ticket notes, and department-scoped ticket assignments.
 
 The original PHP migration implementations remain in app/Core/Schema.php and the two standalone migration classes as compatibility references and as the independent schema-parity test baseline. The public front controller no longer executes schema migrations automatically on every request.
 
@@ -65,3 +65,5 @@ These tests validate the migration and backup mechanisms. They are not a substit
 - `20261115_0003_customer_email_verification.sql`: stores hashed, expiring, single-use customer email verification tokens. New customer registrations remain pending until the address is verified; existing accounts are not modified.
 
 - `20261118_0001_ticket_internal_notes.sql`: stores private staff-only notes separately from customer-visible ticket messages; notes are audited and never queued as customer replies.
+
+- `20261118_0002_ticket_assignments.sql`: stores one current staff assignment per ticket, with foreign keys to the ticket, assignee and assigning operator.
