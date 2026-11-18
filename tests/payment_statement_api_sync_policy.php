@@ -20,7 +20,7 @@ $checks=[
  'provider fetches are audited'=>str_contains($controller,'SecurityAudit::record')&&str_contains($controller,'payment.statement_imported'),
  'iyzico API JSON is normalized without buyer PII'=>str_contains($service,'private static function parseIyzicoJson')&&!str_contains($service,"['buyerEmail']"),
  'API transport signs the fixed iyzico reporting path'=>str_contains($transport,'buildIyzicoAuthorization')&&str_contains($transport,'$path'),
- 'API transport uses GET and keeps redirects disabled'=>str_contains($transport,'CURLOPT_HTTPGET=>true')&&str_contains($transport,'CURLOPT_FOLLOWLOCATION=>false'),
+ 'API transport uses GET and keeps redirects disabled'=>str_contains($transport,'$options[CURLOPT_HTTPGET]=true')&&str_contains($transport,'CURLOPT_FOLLOWLOCATION=>false'),
  'report API endpoints remain host/path allowlisted'=>str_contains($transport,"'/rapor/islem-dokumu'")&&str_contains($transport,"'/v2/reporting/payment/transactions'"),
  'fetch routes are registered'=>str_contains($index,"'/admin/finance/import/paytr-fetch'")&&str_contains($index,"'/admin/finance/import/iyzico-fetch'"),
  'fetch routes require payment management permission'=>str_contains($auth,"'/admin/finance/import/paytr-fetch'")&&str_contains($auth,"'/admin/finance/import/iyzico-fetch'"),
