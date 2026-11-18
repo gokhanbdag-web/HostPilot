@@ -188,17 +188,17 @@ final class AdminController
         try{
             $this->db->beginTransaction();
             $q=$this->db->prepare("SELECT id,status FROM users WHERE id=:id AND role='customer' FOR UPDATE");$q->execute([':id'=>$id]);$target=$q->fetch(PDO::FETCH_ASSOC);
-            if(!$target)throw new \\RuntimeException('Müşteri bulunamadı.');
+            if(!$target)throw new \RuntimeException('Müşteri bulunamadı.');
             $column=$this->db->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='auth_version'");
-            $column->execute();if((int)$column->fetchColumn()!==1)throw new \\RuntimeException('Oturum iptali için veritabanı güncellemelerini uygulayın.');
+            $column->execute();if((int)$column->fetchColumn()!==1)throw new \RuntimeException('Oturum iptali için veritabanı güncellemelerini uygulayın.');
             $this->db->prepare('UPDATE users SET status=:status,auth_version=auth_version+1,updated_at=:updated WHERE id=:id')->execute([':status'=>$status,':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$id]);
-            \\HostPilot\\Core\\SecurityAudit::record($this->db,'customer.status_updated',(int)$actor['id'],['resource_id'=>$id,'action'=>'updated']);
+            \HostPilot\Core\SecurityAudit::record($this->db,'customer.status_updated',(int)$actor['id'],['resource_id'=>$id,'action'=>'updated']);
             $this->db->commit();
             $this->redirect('/admin/customers/'.$id.'?notice='.rawurlencode('Müşteri hesabı durumu güncellendi; mevcut oturumlar geçersiz kılındı.'));
         }catch(Throwable $e){
             if($this->db->inTransaction())$this->db->rollBack();
             error_log('[HostPilot] Customer status update failed: '.$e->getMessage());
-            $this->redirect('/admin/customers/'.$id.'?error='.rawurlencode($e instanceof \\RuntimeException?$e->getMessage():'Müşteri hesabı güncellenemedi.'));
+            $this->redirect('/admin/customers/'.$id.'?error='.rawurlencode($e instanceof \RuntimeException?$e->getMessage():'Müşteri hesabı güncellenemedi.'));
         }
     }
 
