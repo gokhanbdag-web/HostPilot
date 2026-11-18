@@ -4,7 +4,7 @@ namespace HostPilot\Core;
 
 use RuntimeException;
 
-final class ResellerClubClient
+final class ResellerClubClient implements DomainRegistrarInterface
 {
     private string $baseUrl;
     public function __construct(private readonly string $userId,private readonly string $apiKey,string $environment='sandbox')
