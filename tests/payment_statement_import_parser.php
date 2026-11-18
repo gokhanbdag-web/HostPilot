@@ -19,6 +19,8 @@ if(count($iyzRows)!==3||$iyzRows[0]['reference']!=='pay-100'||$iyzRows[0]['type'
 if($iyzRows[0]['date']!=='2026-11-17 10:30:00')throw new RuntimeException('iyzico Europe/Istanbul to UTC date conversion failed.');
 $semicolon="transactionDate;transactionType;paymentTxId;paymentId;conversationId;paidPrice;transactionCurrency\n2026-11-17 13:30:00;AUTH;tx-200;pay-200;conv-200;10.00;USD\n";
 if(StatementImport::parseFile($semicolon,'iyzico')[0]['currency']!=='USD')throw new RuntimeException('iyzico semicolon CSV parsing failed.');
+$withSummary=$iyzico."\ntransactionCurrency,TRY\ntotalPayments,2\n";
+if(count(StatementImport::parseFile($withSummary,'iyzico'))!==3)throw new RuntimeException('iyzico settlement summary rows were not safely ignored.');
 
 $paytr=json_encode(['status'=>'success','data'=>[
  ['islem_tipi'=>'S','net_tutar'=>'9.76','kesinti_tutari'=>'0.24','islem_tutari'=>'10.00','odeme_tutari'=>'10.00','islem_tarihi'=>'17.11.2026','para_birimi'=>'TL','siparis_no'=>'merchant-oid-1'],
