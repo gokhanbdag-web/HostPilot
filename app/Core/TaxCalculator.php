@@ -19,7 +19,6 @@ final class TaxCalculator
         $enabled = ($values['enabled'] ?? '0') === '1';
         $mode = in_array($values['mode'] ?? 'exclusive', ['exclusive', 'inclusive'], true) ? $values['mode'] : 'exclusive';
         $rate = self::rateBasisPoints($values['rate'] ?? '0');
-        if (!$enabled) $rate = 0;
         return [
             'enabled' => $enabled,
             'mode' => $mode,
@@ -104,6 +103,7 @@ final class TaxCalculator
         $parts = explode('.', $rate, 2);
         $whole = (int)$parts[0];
         $fraction = isset($parts[1]) ? (int)str_pad($parts[1], 2, '0') : 0;
+        if ($whole === 100 && $fraction > 0) throw new RuntimeException('Vergi oranı 100 değerini aşamaz.');
         return ($whole * 100) + $fraction;
     }
 }
