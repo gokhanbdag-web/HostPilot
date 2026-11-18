@@ -298,7 +298,7 @@ final class AdminController
         $assignees->execute([':department'=>(string)$ticket['department']]);
         echo '<section class="panel"><h3>Atama ve öncelik</h3><form method="post"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><label>Sorumlu personel<select name="assigned_to_user_id">';
         if(in_array(($user['role']??''),['admin','super_admin'],true))echo '<option value="0">Atanmamış</option>';
-        foreach($assignees->fetchAll(PDO::FETCH_ASSOC) as $assignee)echo '<option value="'.(int)$assignee['id'].'" '.((int)($ticket['assigned_to_user_id']??0)===(int)$assignee['id']?'selected':'').'>'.$this->e($assignee['name']).'</option>';
+        foreach($assignees->fetchAll(PDO::FETCH_ASSOC) as $assignee)echo '<option value="'.(int)$assignee['id'].'" '.((int)($ticket['assigned_to_user_id']??((($user['role']??'')==='staff')?(int)$user['id']:0))===(int)$assignee['id']?'selected':'').'>'.$this->e($assignee['name']).'</option>';
         echo '</select></label><button name="action" value="assign">Atamayı kaydet</button></form>';
         if(in_array(($user['role']??''),['admin','super_admin'],true)){
             echo '<form method="post" style="margin-top:12px"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><label>Öncelik<select name="priority">';
