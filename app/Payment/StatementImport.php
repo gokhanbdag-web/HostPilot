@@ -90,7 +90,8 @@ final class StatementImport
         $rows = [];
         foreach ($records as $line => $record) {
             if (trim((string)($record['transactiondate'] ?? '')) === '' && trim((string)($record['paymentid'] ?? '')) === '' && trim((string)($record['conversationid'] ?? '')) === '') continue;
-            $typeValue = strtolower(trim((string)($record['transactiontype'] ?? $record['transactionstatus'] ?? $record['transaction'] ?? '')));
+            $typeValue = strtolower(trim((string)($record['transactiontype'] ?? '')));
+            if ($typeValue === '') $typeValue = strtolower(trim((string)($record['transactionstatus'] ?? $record['transaction'] ?? '')));
             $phase = strtoupper(trim((string)($record['paymentphase'] ?? '')));
             $type = match ($typeValue) {
                 'refund' => 'refund',
