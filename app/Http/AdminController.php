@@ -141,18 +141,18 @@ final class AdminController
         if (!in_array($user['role'], ['super_admin','admin','staff'], true)) { http_response_code(403); echo 'Yetkisiz erişim.'; return; }
 
         // Exclude opt-in demo fixtures and keep every monetary aggregate separated by currency.
-        $customers=(int)$this->db->query("SELECT COUNT(*) FROM users WHERE role='customer'")->fetchColumn();
+        $customers=(int)$this->db->query("SELECT COUNT(*) FROM users WHERE role='customer' AND email NOT LIKE 'demo.musteri%@example.invalid'")->fetchColumn();
         $orders=(int)$this->db->query("SELECT COUNT(*) FROM orders WHERE order_number NOT LIKE 'DEMO-%'")->fetchColumn();
         $services=(int)$this->db->query("SELECT COUNT(*) FROM services s LEFT JOIN orders o ON o.id=s.order_id WHERE o.id IS NULL OR o.order_number NOT LIKE 'DEMO-%'")->fetchColumn();
-        $openTickets=(int)$this->db->query("SELECT COUNT(*) FROM tickets WHERE status<>'closed'")->fetchColumn();
+        $openTickets=(int)$this->db->query("SELECT COUNT(*) FROM tickets WHERE status<>'closed' AND ticket_number NOT LIKE 'DEMO-TKT-%'")->fetchColumn();
 
         $ordersByCurrency=$this->db->query("SELECT currency,COUNT(*) AS order_count,COALESCE(SUM(subtotal),0) AS subtotal,COALESCE(SUM(tax_total),0) AS tax_total,COALESCE(SUM(total),0) AS total FROM orders WHERE order_number NOT LIKE 'DEMO-%' GROUP BY currency ORDER BY currency")->fetchAll(PDO::FETCH_ASSOC);
         $financeByCurrency=$this->db->query("SELECT currency,COUNT(*) AS invoice_count,COALESCE(SUM(total),0) AS billed,COALESCE(SUM(amount_paid),0) AS collected,COALESCE(SUM(GREATEST(total-amount_paid,0)),0) AS outstanding FROM invoices WHERE invoice_number NOT LIKE 'DEMO-%' GROUP BY currency ORDER BY currency")->fetchAll(PDO::FETCH_ASSOC);
         $invoiceStatuses=$this->db->query("SELECT currency,status,COUNT(*) AS item_count,COALESCE(SUM(total),0) AS total,COALESCE(SUM(amount_paid),0) AS paid FROM invoices WHERE invoice_number NOT LIKE 'DEMO-%' GROUP BY currency,status ORDER BY currency,status")->fetchAll(PDO::FETCH_ASSOC);
         $serviceStatuses=$this->db->query("SELECT s.status,COUNT(*) AS item_count FROM services s LEFT JOIN orders o ON o.id=s.order_id WHERE o.id IS NULL OR o.order_number NOT LIKE 'DEMO-%' GROUP BY s.status ORDER BY s.status")->fetchAll(PDO::FETCH_ASSOC);
-        $ticketStatuses=$this->db->query("SELECT status,COUNT(*) AS item_count FROM tickets GROUP BY status ORDER BY status")->fetchAll(PDO::FETCH_ASSOC);
+        $ticketStatuses=$this->db->query("SELECT status,COUNT(*) AS item_count FROM tickets WHERE ticket_number NOT LIKE 'DEMO-TKT-%' GROUP BY status ORDER BY status")->fetchAll(PDO::FETCH_ASSOC);
         $topProducts=$this->db->query("SELECT o.currency,oi.product_name,SUM(oi.quantity) AS quantity,COALESCE(SUM(oi.line_total),0) AS amount FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.order_number NOT LIKE 'DEMO-%' GROUP BY o.currency,oi.product_id,oi.product_name ORDER BY o.currency,amount DESC LIMIT 30")->fetchAll(PDO::FETCH_ASSOC);
-        $customerGrowth=$this->db->query("SELECT DATE_FORMAT(created_at,'%Y-%m') AS month,COUNT(*) AS total FROM users WHERE role='customer' AND created_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 6 MONTH) GROUP BY DATE_FORMAT(created_at,'%Y-%m') ORDER BY month")->fetchAll(PDO::FETCH_ASSOC);
+        $customerGrowth=$this->db->query("SELECT DATE_FORMAT(created_at,'%Y-%m') AS month,COUNT(*) AS total FROM users WHERE role='customer' AND email NOT LIKE 'demo.musteri%@example.invalid' AND created_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 6 MONTH) GROUP BY DATE_FORMAT(created_at,'%Y-%m') ORDER BY month")->fetchAll(PDO::FETCH_ASSOC);
 
         $money=static fn(mixed $amount,string $currency):string=>number_format((float)$amount,2,',','.').' '.htmlspecialchars($currency,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');
         $this->startPage('İşletme raporları');
