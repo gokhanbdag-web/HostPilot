@@ -54,8 +54,8 @@ $product = (int)$pdo->lastInsertId();
 
 $cartProductInsert=$pdo->prepare("INSERT INTO products(name,slug,product_type,status,featured,sort_order,created_at,updated_at) VALUES(:name,:slug,:type,'active',0,0,UTC_TIMESTAMP(),UTC_TIMESTAMP())");
 $cartPriceInsert=$pdo->prepare("INSERT INTO product_pricing(product_id,currency,billing_cycle,price,setup_fee,is_active,created_at,updated_at) VALUES(:product,:currency,:cycle,:price,:setup,1,UTC_TIMESTAMP(),UTC_TIMESTAMP())");
-$makeCartProduct=static function(string $name,string $slug,string $type,string $currency,string $cycle,string $price,string $setup)use($cartProductInsert,$cartPriceInsert):int{
-    $cartProductInsert->execute([':name'=>$name,':slug'=>$slug,':type'=>$type]);$id=(int)$GLOBALS['pdo']->lastInsertId();
+$makeCartProduct=static function(string $name,string $slug,string $type,string $currency,string $cycle,string $price,string $setup)use($pdo,$cartProductInsert,$cartPriceInsert):int{
+    $cartProductInsert->execute([':name'=>$name,':slug'=>$slug,':type'=>$type]);$id=(int)$pdo->lastInsertId();
     $cartPriceInsert->execute([':product'=>$id,':currency'=>$currency,':cycle'=>$cycle,':price'=>$price,':setup'=>$setup]);return $id;
 };
 $cartHostingA=$makeCartProduct('HTTP Cart Hosting A','http-cart-hosting-a','hosting','TRY','monthly','100.00','25.00');
