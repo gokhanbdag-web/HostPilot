@@ -140,7 +140,7 @@ $providerRefund->execute([':payment'=>$paytrPaymentId,':admin'=>$adminUserId,':r
 $paytrRefundId=(int)$pdo->lastInsertId();
 
 $iyzicoProviderCsv="transactionDate,transactionType,paymentTxId,paymentId,conversationId,price,paidPrice,transactionCurrency,refundConversationId,buyerName,buyerEmail\n2026-11-17 10:30:00,AUTH,9901,IYZICO-PAY-CI,IYZICO-CONV-CI,150.00,150.00,TRY,,,\n2026-11-17 11:00:00,REFUND,9902,IYZICO-PAY-CI,IYZICO-CONV-CI,25.00,150.00,TRY,refund-ci,Private Buyer,private@example.test\n2026-11-17 11:05:00,REFUND,9903,IYZICO-PAY-CI,IYZICO-CONV-CI,15.00,150.00,TRY,refund-ci-2,,\n";
-$iyzicoProviderImport=StatementImport::import($pdo,'iyzico','iyzico-provider-ci.csv',$iyzicoProviderCsv,$adminUserId);
+$iyzicoProviderImport=\HostPilot\Payment\StatementImport::import($pdo,'iyzico','iyzico-provider-ci.csv',$iyzicoProviderCsv,$adminUserId);
 $providerRows=$pdo->prepare('SELECT match_status,suggested_payment_transaction_id,suggested_refund_id FROM payment_statement_movements WHERE import_id=:import ORDER BY source_row_number');
 $providerRows->execute([':import'=>$iyzicoProviderImport['import_id']]);
 $iyzicoProviderMatches=$providerRows->fetchAll(PDO::FETCH_ASSOC);
@@ -150,7 +150,7 @@ $paytrProviderJson=json_encode(['status'=>'success','transactions'=>[
  ['islem_tipi'=>'S','islem_tutari'=>'125.50','net_tutar'=>'122.50','islem_tarihi'=>'17.11.2026','para_birimi'=>'TL','siparis_no'=>'PAYTR-OID-CI'],
  ['islem_tipi'=>'I','islem_tutari'=>'25.00','net_tutar'=>'24.00','islem_tarihi'=>'17.11.2026','para_birimi'=>'TL','siparis_no'=>'PAYTR-OID-CI'],
 ]],JSON_THROW_ON_ERROR);
-$paytrProviderImport=StatementImport::import($pdo,'paytr','paytr-provider-ci.json',$paytrProviderJson,$adminUserId);
+$paytrProviderImport=\HostPilot\Payment\StatementImport::import($pdo,'paytr','paytr-provider-ci.json',$paytrProviderJson,$adminUserId);
 $providerRows->execute([':import'=>$paytrProviderImport['import_id']]);
 $paytrProviderMatches=$providerRows->fetchAll(PDO::FETCH_ASSOC);
 if(count($paytrProviderMatches)!==2||$paytrProviderMatches[0]['match_status']!=='matched'||(int)$paytrProviderMatches[0]['suggested_payment_transaction_id']!==$paytrPaymentId||$paytrProviderMatches[1]['match_status']!=='matched'||(int)$paytrProviderMatches[1]['suggested_refund_id']!==$paytrRefundId)throw new RuntimeException('PayTR provider payment/refund matching failed.');
