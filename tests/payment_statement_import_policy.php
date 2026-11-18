@@ -7,7 +7,7 @@ $migration=file_get_contents(dirname(__DIR__).'/database/migrations/20261117_000
 $checks=[
  'bank uses the existing canonical CSV parser'=>str_contains($service,"'bank' => self::parseCsv"),
  'PayTR native report JSON is supported'=>str_contains($service,'private static function parsePaytrJson'),
- 'PayTR sale and refund codes map separately'=>str_contains($service,"'type' => $providerType === 'S' ? 'capture' : 'refund'"),
+ 'PayTR sale and refund codes map separately'=>str_contains($service, "'type' => " . '$providerType' . " === 'S' ? 'capture' : 'refund'"),
  'iyzico native SFTP CSV is supported'=>str_contains($service,'private static function parseIyzicoCsv'),
  'iyzico auth and postauth are captured while preauth and cancel remain non-cash'=>str_contains($service,"'auth', 'postauth' => 'capture'")&&str_contains($service,"'preauth', 'cancel' => 'unknown'"),
  'provider date conversion is explicit'=>str_contains($service,'Europe/Istanbul')&&str_contains($service,"new \\DateTimeZone('UTC')"),
