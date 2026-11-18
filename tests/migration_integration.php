@@ -124,7 +124,7 @@ if (($manualReview['review_status']??'') !== 'reviewed') throw new RuntimeExcept
 if ((int)$pdo->query('SELECT COUNT(*) FROM payment_transactions')->fetchColumn() !== $paymentCountBeforeReview) throw new RuntimeException('Statement review unexpectedly changed payment transactions.');
 
 // Exercise the official PayTR JSON and iyzico CSV adapters against real matcher rows.
-$pdo->prepare("INSERT INTO orders(order_number,user_id,status,currency,subtotal,tax_total,total,created_at,updated_at) VALUES(:number,:user,'paid','TRY',:total,0,:total,UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':number'=>'PROVIDER-ADAPTER-CI',':user'=>$adminUserId,':total'=>'230.50']);
+$pdo->prepare("INSERT INTO orders(order_number,user_id,status,currency,subtotal,tax_total,total,created_at,updated_at) VALUES(:number,:user,'paid','TRY',:subtotal,0,:total,UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':number'=>'PROVIDER-ADAPTER-CI',':user'=>$adminUserId,':subtotal'=>'230.50',':total'=>'230.50']);
 $orderId=(int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,status,currency,subtotal,tax_total,total,amount_paid,issued_at,created_at,updated_at) VALUES('INV-PROVIDER-ADAPTER-CI',:order,:user,'paid','TRY',230.50,0,230.50,230.50,UTC_TIMESTAMP(),UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':order'=>$orderId,':user'=>$adminUserId]);
 $invoiceId=(int)$pdo->lastInsertId();
