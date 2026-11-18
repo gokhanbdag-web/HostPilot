@@ -41,13 +41,16 @@ final class TaxSettingsController
                     }
                     $rateValue = number_format($rate / 100, 2, '.', '');
                     $fields = ['enabled' => $enabled, 'rate' => $rateValue, 'mode' => $mode, 'label' => $label];
+                    $this->db->beginTransaction();
                     foreach ($fields as $key => $value) {
                         $q = $this->db->prepare("INSERT INTO settings(setting_group,setting_key,setting_value,is_secret,updated_at) VALUES('tax',:key,:value,0,:updated) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value),is_secret=0,updated_at=VALUES(updated_at)");
                         $q->execute([':key' => $key, ':value' => $value, ':updated' => gmdate('Y-m-d H:i:s')]);
                     }
+                    $this->db->commit();
                     SecurityAudit::record($this->db, 'tax.settings_updated', isset($user['id']) ? (int)$user['id'] : null, ['action' => 'updated']);
                     $notice = 'Vergi ayarları kaydedildi. Yeni oluşturulacak sipariş ve faturalar bu ayarları kullanır; mevcut faturalar değişmez.';
                 } catch (Throwable $e) {
+                    if ($this->db->inTransaction()) $this->db->rollBack();
                     $error = $e instanceof \RuntimeException ? $e->getMessage() : 'Vergi ayarları kaydedilemedi.';
                 }
             }
