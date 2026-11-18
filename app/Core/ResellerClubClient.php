@@ -53,6 +53,8 @@ final class ResellerClubClient
         if($ns)$payload['ns']=$ns;
         $data=$this->request('POST','/domains',$payload);
         if(empty($data['orderId'])||!ctype_digit((string)$data['orderId']))throw new RuntimeException('Registrar kayıt yanıtında geçerli orderId bulunamadı.');
+        $eaqId=(string)($data['eaqId']??'');
+        if($eaqId!==''&&!ctype_digit($eaqId))throw new RuntimeException('Registrar kayıt yanıtındaki EAQ action ID geçersiz.');
         return $data;
     }
 
