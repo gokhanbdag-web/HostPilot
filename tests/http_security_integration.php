@@ -278,10 +278,10 @@ try {
     $cartInvoiceItems->execute([':id'=>$cartInvoice['id']]);$cartInvoiceItemTotals=$cartInvoiceItems->fetch(PDO::FETCH_ASSOC);
     $assert(is_array($cartOrder)&&is_array($cartInvoice)&&($cartOrder['currency']??'')==='TRY'
         &&(float)$cartOrder['subtotal']===360.0&&(float)$cartOrder['total']===360.0
-        &&(int)$cartOrderItemTotals['item_count']===2&&(float)$cartOrderItemTotals['unit_total']===360.0&&(float)$cartOrderItemTotals['line_total']===360.0
+        &&(int)$cartOrderItemTotals['item_count']===2&&(float)$cartOrderItemTotals['unit_total']===320.0&&(float)$cartOrderItemTotals['line_total']===320.0
         &&(float)$cartInvoice['subtotal']===360.0&&(float)$cartInvoice['total']===360.0
         &&(int)$cartInvoiceItemTotals['item_count']===4&&(float)$cartInvoiceItemTotals['line_total']===360.0,
-        'order items, setup fees and one invoice reconcile to the exact multi-item total');
+        'recurring order items exclude one-time setup fees while invoice lines reconcile to the full multi-item total');
     $cartAfterCheckout=$request('/cart',$cookieA);
     $assert(str_contains($cartAfterCheckout['body'],'Sepetiniz şu anda boş'),
         'successful checkout clears the session cart');
