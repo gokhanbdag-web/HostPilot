@@ -33,6 +33,8 @@ jobs:
           mapfile -d '' files < <(git ls-files -z -- '*.php')
           if [ "${#files[@]}" -eq 0 ]; then echo "No tracked PHP files were found."; exit 1; fi
           for file in "${files[@]}"; do php -l "$file"; done
+      - name: Test web-root and installer security policy
+        run: php tests/web_root_security.php
       - name: Test SQL migration parser
         run: php tests/migration_runner.php
       - name: Test database backup restore policy
