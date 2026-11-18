@@ -107,7 +107,7 @@ final class ServerController
     public function services():void
     {
         if(!$this->allowed())return;
-        $rows=$this->db->query("SELECT s.*,u.name AS customer_name,u.email,p.name AS product_name,sv.name AS server_name,EXISTS(SELECT 1 FROM provisioning_jobs pj WHERE pj.service_id=s.id AND LEFT(pj.job_type,10)='terminate_' AND pj.status IN ('queued','processing','needs_review')) AS termination_pending FROM services s JOIN users u ON u.id=s.user_id JOIN products p ON p.id=s.product_id LEFT JOIN servers sv ON sv.id=s.server_id ORDER BY s.id DESC LIMIT 300")->fetchAll();
+        $rows=$this->db->query("SELECT s.*,u.name AS customer_name,u.email,p.name AS product_name,sv.name AS server_name,EXISTS(SELECT 1 FROM provisioning_jobs pj WHERE pj.service_id=s.id AND LEFT(pj.job_type,10)='terminate_' AND pj.status IN ('queued','processing','needs_review')) AS termination_pending FROM services s JOIN users u ON u.id=s.user_id JOIN products p ON p.id=s.product_id LEFT JOIN servers sv ON sv.id=s.server_id LEFT JOIN orders o ON o.id=s.order_id WHERE o.id IS NULL OR o.order_number NOT LIKE 'DEMO-%' ORDER BY s.id DESC LIMIT 300")->fetchAll();
         $servers=$this->db->query("SELECT id,name FROM servers WHERE enabled=1 ORDER BY name")->fetchAll();
         $this->start('Hizmetler','services');
         echo '<div class="hero"><div><small>OPERASYON / HOSTING HİZMETLERİ</small><h1>Hizmet yönetimi</h1><p>Ödenmiş siparişlerden oluşan bekleyen hizmetleri sunuculara atayın ve hesapları otomatik oluşturun.</p></div><span class="pill">'.count($rows).' hizmet</span></div><section class="panel"><div class="tablewrap"><table><thead><tr><th>Müşteri / Ürün</th><th>Domain</th><th>Durum</th><th>Sunucu</th><th>İşlem</th></tr></thead><tbody>';
