@@ -155,7 +155,8 @@ final class StatementImport
         }
         $records = $decoded['transactions'] ?? $decoded['data'] ?? $decoded['islemler'] ?? $decoded['payments'] ?? $decoded['records'] ?? $decoded['result'] ?? null;
         if (!is_array($records)) {
-            $records = [];
+            if (isset($decoded['siparis_no']) || isset($decoded['merchant_oid'])) $records = [$decoded];
+            else $records = [];
             foreach ($decoded as $value) if (is_array($value) && (isset($value['siparis_no']) || isset($value['merchant_oid']))) $records[] = $value;
         }
         if ($records === []) throw new RuntimeException('PayTR JSON içinde işlem listesi bulunamadı.');
