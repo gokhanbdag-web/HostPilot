@@ -92,6 +92,7 @@
 
 ## Phase 6 — Domains and registrar adapters
 - [ ] Registrar framework and TLD/pricing matrix.
+- [x] ResellerClub asynchronous registration action tracking, including persisted EAQ IDs and order-ID fallback polling.
 - [ ] ResellerClub adapter.
 - [ ] OpenSRS adapter.
 - [ ] CentralNic Reseller adapter after current API contract verification.
