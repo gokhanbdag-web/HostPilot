@@ -26,7 +26,7 @@ $apiKey='sandbox-api-key';$apiSecret='sandbox-secret';$random='17200000001234567
 $header=\HostPilot\Payment\GatewayTransport::buildIyzicoAuthorization($path,$body,$apiKey,$apiSecret,$random);
 $decoded=base64_decode(substr($header,strlen('IYZWSv2 ')),true);
 $expectedSignature=hash_hmac('sha256',$random.$path.$body,$apiSecret);
-expect(is_string($decoded)&&str_contains($decoded,'apiKey:'.$apiKey.'&randomKey:'.$random.'&signature='.$expectedSignature),'iyzico IYZWSv2 request signature composition');
+expect(is_string($decoded)&&str_contains($decoded,'apiKey:'.$apiKey.'&randomKey:'.$random.'&signature:'.$expectedSignature),'iyzico IYZWSv2 request signature composition');
 
 $merchantKey='paytr-test-key';$merchantSalt='paytr-test-salt';$merchantOid='HPTEST123';$status='success';$totalAmount='12500';
 $callbackHash=\HostPilot\Payment\PaytrSignature::callbackHash($merchantOid,$merchantSalt,$status,$totalAmount,$merchantKey);

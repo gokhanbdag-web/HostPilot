@@ -1,7 +1,7 @@
 name: HostPilot quality checks
 on:
   push:
-    branches: [main]
+    branches: [main, 'finance/**']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -63,6 +63,8 @@ jobs:
         run: php tests/payment_statement_import_parser.php
       - name: Test payment statement review policy
         run: php tests/payment_statement_review_policy.php
+      - name: Test on-demand provider report API policy
+        run: php tests/payment_statement_api_sync_policy.php
       - name: Test hosting transport SSRF policy
         run: php tests/hosting_transport_ssrf.php
       - name: Test cron header authentication policy
