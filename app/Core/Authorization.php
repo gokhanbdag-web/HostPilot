@@ -97,6 +97,7 @@ final class Authorization
         if ($path === '/admin/customers' && $method === 'GET') return 'customers.view';
         if ($path === '/admin/reports' && $method === 'GET') return 'reports.view';
         if ($path === '/admin/tickets' && $method === 'GET') return 'support.view';
+        if ($path === '/admin/ticket-departments' && in_array($method, ['GET','POST'], true)) return 'support.departments.manage';
         if (preg_match('#^/admin/tickets/attachment/[0-9]+$#D', $path) && $method === 'GET') return 'support.view';
         if (preg_match('#^/admin/tickets/[0-9]+$#D', $path)) {
             if ($method === 'GET') return 'support.view';
