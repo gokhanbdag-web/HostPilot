@@ -60,6 +60,21 @@ $pdo->exec("CREATE TABLE ticket_messages (
     CONSTRAINT fk_ticket_messages_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+$pdo->exec("CREATE TABLE knowledgebase_articles (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(190) NOT NULL,
+    slug VARCHAR(190) NOT NULL,
+    excerpt TEXT NULL,
+    content LONGTEXT NOT NULL,
+    category VARCHAR(100) NOT NULL DEFAULT 'Genel',
+    status VARCHAR(20) NOT NULL DEFAULT 'published',
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    UNIQUE KEY uq_kb_slug (slug),
+    KEY idx_kb_status_sort (status, sort_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
 $pdo->prepare("INSERT INTO users (name,first_name,last_name,email,username,password_hash,role,status,created_at,updated_at) VALUES ('Ada Lovelace',NULL,NULL,:email,:username,'test-hash','admin','active',UTC_TIMESTAMP(),UTC_TIMESTAMP())")
     ->execute([':email' => 'ada@example.test', ':username' => 'ada-admin']);
 
@@ -236,6 +251,21 @@ $legacy->exec("CREATE TABLE ticket_messages (
     CONSTRAINT fk_ticket_messages_ticket FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE,
     CONSTRAINT fk_ticket_messages_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+$legacy->exec("CREATE TABLE knowledgebase_articles (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(190) NOT NULL,
+    slug VARCHAR(190) NOT NULL,
+    excerpt TEXT NULL,
+    content LONGTEXT NOT NULL,
+    category VARCHAR(100) NOT NULL DEFAULT 'Genel',
+    status VARCHAR(20) NOT NULL DEFAULT 'published',
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    UNIQUE KEY uq_kb_slug (slug),
+    KEY idx_kb_status_sort (status, sort_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
 $seedUser = $legacy->prepare("INSERT INTO users (name,first_name,last_name,email,username,password_hash,role,status,created_at,updated_at) VALUES ('Ada Lovelace',NULL,NULL,:email,:username,'test-hash','admin','active',UTC_TIMESTAMP(),UTC_TIMESTAMP())");
 $seedUser->execute([':email' => 'ada@example.test', ':username' => 'ada-admin']);
 
