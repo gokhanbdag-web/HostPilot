@@ -8,11 +8,11 @@ Use a unique, monotonically increasing filename in YYYYMMDD_NNNN_short_descripti
 
 ## Current inventory
 
-There are 39 SQL migration files:
+There are 40 SQL migration files:
 - 17 historical migrations converted from app/Core/Schema.php.
 - Two standalone migrations for password reset tokens and admin first/last names.
 - One forward repair migration for a legacy invoice/service foreign-key omission.
-- Nineteen additional forward migrations covering staff permissions, customer verification and MFA, audit/privacy, ticket attachments, payment reconciliation/refunds, statement imports/review, and private support-ticket notes, department-scoped ticket assignments, configurable support departments, knowledge-base feedback, dynamic CMS pages, configurable header/footer menus, and customer announcements with per-user dismissal.
+- Twenty additional forward migrations covering staff permissions, customer verification and MFA, audit/privacy, ticket attachments, payment reconciliation/refunds, statement imports/review, and private support-ticket notes, department-scoped ticket assignments, configurable support departments, knowledge-base feedback, dynamic CMS pages, configurable header/footer menus, customer announcements with per-user dismissal, and registrar registration action tracking.
 
 The original PHP migration implementations remain in app/Core/Schema.php and the two standalone migration classes as compatibility references and as the independent schema-parity test baseline. The public front controller no longer executes schema migrations automatically on every request.
 
@@ -77,3 +77,5 @@ These tests validate the migration and backup mechanisms. They are not a substit
 - `20261118_0006_cms_menus.sql`: creates header/footer menu registries and ordered menu items, seeding the default site navigation links idempotently.
 
 - `20261118_0007_cms_announcements.sql`: adds scheduled customer announcements and per-user dismissals, with cascading cleanup and audit-ready ownership.
+
+- `20261118_0008_domain_registration_action_id.sql`: stores the ResellerClub EAQ action identifier so asynchronous registration status can be polled by order ID and, when available, the exact action ID.
