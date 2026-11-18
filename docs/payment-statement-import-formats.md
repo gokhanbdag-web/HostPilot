@@ -39,11 +39,15 @@ Bank uploads continue to use the canonical format with the exact ordered header:
 
 Dates must be UTC YYYY-MM-DD HH:MM:SS; amount uses a dot decimal separator; type is capture, refund or unknown.
 
+## On-demand API retrieval
+
+Administrators can optionally fetch reports from the same encrypted credentials already stored in Payment Settings. PayTR uses its official transaction-detail report endpoint and is limited to a maximum three-day range. iyzico uses its official daily transaction reporting API, including page-by-page retrieval, and is limited to seven days per action. The requests run only after an administrator submits the CSRF-protected form; no scheduled or background provider calls are made. The API response is imported through the same parser, duplicate-file check and suggestion-only matching flow. Test/live iyzico endpoint selection follows the saved payment setting.
+
 ## Safety and limitations
 
 - Maximum file size is 2 MB and maximum imported movements are 5,000 per file.
 - Duplicate files for the same source are rejected by SHA-256 idempotency.
 - Matching uses provider references, currency and exact decimal amounts. Unmatched, ambiguous or mismatched rows remain in the review queue.
 - Imports and review decisions do not change payment, refund, invoice or bank account balances and do not initiate refunds.
-- PayTR API calls and iyzico SFTP connections are not made by HostPilot in this release. A user downloads/saves the provider report and uploads it in the admin panel.
+- PayTR API and iyzico daily reporting API retrieval are optional, on-demand actions initiated by an administrator. iyzico SFTP is not connected automatically; its CSV files remain browser-uploaded.
 - Provider report layouts can evolve. Unsupported or missing required columns fail closed instead of guessing mappings.
