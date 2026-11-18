@@ -139,7 +139,7 @@ $iyzicoRefundId=(int)$pdo->lastInsertId();
 $providerRefund->execute([':payment'=>$paytrPaymentId,':admin'=>$adminUserId,':reference'=>'PAYTR-REFUND-CI',':amount'=>'25.00']);
 $paytrRefundId=(int)$pdo->lastInsertId();
 
-$iyzicoProviderCsv="transactionDate,transactionType,paymentTxId,paymentId,conversationId,price,paidPrice,transactionCurrency,refundConversationId,buyerName,buyerEmail\\n2026-11-17 10:30:00,AUTH,9901,IYZICO-PAY-CI,IYZICO-CONV-CI,150.00,150.00,TRY,,,\\n2026-11-17 11:00:00,REFUND,9902,IYZICO-PAY-CI,IYZICO-CONV-CI,25.00,150.00,TRY,refund-ci,Private Buyer,private@example.test\\n2026-11-17 11:05:00,REFUND,9903,IYZICO-PAY-CI,IYZICO-CONV-CI,15.00,150.00,TRY,refund-ci-2,,\\n";
+$iyzicoProviderCsv="transactionDate,transactionType,paymentTxId,paymentId,conversationId,price,paidPrice,transactionCurrency,refundConversationId,buyerName,buyerEmail\n2026-11-17 10:30:00,AUTH,9901,IYZICO-PAY-CI,IYZICO-CONV-CI,150.00,150.00,TRY,,,\n2026-11-17 11:00:00,REFUND,9902,IYZICO-PAY-CI,IYZICO-CONV-CI,25.00,150.00,TRY,refund-ci,Private Buyer,private@example.test\n2026-11-17 11:05:00,REFUND,9903,IYZICO-PAY-CI,IYZICO-CONV-CI,15.00,150.00,TRY,refund-ci-2,,\n";
 $iyzicoProviderImport=StatementImport::import($pdo,'iyzico','iyzico-provider-ci.csv',$iyzicoProviderCsv,$adminUserId);
 $providerRows=$pdo->prepare('SELECT match_status,suggested_payment_transaction_id,suggested_refund_id FROM payment_statement_movements WHERE import_id=:import ORDER BY source_row_number');
 $providerRows->execute([':import'=>$iyzicoProviderImport['import_id']]);
