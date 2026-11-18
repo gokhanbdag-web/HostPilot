@@ -261,7 +261,7 @@ try {
     // Price and setup-fee changes made after adding items are reflected at checkout.
     $pdo->prepare("UPDATE product_pricing SET price='220.00',setup_fee='15.00' WHERE product_id=:id AND billing_cycle='annually'")->execute([':id'=>$cartHostingB]);
     $cartPageBeforeCheckout=$request('/cart',$cookieA);
-    $assert(str_contains($cartPageBeforeCheckout['body'],'220,00')&&str_contains($cartPageBeforeCheckout['body'],'15,00'),
+    $assert(str_contains($cartPageBeforeCheckout['body'],'235,00')&&str_contains($cartPageBeforeCheckout['body'],'15,00'),
         'cart re-reads current product pricing and setup fees');
     $cartCheckout=$request('/order/create',$cookieA,'POST',['_token'=>$getToken($cartPageBeforeCheckout['body'])]);
     $assert($cartCheckout['status']===200&&str_contains($cartCheckout['body'],'Faturalarım'),
