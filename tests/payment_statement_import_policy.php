@@ -14,7 +14,7 @@ $checks=[
  'report values are validated before persistence'=>str_contains($service,'preg_match')&&str_contains($service,'DateTimeImmutable'),
  'PayTR report JSON parser is available'=>str_contains($service,'parsePaytrJson')&&str_contains($service,"'S' => 'capture'")&&str_contains($service,"'I' => 'refund'"),
  'iyzico SFTP report parser is available'=>str_contains($service,'parseIyzicoCsv')&&str_contains($service,"'auth','postauth' => 'capture'")&&str_contains($service,"'refund' => 'refund'"),
- 'provider parsers exclude buyer personal data'=>!str_contains($service,"$get('buyeremail')")&&!str_contains($service,"$get('buyername')"),
+ 'provider parsers exclude buyer personal data'=>!str_contains($service,'buyerEmail')&&!str_contains($service,'buyerName'),
  'source-specific parser is selected'=>str_contains($service,'self::parseUpload($source, $contents)'),
  'duplicate source files are rejected'=>str_contains($migration,'uq_statement_source_file'),
  'statement rows are idempotent within an import'=>str_contains($migration,'uq_statement_import_row'),
