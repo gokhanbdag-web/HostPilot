@@ -107,7 +107,8 @@
 - [ ] Customer ticket portal and email notifications.
 - [ ] FAQ and knowledge base search/feedback.
 - [x] Package-change lifecycle notifications by email (scheduled, cancelled, upgrade payment confirmed, remote package change completed).
-- [ ] Announcements and remaining general service notifications (password/security events, domain lifecycle, payment failures).
+- [x] Customer announcements with scheduled visibility, severity levels and per-customer dismissal.
+- [ ] Remaining general service notifications (password/security events, domain lifecycle, payment failures).
 - [ ] Client Area service/domain/invoice management.
 
 **Exit criteria:** Complete customer support workflow from ticket creation through closure.

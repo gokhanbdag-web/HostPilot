@@ -104,6 +104,9 @@ final class Authorization
         if (preg_match('#^/admin/pages/[1-9][0-9]*$#D', $path) && in_array($method, ['GET','POST'], true)) return 'cms.pages.manage';
         if ($path === '/admin/menus' && $method === 'GET') return 'cms.menus.manage';
         if (preg_match('#^/admin/menus/[1-9][0-9]*$#D', $path) && in_array($method, ['GET','POST'], true)) return 'cms.menus.manage';
+        if ($path === '/admin/announcements' && $method === 'GET') return 'announcements.manage';
+        if (in_array($path, ['/admin/announcements/new'], true) && in_array($method, ['GET','POST'], true)) return 'announcements.manage';
+        if (preg_match('#^/admin/announcements/[1-9][0-9]*$#D', $path) && in_array($method, ['GET','POST'], true)) return 'announcements.manage';
         if (preg_match('#^/admin/tickets/attachment/[0-9]+$#D', $path) && $method === 'GET') return 'support.view';
         if (preg_match('#^/admin/tickets/[0-9]+$#D', $path)) {
             if ($method === 'GET') return 'support.view';
