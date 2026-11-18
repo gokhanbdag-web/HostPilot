@@ -150,3 +150,12 @@ Reference: https://owasp.org/www-project-application-security-verification-stand
 - Attachments are stored under `storage/private/ticket-attachments`, outside public upload paths. Apache access is denied by `storage/private/.htaccess`; deployments using Nginx or another server that ignores `.htaccess` must add an equivalent deny rule for `/storage/private/`.
 - Downloads are forced as attachments, include `nosniff` and no-store headers, verify file integrity, and require the ticket owner or a staff account authorized for that ticket's department.
 - This validation is not antivirus scanning; do not upload executable or sensitive secrets. Configure PHP `upload_max_filesize` and `post_max_size` to support the 5 MiB per-file limit plus request overhead.
+
+
+## 16. Installer session and web-root hardening
+
+- The first-run installer configures strict session mode, cookie-only sessions, and disables transparent session IDs before starting a session.
+- Installer session cookies are HttpOnly and SameSite=Lax; the Secure attribute is enabled only when the installer request is HTTPS.
+- The installer cookie path is scoped to the detected application base path so root and subdirectory installs remain isolated.
+- The root Apache rules deny direct access to repository metadata, developer documentation, application internals, tests, and storage. Storage also receives a valid multiline deny rule during installation; an existing malformed or outdated rule is repaired atomically.
+- Apache rules do not protect Nginx or other servers that ignore .htaccess. Those deployments must configure equivalent deny rules at the web-server level.

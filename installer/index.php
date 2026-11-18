@@ -6,7 +6,31 @@ declare(strict_types=1);
  * The front controller includes this file before HostPilot is installed.
  */
 
+$scriptName = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? '/index.php'));
+$basePath = dirname($scriptName);
+if (str_ends_with($basePath, '/installer')) {
+    $basePath = dirname($basePath);
+}
+$basePath = rtrim($basePath, '/');
+if ($basePath === '.' || $basePath === '/') {
+    $basePath = '';
+}
+
+$isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || (($_SERVER['SERVER_PORT'] ?? null) === '443');
+
 if (session_status() !== PHP_SESSION_ACTIVE) {
+    ini_set('session.use_strict_mode', '1');
+    ini_set('session.use_only_cookies', '1');
+    ini_set('session.use_trans_sid', '0');
+    ini_set('session.gc_maxlifetime', '43200');
+    session_set_cookie_params([
+        'lifetime' => 0,
+        'path' => $basePath !== '' ? $basePath : '/',
+        'secure' => $isHttps,
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
     session_start();
 }
 
@@ -20,18 +44,6 @@ if (is_file($lockFile) && is_file($configFile)) {
     exit('HostPilot is already installed.');
 }
 
-$scriptName = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? '/index.php'));
-$basePath = dirname($scriptName);
-if (str_ends_with($basePath, '/installer')) {
-    $basePath = dirname($basePath);
-}
-$basePath = rtrim($basePath, '/');
-if ($basePath === '.' || $basePath === '/') {
-    $basePath = '';
-}
-
-$isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-    || (($_SERVER['SERVER_PORT'] ?? null) === '443');
 $scheme = $isHttps ? 'https' : 'http';
 $host = preg_replace('/[^a-zA-Z0-9.\-:\[\]]/', '', (string)($_SERVER['HTTP_HOST'] ?? 'localhost'));
 $baseUrl = $scheme . '://' . ($host !== '' ? $host : 'localhost') . $basePath;
@@ -109,9 +121,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // Defense in depth: deny direct HTTP access to secrets, logs, sessions, and private files.
             $storageHtaccess = $storage . DIRECTORY_SEPARATOR . '.htaccess';
-            if (!is_file($storageHtaccess)) {
-                $denyRules = "<IfModule mod_authz_core.c>\\nRequire all denied\\n</IfModule>\\n<IfModule !mod_authz_core.c>\\nDeny from all\\n</IfModule>\\n";
-                if (file_put_contents($storageHtaccess, $denyRules, LOCK_EX) === false) {
+            $denyRules = "<IfModule mod_authz_core.c>\nRequire all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\nDeny from all\n</IfModule>\n";
+            $existingDenyRules = is_file($storageHtaccess) ? file_get_contents($storageHtaccess) : false;
+            if ($existingDenyRules !== $denyRules) {
+                $temporaryDenyFile = $storageHtaccess . '.tmp';
+                if (file_put_contents($temporaryDenyFile, $denyRules, LOCK_EX) === false
+                    || !rename($temporaryDenyFile, $storageHtaccess)) {
+                    @unlink($temporaryDenyFile);
                     throw new RuntimeException('storage erişim koruması yazılamadı.');
                 }
                 @chmod($storageHtaccess, 0640);

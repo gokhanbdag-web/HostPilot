@@ -4,8 +4,11 @@
     # Preserve Authorization for PHP environments that otherwise drop it.
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 
-    # Block direct access to internal application and storage directories.
-    RewriteRule ^(app|bootstrap|config|database|resources|routes|tests|storage)(/|$) - [F,L,NC]
+    # Block repository internals and private application directories.
+    RewriteRule ^(?:\.git|\.github|app|bootstrap|config|database|docs|resources|routes|tests|storage)(/|$) - [F,L,NC]
+
+    # Do not publish repository metadata or developer documentation.
+    RewriteRule ^(?:README\.md|UPDATE_NOTES\.md|DEVELOPMENT-STATUS\.md|ROADMAP\.md|VERSION)$ - [F,L,NC]
 
     # Existing files/directories (assets, installer entry point) are served normally.
     RewriteCond %{REQUEST_FILENAME} -f [OR]
