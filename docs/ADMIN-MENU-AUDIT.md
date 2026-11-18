@@ -16,7 +16,7 @@ This inventory distinguishes a working route from a complete business module. A 
 | Finans Raporları | `/admin/finance` | Partial: financial movement/reporting and CSV export exist; broader accounting, tax, currency and credit-ledger features remain. |
 | Vergi / KDV Ayarları | `/admin/tax` | Working initial global tax settings with inclusive/exclusive calculation; product-specific rates, jurisdiction rules and legal e-invoice remain pending. |
 | Sunucular | `/admin/servers` | Working server registry, connection test and package mapping; live server-side operation depends on valid credentials. |
-| Hizmetler | `/admin/services` | Partial: service listing and provisioning/lifecycle actions exist; complete customer/service detail and remote-state query adapters remain. |
+| Hizmetler | `/admin/services` | Service list and detail now include related invoices and provisioning history; provisioning, suspend/reactivate and termination actions reuse existing guarded workflows. Live remote-state query adapters remain. |
 | Domainler | `/admin/domains` | Working ResellerClub settings page; domain operations are split into sub-pages and provider coverage is limited. |
 | Domain Siparişleri | `/admin/domains/orders` | Working queue/reconciliation view. |
 | Domain Yenilemeleri | `/admin/domains/renewals` | Working renewal queue/reconciliation view; additional registrar coverage remains. |

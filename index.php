@@ -174,6 +174,8 @@ if ($requestPath === '/admin/updates/status' && $method === 'GET') { (new \HostP
 $controller = new \HostPilot\Http\AdminController($pdo, $basePath, (string)($config['app']['key'] ?? ''));
 if ($requestPath === '/admin/staff' && $method === 'GET') { (new \HostPilot\Http\StaffAccessController($pdo, $basePath))->index(); exit; }
 if ($requestPath === '/admin/staff/save' && $method === 'POST') { (new \HostPilot\Http\StaffAccessController($pdo, $basePath))->save(); exit; }
+if (preg_match('#^/admin/customers/([0-9]+)$#', $requestPath, $customerMatch) && $method === 'GET') { $controller->viewCustomer((int)$customerMatch[1]); exit; }
+if ($requestPath === '/admin/customers/status' && $method === 'POST') { $controller->updateCustomerStatus(); exit; }
 if ($requestPath === '/admin/customers' && $method === 'GET') { $controller->customers(); exit; }
 if ($requestPath === '/admin/reports' && $method === 'GET') { $controller->reports(); exit; }
 if ($requestPath === '/admin/tickets' && $method === 'GET') { $controller->tickets(); exit; }
@@ -214,6 +216,7 @@ if ($requestPath === '/admin/servers' && $method === 'GET') { $serverController-
 if ($requestPath === '/admin/servers/save' && $method === 'POST') { $serverController->saveServer(); exit; }
 if ($requestPath === '/admin/servers/test' && $method === 'POST') { $serverController->testServer(); exit; }
 if ($requestPath === '/admin/servers/map' && $method === 'POST') { $serverController->saveMapping(); exit; }
+if (preg_match('#^/admin/services/([0-9]+)$#', $requestPath, $serviceMatch) && $method === 'GET') { $serverController->viewService((int)$serviceMatch[1]); exit; }
 if ($requestPath === '/admin/services' && $method === 'GET') { $serverController->services(); exit; }
 if ($requestPath === '/admin/automation' && in_array($method, ['GET','POST'], true)) { $cronController->adminAutomation(); exit; }
 if ($requestPath === '/admin/automation/jobs/retry' && $method === 'POST') { $cronController->retryProvisioningJob(); exit; }

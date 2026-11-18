@@ -118,7 +118,7 @@ final class AdminController
         if (!in_array($user['role'], ['super_admin','admin','staff'], true)) { http_response_code(403); echo 'Yetkisiz erişim.'; return; }
         $term=trim((string)($_GET['q']??''));
         $page=max(1,(int)($_GET['page']??1));$limit=25;$offset=($page-1)*$limit;
-        $where="role='customer'";$params=[];
+        $where="role='customer' AND email NOT LIKE 'demo.musteri%@example.invalid'";$params=[];
         if($term!==''){$where.=" AND (name LIKE :q1 OR email LIKE :q2 OR username LIKE :q3)";$like='%'.$term.'%';$params=[':q1'=>$like,':q2'=>$like,':q3'=>$like];}
         $count=$this->db->prepare("SELECT COUNT(*) FROM users WHERE ".$where);$count->execute($params);$total=(int)$count->fetchColumn();
         $list=$this->db->prepare("SELECT id,name,email,username,status,created_at FROM users WHERE ".$where." ORDER BY created_at DESC,id DESC LIMIT ".$limit." OFFSET ".$offset);$list->execute($params);$rows=$list->fetchAll();
@@ -127,11 +127,79 @@ final class AdminController
         if(!$rows)echo '<p>Aramanızla eşleşen müşteri bulunamadı.</p>';
         foreach($rows as $row){
             $created=date('d.m.Y',strtotime((string)$row['created_at']));
-            echo '<div class="ticket-admin"><span><b>'.$this->e((string)$row['name']).'</b><small>'.$this->e((string)$row['email']).' · @'.$this->e((string)$row['username']).' · Kayıt: '.$created.'</small></span><em>'.$this->e((string)$row['status']).'</em></div>';
+            echo '<a class="ticket-admin" href="'.$this->url('/admin/customers/'.(int)$row['id']).'"><span><b>'.$this->e((string)$row['name']).'</b><small>'.$this->e((string)$row['email']).' · @'.$this->e((string)$row['username']).' · Kayıt: '.$created.'</small></span><em>'.$this->e((string)$row['status']).' · Detay →</em></a>';
         }
         $pages=max(1,(int)ceil($total/$limit));
         if($pages>1){echo '<nav style="display:flex;gap:12px;padding-top:18px">';for($n=1;$n<=$pages;$n++){if($n===$page)echo '<strong>'.$n.'</strong>';else echo '<a href="'.$this->url('/admin/customers').'?q='.rawurlencode($term).'&page='.$n.'">'.$n.'</a>';}echo '</nav>';}
         echo '</article></main></div>';$this->endPage();
+    }
+
+    public function viewCustomer(int $id): void
+    {
+        if (!Auth::check()) $this->redirect('/admin/login');
+        $actor=Auth::user();
+        if (!in_array($actor['role'], ['super_admin','admin','staff'], true)) { http_response_code(403); echo 'Yetkisiz erişim.'; return; }
+        $q=$this->db->prepare("SELECT id,name,email,username,status,created_at FROM users WHERE id=:id AND role='customer' LIMIT 1");
+        $q->execute([':id'=>$id]);$customer=$q->fetch(PDO::FETCH_ASSOC);
+        if(!$customer){http_response_code(404);echo 'Müşteri bulunamadı.';return;}
+
+        $orders=$this->db->prepare("SELECT id,order_number,status,currency,total,created_at FROM orders WHERE user_id=:id AND order_number NOT LIKE 'DEMO-%' ORDER BY id DESC LIMIT 50");
+        $orders->execute([':id'=>$id]);$orderRows=$orders->fetchAll(PDO::FETCH_ASSOC);
+        $invoices=$this->db->prepare("SELECT id,invoice_number,status,currency,total,amount_paid,due_at,issued_at FROM invoices WHERE user_id=:id AND invoice_number NOT LIKE 'DEMO-%' ORDER BY id DESC LIMIT 50");
+        $invoices->execute([':id'=>$id]);$invoiceRows=$invoices->fetchAll(PDO::FETCH_ASSOC);
+        $services=$this->db->prepare("SELECT s.id,s.domain,s.status,s.billing_cycle,s.amount,s.next_due_date,p.name AS product_name,o.currency AS currency FROM services s JOIN products p ON p.id=s.product_id LEFT JOIN orders o ON o.id=s.order_id WHERE s.user_id=:id AND (o.id IS NULL OR o.order_number NOT LIKE 'DEMO-%') ORDER BY s.id DESC LIMIT 50");
+        $services->execute([':id'=>$id]);$serviceRows=$services->fetchAll(PDO::FETCH_ASSOC);
+        $tickets=$this->db->prepare("SELECT ticket_number,subject,status,department,updated_at FROM tickets WHERE user_id=:id AND ticket_number NOT LIKE 'DEMO-TKT-%' ORDER BY id DESC LIMIT 30");
+        $tickets->execute([':id'=>$id]);$ticketRows=$tickets->fetchAll(PDO::FETCH_ASSOC);
+
+        $money=static fn(mixed $amount,string $currency):string=>number_format((float)$amount,2,',','.').' '.htmlspecialchars($currency,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');
+        $this->startPage('Müşteri detayları');
+        echo '<div class="layout"><aside class="sidebar"><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a class="nav-item" href="'.$this->url('/admin').'">▦ Genel Bakış</a><a class="nav-item active" href="'.$this->url('/admin/customers').'">♙ Müşteri Listesi</a><a class="nav-item" href="'.$this->url('/admin/services').'">▤ Hizmetler</a></aside><main class="main"><header class="topbar"><div><small>YÖNETİM / MÜŞTERİLER / DETAY</small><h1>'.$this->e((string)$customer['name']).'</h1></div><a class="logout" href="'.$this->url('/admin/customers').'">Müşteri listesine dön</a></header>';
+        if(isset($_GET['notice']))echo '<div class="notice">'. $this->e((string)$_GET['notice']).'</div>';
+        if(isset($_GET['error']))echo '<div class="notice err">'.$this->e((string)$_GET['error']).'</div>';
+        echo '<section class="cards"><article class="metric"><span>Sipariş</span><strong>'.count($orderRows).'</strong><small>Son 50 gerçek sipariş</small></article><article class="metric"><span>Fatura</span><strong>'.count($invoiceRows).'</strong><small>Son 50 gerçek fatura</small></article><article class="metric"><span>Hizmet</span><strong>'.count($serviceRows).'</strong><small>Demo hizmetler hariç</small></article><article class="metric"><span>Destek</span><strong>'.count($ticketRows).'</strong><small>Gerçek destek talepleri</small></article></section>';
+        echo '<section class="panel"><h3>Hesap bilgileri</h3><div class="status"><span>Ad soyad</span><strong>'.$this->e((string)$customer['name']).'</strong></div><div class="status"><span>E-posta</span><strong>'.$this->e((string)$customer['email']).'</strong></div><div class="status"><span>Kullanıcı adı</span><strong>'.$this->e((string)$customer['username']).'</strong></div><div class="status"><span>Durum</span><strong>'.$this->e((string)$customer['status']).'</strong></div><div class="status"><span>Kayıt tarihi</span><strong>'.$this->e((string)$customer['created_at']).'</strong></div>';
+        if(in_array($actor['role'],['super_admin','admin'],true)){
+            $nextStatus=$customer['status']==='active'?'disabled':'active';$label=$nextStatus==='disabled'?'Müşteri hesabını devre dışı bırak':'Müşteri hesabını yeniden etkinleştir';
+            echo '<form method="post" action="'.$this->url('/admin/customers/status').'" onsubmit="return confirm(\'Hesap durumu değiştirilsin mi? Mevcut oturumlar kapatılacaktır.\')"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="customer_id" value="'.(int)$customer['id'].'"><input type="hidden" name="status" value="'.$nextStatus.'"><button class="secondary">'.$label.'</button></form><p>Hesabı devre dışı bırakmak yeni girişleri engeller ve mevcut oturumları geçersiz kılar; hizmetleri veya domainleri otomatik olarak sonlandırmaz.</p>';
+        }else echo '<p>Hesap durumunu değiştirmek için yönetici yetkisi gerekir.</p>';
+        echo '</section><section class="panel"><h3>Sipariş geçmişi</h3>';
+        if(!$orderRows)echo '<p>Gerçek sipariş kaydı yok.</p>';
+        foreach($orderRows as $row)echo '<div class="status"><span>'.$this->e((string)$row['order_number']).'<small>'.$this->e((string)$row['status']).' · '.$this->e((string)$row['created_at']).'</small></span><strong>'.$money($row['total'],(string)$row['currency']).'</strong></div>';
+        echo '</section><section class="panel"><h3>Fatura geçmişi</h3>';
+        if(!$invoiceRows)echo '<p>Gerçek fatura kaydı yok.</p>';
+        foreach($invoiceRows as $row)echo '<div class="status"><span>'.$this->e((string)$row['invoice_number']).'<small>'.$this->e((string)$row['status']).' · Vade: '.$this->e((string)($row['due_at']??'—')).'</small></span><strong>'.$money($row['amount_paid'],(string)$row['currency']).' / '.$money($row['total'],(string)$row['currency']).'</strong></div>';
+        echo '</section><section class="panel"><h3>Hizmetleri</h3>';
+        if(!$serviceRows)echo '<p>Bağlı hizmet bulunmuyor.</p>';
+        foreach($serviceRows as $row)echo '<a class="ticket-admin" href="'.$this->url('/admin/services/'.(int)$row['id']).'"><span><b>'.$this->e((string)$row['product_name']).'</b><small>'.$this->e((string)($row['domain']??'Domain atanmadı')).' · '.$this->e((string)$row['billing_cycle']).' · Yenileme: '.$this->e((string)($row['next_due_date']??'—')).'</small></span><em>'.$this->e((string)$row['status']).' · '.$money($row['amount'],(string)($row['currency']??'TRY')).' · Detay →</em></a>';
+        echo '</section><section class="panel"><h3>Destek geçmişi</h3>';
+        if(!$ticketRows)echo '<p>Gerçek destek talebi yok.</p>';
+        foreach($ticketRows as $row)echo '<div class="status"><span>#'.$this->e((string)$row['ticket_number']).' · '.$this->e((string)$row['subject']).'<small>'.$this->e((string)$row['department']).' · '.$this->e((string)$row['updated_at']).'</small></span><strong>'.$this->e((string)$row['status']).'</strong></div>';
+        echo '</section></main></div>';$this->endPage();
+    }
+
+    public function updateCustomerStatus(): void
+    {
+        if (!Auth::check()) $this->redirect('/admin/login');
+        $actor=Auth::user();
+        if (!in_array($actor['role'], ['super_admin','admin'], true)) { http_response_code(403); echo 'Müşteri hesabı durumunu değiştirme yetkiniz yok.'; return; }
+        $id=(int)($_POST['customer_id']??0);$status=(string)($_POST['status']??'');
+        if(!Auth::verifyCsrf($_POST['_token']??null)||$id<1||!in_array($status,['active','disabled'],true))$this->redirect('/admin/customers/'.$id.'?error='.rawurlencode('Güvenlik veya doğrulama hatası.'));
+        try{
+            $this->db->beginTransaction();
+            $q=$this->db->prepare("SELECT id,status FROM users WHERE id=:id AND role='customer' FOR UPDATE");$q->execute([':id'=>$id]);$target=$q->fetch(PDO::FETCH_ASSOC);
+            if(!$target)throw new \RuntimeException('Müşteri bulunamadı.');
+            $column=$this->db->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='auth_version'");
+            $column->execute();if((int)$column->fetchColumn()!==1)throw new \RuntimeException('Oturum iptali için veritabanı güncellemelerini uygulayın.');
+            $this->db->prepare('UPDATE users SET status=:status,auth_version=auth_version+1,updated_at=:updated WHERE id=:id')->execute([':status'=>$status,':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$id]);
+            \HostPilot\Core\SecurityAudit::record($this->db,'customer.status_updated',(int)$actor['id'],['resource_id'=>$id,'action'=>'updated']);
+            $this->db->commit();
+            $this->redirect('/admin/customers/'.$id.'?notice='.rawurlencode('Müşteri hesabı durumu güncellendi; mevcut oturumlar geçersiz kılındı.'));
+        }catch(Throwable $e){
+            if($this->db->inTransaction())$this->db->rollBack();
+            error_log('[HostPilot] Customer status update failed: '.$e->getMessage());
+            $this->redirect('/admin/customers/'.$id.'?error='.rawurlencode($e instanceof \RuntimeException?$e->getMessage():'Müşteri hesabı güncellenemedi.'));
+        }
     }
 
     public function reports(): void

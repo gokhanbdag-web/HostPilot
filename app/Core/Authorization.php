@@ -94,6 +94,8 @@ final class Authorization
         if ($path === '/admin/security/attachments' && in_array($method, ['GET', 'POST'], true)) return 'security.attachments.manage';
         if ($path === '/admin/staff' && $method === 'GET') return 'staff.permissions.manage';
         if ($path === '/admin/staff/save' && $method === 'POST') return 'staff.permissions.manage';
+        if (preg_match('#^/admin/customers/[0-9]+$#', $path) && $method === 'GET') return 'customers.view';
+        if ($path === '/admin/customers/status' && $method === 'POST') return 'customers.manage';
         if ($path === '/admin/customers' && $method === 'GET') return 'customers.view';
         if ($path === '/admin/reports' && $method === 'GET') return 'reports.view';
         if ($path === '/admin/tickets' && $method === 'GET') return 'support.view';
@@ -135,6 +137,7 @@ final class Authorization
 
         if ($path === '/admin/servers' && $method === 'GET') return 'servers.view';
         if (in_array($path, ['/admin/servers/save', '/admin/servers/test', '/admin/servers/map'], true) && $method === 'POST') return 'servers.manage';
+        if (preg_match('#^/admin/services/[0-9]+$#', $path) && $method === 'GET') return 'services.view';
         if ($path === '/admin/services' && $method === 'GET') return 'services.view';
         if (in_array($path, ['/admin/services/provision', '/admin/services/lifecycle', '/admin/services/terminate'], true) && $method === 'POST') return 'services.manage';
         if ($path === '/admin/automation' && in_array($method, ['GET', 'POST'], true)) return 'automation.manage';
