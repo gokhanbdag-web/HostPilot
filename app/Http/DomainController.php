@@ -6,7 +6,7 @@ use HostPilot\Core\Auth;
 use HostPilot\Core\Authorization;
 use HostPilot\Core\CronAuthenticator;
 use HostPilot\Core\SecurityAudit;
-use HostPilot\Core\ResellerClubClient;
+use HostPilot\Core\RegistrarFactory;
 use HostPilot\Core\SecretVault;
 use PDO;
 use Throwable;
@@ -52,7 +52,7 @@ final class DomainController
             if(!Auth::verifyCsrf($_POST['_token']??null))$error='Güvenlik doğrulaması başarısız.';
             else{
                 $domain=strtolower(trim((string)($_POST['domain']??'')));
-                try{$cfg=$this->load();if(($cfg['enabled']??'0')!=='1')throw new \RuntimeException('Domain sorgulama şu anda etkin değil.');if(empty($cfg['api_key_enc']))throw new \RuntimeException('Registrar API anahtarı tanımlanmamış.');$api=new ResellerClubClient((string)$cfg['user_id'],$this->vault->decrypt((string)$cfg['api_key_enc']),(string)$cfg['environment']);$result=$api->checkAvailability($domain);}
+                try{$cfg=$this->load();if(($cfg['enabled']??'0')!=='1')throw new \RuntimeException('Domain sorgulama şu anda etkin değil.');if(empty($cfg['api_key_enc']))throw new \RuntimeException('Registrar API anahtarı tanımlanmamış.');$api=RegistrarFactory::create('resellerclub',(string)$cfg['user_id'],$this->vault->decrypt((string)$cfg['api_key_enc']),(string)$cfg['environment']);$result=$api->checkAvailability($domain);}
                 catch(Throwable $e){$error=$e->getMessage();}
             }
         }
@@ -92,7 +92,7 @@ final class DomainController
             $q->execute([':id'=>$id,':user'=>$user['id']]);$row=$q->fetch(PDO::FETCH_ASSOC);
             if(!$row||$row['status']!=='active'||empty($row['registrar_order_id']))throw new \RuntimeException('Yalnızca aktif ve registrar orderId bilgisi bulunan domainler eşitlenebilir.');
             $cfg=$this->load();if(($cfg['enabled']??'0')!=='1'||empty($cfg['api_key_enc'])||empty($cfg['user_id']))throw new \RuntimeException('Domain registrar bağlantısı etkin değil veya eksik.');
-            $api=new ResellerClubClient((string)$cfg['user_id'],$this->vault->decrypt((string)$cfg['api_key_enc']),(string)($cfg['environment']??'sandbox'));
+            $api=RegistrarFactory::create('resellerclub',(string)$cfg['user_id'],$this->vault->decrypt((string)$cfg['api_key_enc']),(string)($cfg['environment']??'sandbox'));
             $details=$api->domainDetails((string)$row['registrar_order_id']);
             $expiryRaw=$details['expiryDate']??$details['endTime']??$details['domainEndTime']??null;
             $expiry=$this->parseRegistrarExpiry($expiryRaw);
@@ -430,7 +430,7 @@ final class DomainController
 
             $cfg=$this->load();
             if(($cfg['enabled']??'0')!=='1'||empty($cfg['api_key_enc'])||empty($cfg['user_id']))throw new \RuntimeException('Domain registrar bağlantısı etkin değil veya eksik.');
-            $api=new ResellerClubClient((string)$cfg['user_id'],$this->vault->decrypt((string)$cfg['api_key_enc']),(string)($cfg['environment']??'sandbox'));
+            $api=RegistrarFactory::create('resellerclub',(string)$cfg['user_id'],$this->vault->decrypt((string)$cfg['api_key_enc']),(string)($cfg['environment']??'sandbox'));
             if($nameserverOperation){
                 if($stage!=='active'||empty($row['registrar_order_id'])||empty($row['pending_nameservers_enc']))throw new \RuntimeException('Nameserver kuyruğu için aktif domain veya şifreli değişiklik bilgisi eksik.');
                 $servers=json_decode($this->vault->decrypt((string)$row['pending_nameservers_enc']),true,16,JSON_THROW_ON_ERROR);
@@ -532,7 +532,7 @@ final class DomainController
             if($row['current_expiry']===null||strtotime((string)$row['current_expiry'])!==strtotime((string)$row['expiry_before']))throw new \RuntimeException('Domain bitiş tarihi yenileme talebinden sonra değişmiş; mükerrer yenileme riski nedeniyle inceleme gerekli.');
             $this->db->prepare("UPDATE domain_renewals SET status='processing',locked_at=:now,updated_at=:now WHERE id=:id")->execute([':now'=>$now,':id'=>$row['id']]);$this->db->commit();
             $cfg=$this->load();if(($cfg['enabled']??'0')!=='1'||empty($cfg['api_key_enc'])||empty($cfg['user_id']))throw new \RuntimeException('Domain registrar bağlantısı etkin değil veya eksik.');
-            $api=new ResellerClubClient((string)$cfg['user_id'],$this->vault->decrypt((string)$cfg['api_key_enc']),(string)($cfg['environment']??'sandbox'));
+            $api=RegistrarFactory::create('resellerclub',(string)$cfg['user_id'],$this->vault->decrypt((string)$cfg['api_key_enc']),(string)($cfg['environment']??'sandbox'));
             if($stage==='queued'){
                 $expiryTimestamp=strtotime((string)$row['expiry_before'].' UTC');if(!$expiryTimestamp||$expiryTimestamp<=time())throw new \RuntimeException('Domain bitiş tarihi geçmiş veya geçersiz; otomatik yenileme yapılamaz.');
                 $remoteCallStarted=true;$result=$api->renewDomain((string)$row['registrar_order_id'],(int)$row['years'],$expiryTimestamp,false);
@@ -588,7 +588,7 @@ final class DomainController
         try{
             $cfg=$this->load();
             if(($cfg['enabled']??'0')!=='1'||empty($cfg['api_key_enc'])||empty($cfg['user_id']))throw new \RuntimeException('Domain registrar bağlantısı etkin değil veya eksik.');
-            $api=new ResellerClubClient((string)$cfg['user_id'],$this->vault->decrypt((string)$cfg['api_key_enc']),(string)($cfg['environment']??'sandbox'));
+            $api=RegistrarFactory::create('resellerclub',(string)$cfg['user_id'],$this->vault->decrypt((string)$cfg['api_key_enc']),(string)($cfg['environment']??'sandbox'));
             for($n=0;$n<10;$n++){
                 $row=null;$now=gmdate('Y-m-d H:i:s');
                 $this->db->beginTransaction();
