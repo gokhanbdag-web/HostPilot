@@ -139,7 +139,7 @@ $iyzicoRefundId=(int)$pdo->lastInsertId();
 $refundInsert->execute([':payment'=>$paytrPaymentId,':admin'=>$adminUserId,':reference'=>'PAYTR-REFUND-CI',':amount'=>'25.00']);
 $paytrRefundId=(int)$pdo->lastInsertId();
 
-$iyzicoCsv="transactionDate,transactionType,paymentTxId,paymentId,conversationId,paymentPhase,price,paidPrice,transactionCurrency\\n2026-11-17 10:30:00,postauth,9901,IYZICO-PAY-CI,IYZICO-CONV-CI,AUTH,100.00,105.00,TRY\\n2026-11-17 11:00:00,refund,9902,IYZICO-PAY-CI,IYZICO-CONV-CI,AUTH,25.00,105.00,TRY\\n";
+$iyzicoCsv="transactionDate,transactionType,paymentTxId,paymentId,conversationId,paymentPhase,price,paidPrice,transactionCurrency\n2026-11-17 10:30:00,postauth,9901,IYZICO-PAY-CI,IYZICO-CONV-CI,AUTH,100.00,105.00,TRY\n2026-11-17 11:00:00,refund,9902,IYZICO-PAY-CI,IYZICO-CONV-CI,AUTH,25.00,105.00,TRY\n";
 $iyzicoImport=StatementImport::import($pdo,'iyzico','iyzico-provider-ci.csv',$iyzicoCsv,$adminUserId);
 $iyzicoRows=$pdo->prepare('SELECT match_status,suggested_payment_transaction_id,suggested_refund_id FROM payment_statement_movements WHERE import_id=:import ORDER BY source_row_number');
 $iyzicoRows->execute([':import'=>$iyzicoImport['import_id']]);
