@@ -169,7 +169,7 @@ final class CatalogController
             $taxIndex=0;
             foreach($items as $item){
                 $base=$this->moneyDecimal($item['base_cents']);$line=$this->moneyDecimal($item['line_cents']);
-                $orderLine->execute([':oid'=>$orderId,':pid'=>$item['id'],':name'=>$item['name'],':cycle'=>$item['billing_cycle'],':price'=>$base,':line'=>$line,':created'=>$now]);
+                $orderLine->execute([':oid'=>$orderId,':pid'=>$item['id'],':name'=>$item['name'],':cycle'=>$item['billing_cycle'],':price'=>$base,':line'=>$base,':created'=>$now]);
                 $baseTax=$taxTotals['lines'][$taxIndex++];
                 $invoiceLine->execute([':invoice'=>$invoiceId,':description'=>$item['name'].' · '.$this->cycle($item['billing_cycle']),':price'=>TaxCalculator::decimal($baseTax['subtotal_cents']),':rate'=>$baseTax['tax_rate'],':tax'=>TaxCalculator::decimal($baseTax['tax_cents']),':total'=>TaxCalculator::decimal($baseTax['total_cents']),':created'=>$now]);
                 if($item['setup_cents']>0){
