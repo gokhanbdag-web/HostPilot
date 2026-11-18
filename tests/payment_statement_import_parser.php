@@ -42,6 +42,7 @@ foreach([
  ['source'=>'paytr','contents'=>'{"status":"failed"}'],
  ['source'=>'paytr','contents'=>'{"status":"success","data":[{"islem_tipi":"X"}]}'],
  ['source'=>'iyzico','contents'=>"transactionDate,transactionType,paymentId,paidPrice,transactionCurrency\n2026-11-17,AUTH,p1,1,US\n"],
+ ['source'=>'iyzico','contents'=>"transactionDate,transactionType,paymentId,price,paidPrice,transactionCurrency\n2026-11-17,REFUND,p1,,150.00,TRY\n"],
 ] as $case){$failed=false;try{StatementImport::parseFile($case['contents'],$case['source']);}catch(RuntimeException){$failed=true;}if(!$failed)throw new RuntimeException('Invalid provider report was accepted.');}
 $failed=false;try{StatementImport::parseCsv(str_repeat('x',StatementImport::MAX_FILE_BYTES+1));}catch(RuntimeException){$failed=true;}if(!$failed)throw new RuntimeException('Oversized CSV was accepted.');
 echo "HostPilot statement import parser tests passed.\n";
