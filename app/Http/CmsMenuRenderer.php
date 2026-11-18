@@ -16,7 +16,10 @@ final class CmsMenuRenderer
         $q->execute([':id'=>$menuId]);$html='';
         foreach($q->fetchAll(PDO::FETCH_ASSOC) as $item){
             $url=(string)$item['url'];
-            if(str_starts_with($url,'/')&&!str_starts_with($url,'//'))$url=rtrim($basePath,'/').$url;
+            $relative=str_starts_with($url,'/')&&!str_starts_with($url,'//');
+            $external=filter_var($url,FILTER_VALIDATE_URL)!==false&&strtolower((string)parse_url($url,PHP_URL_SCHEME))==='https';
+            if(!$relative&&!$external)continue;
+            if($relative)$url=rtrim($basePath,'/').$url;
             $target=(int)$item['target_blank']===1?' target="_blank" rel="noopener noreferrer"':'';
             $html.='<a class="menu-link" href="'.htmlspecialchars($url,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8').'"'.$target.'>'.htmlspecialchars((string)$item['label'],ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8').'</a>';
         }
