@@ -3,6 +3,7 @@ declare(strict_types=1);
 namespace HostPilot\Http;
 use HostPilot\Core\Auth;
 use HostPilot\Core\EmailService;
+use HostPilot\Core\TaxCalculator;
 use PDO;
 use Throwable;
 
@@ -80,19 +81,21 @@ final class PackageChangeController
             $cycleDays=(int)$periodStart->diff($dueDate)->days;
             if($days<1||$cycleDays<1||$periodStart>$today)throw new \RuntimeException('Kalan fatura dönemi hesaplanamadı.');
             $amount=round(((float)$plan['price']-(float)$s['amount'])*min(1,$days/$cycleDays),2);if($amount<=0)throw new \RuntimeException('Yükseltme farkı tahsilata uygun değil.');
+            $taxLine=TaxCalculator::line(TaxCalculator::toCents(number_format($amount,2,'.','')),TaxCalculator::settings($this->db));
+            $subtotal=TaxCalculator::decimal($taxLine['subtotal_cents']);$taxTotal=TaxCalculator::decimal($taxLine['tax_cents']);$grandTotal=TaxCalculator::decimal($taxLine['total_cents']);
             $due=gmdate('Y-m-d H:i:s',time()+604800);
             $c=$this->db->prepare("INSERT INTO service_package_changes(service_id,from_product_id,to_product_id,target_package,target_package_guid,target_package_external_id,target_amount,charge_amount,currency,change_type,status,effective_at,created_at,updated_at) VALUES(:sid,:from,:to,:package,:guid,:external,:target,:charge,:currency,'upgrade','pending_payment',:effective,:created,:updated)");
-            $c->execute([':sid'=>$sid,':from'=>$s['product_id'],':to'=>$pid,':package'=>$plan['remote_package'],':guid'=>$plan['remote_package_guid']?:null,':external'=>$plan['remote_package_external_id']?:null,':target'=>$plan['price'],':charge'=>$amount,':currency'=>$currency,':effective'=>$now,':created'=>$now,':updated'=>$now]);$changeId=(int)$this->db->lastInsertId();
+            $c->execute([':sid'=>$sid,':from'=>$s['product_id'],':to'=>$pid,':package'=>$plan['remote_package'],':guid'=>$plan['remote_package_guid']?:null,':external'=>$plan['remote_package_external_id']?:null,':target'=>$plan['price'],':charge'=>$grandTotal,':currency'=>$currency,':effective'=>$now,':created'=>$now,':updated'=>$now]);$changeId=(int)$this->db->lastInsertId();
             $orderNo='HP'.gmdate('ymd').strtoupper(bin2hex(random_bytes(4)));
-            $o=$this->db->prepare("INSERT INTO orders(order_number,user_id,status,currency,subtotal,tax_total,total,notes,created_at,updated_at) VALUES(:no,:uid,'pending',:currency,:total,0,:total,:notes,:now,:now)");
-            $o->execute([':no'=>$orderNo,':uid'=>$u['id'],':currency'=>$currency,':total'=>$amount,':notes'=>'Paket yükseltme #'.$changeId,':now'=>$now]);$oid=(int)$this->db->lastInsertId();
+            $o=$this->db->prepare("INSERT INTO orders(order_number,user_id,status,currency,subtotal,tax_total,total,notes,created_at,updated_at) VALUES(:no,:uid,'pending',:currency,:subtotal,:tax,:total,:notes,:now,:now)");
+            $o->execute([':no'=>$orderNo,':uid'=>$u['id'],':currency'=>$currency,':subtotal'=>$subtotal,':tax'=>$taxTotal,':total'=>$grandTotal,':notes'=>'Paket yükseltme #'.$changeId,':now'=>$now]);$oid=(int)$this->db->lastInsertId();
             $oi=$this->db->prepare("INSERT INTO order_items(order_id,product_id,product_name,billing_cycle,quantity,unit_price,line_total,created_at) VALUES(:oid,:pid,:name,:cycle,1,:price,:price,:now)");
             $oi->execute([':oid'=>$oid,':pid'=>$pid,':name'=>$plan['name'].' · Paket yükseltme farkı',':cycle'=>$s['billing_cycle'],':price'=>$amount,':now'=>$now]);
             $invoiceNo='INV'.gmdate('ymd').strtoupper(bin2hex(random_bytes(4)));
-            $iv=$this->db->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,status,currency,subtotal,tax_total,total,amount_paid,issued_at,due_at,created_at,updated_at) VALUES(:no,:oid,:uid,'unpaid',:currency,:total,0,:total,0,:now,:due,:now,:now)");
-            $iv->execute([':no'=>$invoiceNo,':oid'=>$oid,':uid'=>$u['id'],':currency'=>$currency,':total'=>$amount,':now'=>$now,':due'=>$due]);$invoiceId=(int)$this->db->lastInsertId();
-            $line=$this->db->prepare("INSERT INTO invoice_items(invoice_id,description,quantity,unit_price,tax_rate,tax_amount,line_total,created_at) VALUES(:invoice,:description,1,:price,0,0,:price,:now)");
-            $line->execute([':invoice'=>$invoiceId,':description'=>'Paket yükseltme: '.$s['old_name'].' → '.$plan['name'],':price'=>$amount,':now'=>$now]);
+            $iv=$this->db->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,status,currency,subtotal,tax_total,total,amount_paid,issued_at,due_at,created_at,updated_at) VALUES(:no,:oid,:uid,'unpaid',:currency,:subtotal,:tax,:total,0,:now,:due,:now,:now)");
+            $iv->execute([':no'=>$invoiceNo,':oid'=>$oid,':uid'=>$u['id'],':currency'=>$currency,':subtotal'=>$subtotal,':tax'=>$taxTotal,':total'=>$grandTotal,':now'=>$now,':due'=>$due]);$invoiceId=(int)$this->db->lastInsertId();
+            $line=$this->db->prepare("INSERT INTO invoice_items(invoice_id,description,quantity,unit_price,tax_rate,tax_amount,line_total,created_at) VALUES(:invoice,:description,1,:price,:rate,:tax,:total,:now)");
+            $line->execute([':invoice'=>$invoiceId,':description'=>'Paket yükseltme: '.$s['old_name'].' → '.$plan['name'],':price'=>$subtotal,':rate'=>$taxLine['tax_rate'],':tax'=>$taxTotal,':total'=>$grandTotal,':now'=>$now]);
             $this->db->prepare("UPDATE service_package_changes SET invoice_id=:invoice WHERE id=:id")->execute([':invoice'=>$invoiceId,':id'=>$changeId]);
             $this->db->commit();(new EmailService($this->db,$this->applicationKey))->sendPackageChange((string)$u['email'],(string)$u['name'],(string)$s['remote_domain'],(string)$s['old_name'],(string)$plan['name'],'requested');$this->go('/client/invoices/'.$invoiceId.'/pay');
         }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();$this->go('/client/services','error='.$e->getMessage());}
