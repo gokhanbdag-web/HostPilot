@@ -111,6 +111,8 @@ jobs:
         run: php tests/tax_calculator.php
       - name: Test tax settings and invoice integration policy
         run: php tests/tax_policy.php
+      - name: Test real business reports policy
+        run: php tests/admin_reports_policy.php
       - name: Test customer announcements policy
         run: php tests/customer_announcements_policy.php
       - name: Test registrar registration action tracking policy
