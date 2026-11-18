@@ -17,7 +17,7 @@ $checks=[
     'Cart preview calculates tax from each product and setup-fee line'=>str_contains($catalog,'TaxCalculator::totals($cartAmounts,$taxSettings)'),
     'Checkout recalculates tax after reloading current product prices'=>str_contains($catalog,'TaxCalculator::settings($this->db)')&&str_contains($catalog,'TaxCalculator::totals(array_column($invoiceRows'),
     'Checkout persists net subtotal, tax and gross total'=>str_contains($catalog,':subtotal,:tax,:total')&&str_contains($catalog,':rate,:tax,:total'),
-    'One-time setup fees are not added to recurring service price'=>preg_match("/':line'=>\\$base/",$catalog)===1,
+    'One-time setup fees are not added to recurring service price'=>str_contains($catalog, "':line'=>\$base"),
     'Domain renewal invoices use the current tax settings'=>str_contains($domain,'TaxCalculator::line(TaxCalculator::toCents($total)'),
     'Recurring service invoices use the current tax settings'=>str_contains($cron,'TaxCalculator::line(TaxCalculator::toCents($service[\'amount\'])'),
     'Package upgrade invoices include tax snapshots'=>str_contains($package,'TaxCalculator::line(TaxCalculator::toCents(number_format($amount'),
