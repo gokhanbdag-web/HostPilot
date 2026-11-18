@@ -245,6 +245,9 @@ if ($requestPath === '/admin/orders' && $method === 'GET') { $catalog->adminOrde
 if ($requestPath === '/client/orders' && $method === 'GET') { $catalog->clientOrders(); exit; }
 if ($requestPath === '/client/invoices' && $method === 'GET') { $catalog->clientInvoices(); exit; }
 if ($requestPath === '/admin/invoices' && $method === 'GET') { $catalog->adminInvoices(); exit; }
+if ($requestPath === '/cart' && $method === 'GET') { $catalog->cart(); exit; }
+if ($requestPath === '/cart/add' && $method === 'POST') { $catalog->addToCart(); exit; }
+if ($requestPath === '/cart/remove' && $method === 'POST') { $catalog->removeFromCart(); exit; }
 if ($requestPath === '/order/create' && $method === 'POST') { $catalog->createOrder(); exit; }
 if (preg_match('#^/page/([a-z0-9][a-z0-9-]{0,189})$#D', $requestPath, $pageMatch) && $method === 'GET') { (new \HostPilot\Http\CmsPageController($pdo,$basePath))->show($pageMatch[1]); exit; }
 if (preg_match('#^/product/([a-z0-9-]+)$#', $requestPath, $productMatch) && $method === 'GET') { $catalog->product($productMatch[1]); exit; }
