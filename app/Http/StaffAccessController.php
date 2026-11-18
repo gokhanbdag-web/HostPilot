@@ -11,8 +11,6 @@ use Throwable;
 
 final class StaffAccessController
 {
-    private const DEPARTMENTS = ['General Support', 'Billing', 'Technical Support', 'Sales'];
-
     public function __construct(private readonly PDO $db, private readonly string $basePath = '') {}
 
     public function index(): void
@@ -36,6 +34,9 @@ final class StaffAccessController
         if (!$staff) echo '<section class="card"><p>Henüz personel hesabı bulunmuyor. Personel hesapları eklendiğinde burada listelenir.</p></section>';
         foreach ($staff as $member) {
             $id = (int)$member['id'];
+            $departmentOptions=$this->db->prepare("SELECT name,status FROM support_departments WHERE status='active' OR name IN (SELECT department FROM staff_departments WHERE user_id=:id) ORDER BY sort_order,name");
+            $departmentOptions->execute([':id'=>$id]);
+            $availableDepartments=$departmentOptions->fetchAll(PDO::FETCH_ASSOC);
             echo '<section class="card"><h2>' . $this->e((string)$member['name']) . '</h2><p>' . $this->e((string)$member['email']) . ' · ' . $this->e((string)$member['status']) . '</p><form method="post" action="' . $this->url('/admin/staff/save') . '"><input type="hidden" name="_token" value="' . $this->e(Auth::csrfToken()) . '"><input type="hidden" name="user_id" value="' . $id . '"><h3>Modül izinleri</h3><div class="checks">';
             foreach (Authorization::staffPermissionGroups() as $group => $groupPermissions) {
                 echo '<h4>' . $this->e($group) . '</h4>';
@@ -45,9 +46,10 @@ final class StaffAccessController
                 }
             }
             echo '</div><h3>Destek departmanları</h3><div class="checks">';
-            foreach (self::DEPARTMENTS as $department) {
+            foreach ($availableDepartments as $departmentRow) {
+                $department=(string)$departmentRow['name'];
                 $checked = in_array($department, $departments[$id] ?? [], true) ? ' checked' : '';
-                echo '<label><input type="checkbox" name="departments[]" value="' . $this->e($department) . '"' . $checked . '> ' . $this->e($department) . '</label>';
+                echo '<label><input type="checkbox" name="departments[]" value="' . $this->e($department) . '"' . $checked . '> ' . $this->e($department) . ($departmentRow['status']==='inactive'?' (pasif)':'') . '</label>';
             }
             echo '</div><button type="submit">Yetkileri kaydet</button></form></section>';
         }
@@ -82,8 +84,12 @@ final class StaffAccessController
             array_keys(Authorization::staffPermissionCatalog()),
             array_map('strval', (array)($_POST['permissions'] ?? []))
         )));
+        $activeDepartments=$this->db->query("SELECT name FROM support_departments WHERE status='active'")->fetchAll(PDO::FETCH_COLUMN);
+        $existingDepartments=$this->db->prepare('SELECT department FROM staff_departments WHERE user_id=:id');
+        $existingDepartments->execute([':id'=>$userId]);
+        $allowedDepartments=array_values(array_unique(array_merge($activeDepartments,$existingDepartments->fetchAll(PDO::FETCH_COLUMN))));
         $departments = array_values(array_unique(array_intersect(
-            self::DEPARTMENTS,
+            $allowedDepartments,
             array_map('strval', (array)($_POST['departments'] ?? []))
         )));
 
