@@ -96,9 +96,9 @@ if ($requestPath === '/admin/security/sessions' && in_array($method, ['GET','POS
 if ($requestPath === '/admin/security/mfa' && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\MfaController($pdo, $basePath, (string)($config['app']['key'] ?? '')))->index(); exit; }
 if ($requestPath === '/admin/security/attachments' && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\TicketAttachmentController($pdo,$basePath,HOSTPILOT_STORAGE))->adminScannerSettings(); exit; }
 if ($requestPath === '/admin/ticket-departments' && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\SupportDepartmentController($pdo,$basePath))->index(); exit; }
-if ($requestPath === '/admin/knowledgebase' && in_array($method, ['GET','POST'], true)) { (new \\HostPilot\\Http\\KnowledgebaseAdminController($pdo,$basePath))->index(); exit; }
-if ($requestPath === '/admin/knowledgebase/new' && in_array($method, ['GET','POST'], true)) { (new \\HostPilot\\Http\\KnowledgebaseAdminController($pdo,$basePath))->index(0); exit; }
-if (preg_match('#^/admin/knowledgebase/([1-9][0-9]*)$#D', $requestPath, $match) && in_array($method, ['GET','POST'], true)) { (new \\HostPilot\\Http\\KnowledgebaseAdminController($pdo,$basePath))->index((int)$match[1]); exit; }
+if ($requestPath === '/admin/knowledgebase' && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\KnowledgebaseAdminController($pdo,$basePath))->index(); exit; }
+if ($requestPath === '/admin/knowledgebase/new' && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\KnowledgebaseAdminController($pdo,$basePath))->index(0); exit; }
+if (preg_match('#^/admin/knowledgebase/([1-9][0-9]*)$#D', $requestPath, $match) && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\KnowledgebaseAdminController($pdo,$basePath))->index((int)$match[1]); exit; }
 
 if ($requestPath === '/admin/database-restore' && in_array($method, ['GET','POST'], true)) {
     (new \HostPilot\Http\DatabaseRestoreController($pdo,$basePath,HOSTPILOT_STORAGE))->index();
