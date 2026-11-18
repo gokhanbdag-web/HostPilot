@@ -156,6 +156,7 @@ final class UpdateController
         if ($curl === false) {
             return ['ok' => false, 'label' => 'BAŞARISIZ', 'detail' => 'HTTP/1.1 yanıtı alınamadı', 'checked_at' => $checkedAt];
         }
+        $statusLine = '';
         curl_setopt_array($curl, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_FOLLOWLOCATION => false,
@@ -165,6 +166,13 @@ final class UpdateController
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
             CURLOPT_HTTPHEADER => ['Accept: application/json', 'Cache-Control: no-cache'],
+            CURLOPT_HEADERFUNCTION => static function ($handle, string $headerLine) use (&$statusLine): int {
+                $candidate = trim($headerLine);
+                if (preg_match('/^HTTP\\/\\d(?:\\.\\d)?\\s+\\d{3}\\b/i', $candidate)) {
+                    $statusLine = $candidate;
+                }
+                return strlen($headerLine);
+            },
         ]);
         $body = curl_exec($curl);
         $code = (int)curl_getinfo($curl, CURLINFO_HTTP_CODE);
@@ -172,7 +180,7 @@ final class UpdateController
         curl_close($curl);
         $payload = is_string($body) ? json_decode($body, true) : null;
         $healthy = $code === 200 && is_array($payload) && ($payload['status'] ?? '') === 'healthy';
-        $reason = $code > 0 ? 'HTTP/1.1 ' . $code . ' ' . $this->httpReason($code) : 'HTTP bağlantısı kurulamadı';
+        $reason = $statusLine !== '' ? $statusLine : ($code > 0 ? 'HTTP yanıtı alındı (kod ' . $code . ')' : 'HTTP bağlantısı kurulamadı');
         if ($error !== '' && $code === 0) $reason .= ' · ' . $error;
         return [
             'ok' => $healthy,
@@ -180,17 +188,6 @@ final class UpdateController
             'detail' => $reason . ($healthy ? ' · Uygulama sağlıklı' : ' · Uygulama sağlık yanıtı doğrulanamadı'),
             'checked_at' => $checkedAt,
         ];
-    }
-
-    private function httpReason(int $code): string
-    {
-        return match ($code) {
-            200 => 'OK', 201 => 'Created', 204 => 'No Content', 301 => 'Moved Permanently',
-            302 => 'Found', 400 => 'Bad Request', 401 => 'Unauthorized', 403 => 'Forbidden',
-            404 => 'Not Found', 429 => 'Too Many Requests', 500 => 'Internal Server Error',
-            502 => 'Bad Gateway', 503 => 'Service Unavailable', 504 => 'Gateway Timeout',
-            default => 'HTTP Response',
-        };
     }
 
     private function readUpdateNotes(): string
