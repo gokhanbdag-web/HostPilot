@@ -6,10 +6,10 @@ $catalog=file_get_contents($root.'/app/Http/CatalogController.php');
 $routes=file_get_contents($root.'/index.php');
 if(!is_string($catalog)||!is_string($routes))throw new RuntimeException('Cart source files are missing.');
 $checks=[
-    'Cart page is registered as GET'=>str_contains($routes,"$requestPath === '/cart' && $method === 'GET'"),
-    'Cart add is registered as POST'=>str_contains($routes,"$requestPath === '/cart/add' && $method === 'POST'"),
-    'Cart remove is registered as POST'=>str_contains($routes,"$requestPath === '/cart/remove' && $method === 'POST'"),
-    'Cart uses the server-side session'=>str_contains($catalog,"$_SESSION['hostpilot_cart']"),
+    'Cart page is registered as GET'=>str_contains($routes,'$requestPath === \'/cart\' && $method === \'GET\''),
+    'Cart add is registered as POST'=>str_contains($routes,'$requestPath === \'/cart/add\' && $method === \'POST\''),
+    'Cart remove is registered as POST'=>str_contains($routes,'$requestPath === \'/cart/remove\' && $method === \'POST\''),
+    'Cart uses the server-side session'=>str_contains($catalog,'$_SESSION[\'hostpilot_cart\']'),
     'Cart mutations require CSRF validation'=>substr_count($catalog,'Auth::verifyCsrf($_POST[\'_token\']??null)')>=2,
     'Cart has a bounded item count'=>str_contains($catalog,'count($cart)>=10')&&str_contains($catalog,'count($cart)>10'),
     'Duplicate product-cycle entries are rejected'=>str_contains($catalog,'isset($cart[$key])'),
