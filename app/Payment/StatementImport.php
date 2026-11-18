@@ -71,7 +71,7 @@ final class StatementImport
         return match ($source) {
             'bank' => self::parseCsv($contents),
             'paytr' => self::parsePaytrJson($contents),
-            'iyzico' => self::parseIyzicoCsv($contents),
+            'iyzico' => (str_starts_with(ltrim($contents), '{') ? self::parseIyzicoJson($contents) : self::parseIyzicoCsv($contents)),
             default => throw new RuntimeException('Ekstre kaynağı geçersiz.'),
         };
     }
