@@ -70,7 +70,8 @@ final class StatementImport
     public static function parseProviderFile(string $source, string $contents): array
     {
         if (!in_array($source, ['bank','paytr','iyzico'], true)) throw new RuntimeException('Kaynak türü geçersiz.');
-        if ($source === 'paytr' && ltrim($contents) !== '' && in_array(ltrim($contents)[0], ['{','['], true)) {
+        $trimmed = ltrim($contents, "\xEF\xBB\xBF \t\n\r\0\x0B");
+        if ($source === 'paytr' && $trimmed !== '' && in_array($trimmed[0], ['{','['], true)) {
             return self::parsePaytrJson($contents);
         }
         if ($source === 'bank') return self::parseCsv($contents);
@@ -88,6 +89,7 @@ final class StatementImport
         $records = self::readProviderCsv($contents);
         $rows = [];
         foreach ($records as $line => $record) {
+            if (trim((string)($record['transactiondate'] ?? '')) === '' && trim((string)($record['paymentid'] ?? '')) === '' && trim((string)($record['conversationid'] ?? '')) === '') continue;
             $typeValue = strtolower(trim((string)($record['transactiontype'] ?? $record['transactionstatus'] ?? $record['transaction'] ?? '')));
             $phase = strtoupper(trim((string)($record['paymentphase'] ?? '')));
             $type = match ($typeValue) {
@@ -104,7 +106,7 @@ final class StatementImport
             }
             $amountField = $type === 'refund' ? 'price' : 'paidprice';
             $amount = trim((string)($record[$amountField] ?? ''));
-            if ($amount === '') $amount = trim((string)($record['price'] ?? ''));
+            if ($type !== 'refund' && $amount === '') $amount = trim((string)($record['price'] ?? ''));
             $currency = strtoupper(trim((string)($record['transactioncurrency'] ?? '')));
             $date = trim((string)($record['transactiondate'] ?? ''));
             if ($date === '' || $reference === '' || $amount === '' || $currency === '') {
@@ -150,8 +152,12 @@ final class StatementImport
         if (!is_array($decoded) || ($decoded['status'] ?? '') !== 'success') {
             throw new RuntimeException('PayTR işlem dökümü status=success içermelidir.');
         }
-        $records = $decoded['transactions'] ?? $decoded['data'] ?? $decoded['islemler'] ?? null;
-        if (!is_array($records)) throw new RuntimeException('PayTR JSON içinde işlem listesi bulunamadı.');
+        $records = $decoded['transactions'] ?? $decoded['data'] ?? $decoded['islemler'] ?? $decoded['payments'] ?? $decoded['records'] ?? $decoded['result'] ?? null;
+        if (!is_array($records)) {
+            $records = [];
+            foreach ($decoded as $value) if (is_array($value) && (isset($value['siparis_no']) || isset($value['merchant_oid']))) $records[] = $value;
+        }
+        if ($records === []) throw new RuntimeException('PayTR JSON içinde işlem listesi bulunamadı.');
         if (isset($records['siparis_no']) || isset($records['merchant_oid'])) $records = [$records];
         $rows = [];
         foreach ($records as $line => $record) {
