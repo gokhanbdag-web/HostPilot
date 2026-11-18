@@ -143,6 +143,7 @@ $privacy = new \HostPilot\Http\PrivacyController($pdo, $basePath, HOSTPILOT_STOR
 if ($requestPath === '/client/privacy' && in_array($method, ['GET','POST'], true)) { $privacy->customer(); exit; }
 if ($requestPath === '/client/privacy/export' && $method === 'GET') { $privacy->export(); exit; }
 if ($requestPath === '/admin/privacy' && in_array($method, ['GET','POST'], true)) { $privacy->admin(); exit; }
+if ($requestPath === '/client/announcements/dismiss' && $method === 'POST') { $client->dismissAnnouncement(); exit; }
 if ($requestPath === '/client' || $requestPath === '/client/') { $client->dashboard(); exit; }
 if ($requestPath === '/client/services' && $method === 'GET') { $client->services(); exit; }
 if ($requestPath === '/client/services/domain' && $method === 'POST') { $client->saveServiceDomain(); exit; }
