@@ -214,7 +214,7 @@ if ($requestPath === '/admin/finance' && $method === 'GET') { $payment->adminFin
 if ($requestPath === '/admin/finance/import' && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\StatementImportController($pdo, $basePath, (string)($config['app']['key'] ?? '')))->index(); exit; }
 if ($requestPath === '/admin/finance/import/paytr-fetch' && $method === 'POST') { (new \HostPilot\Http\StatementImportController($pdo, $basePath, (string)($config['app']['key'] ?? '')))->fetchPaytr(); exit; }
 if ($requestPath === '/admin/finance/import/iyzico-fetch' && $method === 'POST') { (new \HostPilot\Http\StatementImportController($pdo, $basePath, (string)($config['app']['key'] ?? '')))->fetchIyzico(); exit; }
-if ($requestPath === '/admin/finance/import/movements/review' && $method === 'POST') { (new \HostPilot\Http\StatementImportController($pdo, $basePath))->review(); exit; }
+if ($requestPath === '/admin/finance/import/movements/review' && $method === 'POST') { (new \HostPilot\Http\StatementImportController($pdo, $basePath, (string)($config['app']['key'] ?? '')))->review(); exit; }
 if ($requestPath === '/admin/finance/export' && $method === 'GET') { $payment->adminFinanceExport(); exit; }
 if ($requestPath === '/admin/payment-transactions/reconcile' && $method === 'POST') { $payment->adminReconcile(); exit; }
 if ($requestPath === '/admin/payment-transactions/refund' && $method === 'POST') { $payment->adminRecordRefund(); exit; }
