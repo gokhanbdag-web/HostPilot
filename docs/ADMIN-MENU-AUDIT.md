@@ -26,7 +26,7 @@ This inventory distinguishes a working route from a complete business module. A 
 | Site Sayfaları | `/admin/pages` | Working CMS page CRUD and publishing; not a visual page builder. |
 | Menü Yönetimi | `/admin/menus` | Working header/footer menu management. |
 | Duyurular | `/admin/announcements` | Working scheduled announcement management. |
-| Raporlar | `/admin/reports` | Demo-only: currently aggregates only `DEMO-` sample records, not real business reporting. |
+| İşletme Raporları | `/admin/reports` | Working real-data aggregates for orders, invoices, collected/outstanding balances, services, tickets, customer growth and top products; currencies remain separated and `DEMO-` fixtures are excluded. |
 | Entegrasyonlar | `/admin/integrations` | Previously had no route; this change adds a central integration status page with links to real configuration screens. |
 | Tema & Sayfa Editörü | `/admin/themes` | Previously had no route; this change adds a truthful CMS workspace. Drag-and-drop theme/page editor is still not implemented. |
 | Ayarlar | `/admin/settings` | SMTP/email configuration only; rename menu to avoid implying a complete global settings module. |

@@ -382,6 +382,11 @@ try {
     $login('/admin/login','http-staff@example.test',$cookieStaff);
     $login('/admin/login','http-admin@example.test',$cookieAdmin);
     $login('/admin/login','http-super@example.test',$cookieSuper);
+    $reportsPage=$request('/admin/reports',$cookieAdmin);
+    $assert($reportsPage['status']===200&&str_contains($reportsPage['body'],'İşletme raporları')
+        &&str_contains($reportsPage['body'],'Fatura ve tahsilat özeti')
+        &&!str_contains($reportsPage['body'],'demo.musteri01@example.invalid'),
+        'admin reports page renders real aggregate data without exposing demo customer identities');
 
     // A stale provider session is never auto-retried: it becomes review-only until an admin checks the provider.
     $staleAdminPage=$request('/admin/payment-transactions',$cookieAdmin);
