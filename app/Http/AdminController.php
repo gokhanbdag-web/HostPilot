@@ -166,17 +166,17 @@ final class AdminController
             if (!$departments) $rows = [];
             else {
                 $placeholders = implode(',', array_fill(0, count($departments), '?'));
-                $statement = $this->db->prepare("SELECT t.id,t.ticket_number,t.subject,t.department,t.priority,t.status,t.updated_at,u.name,u.email FROM tickets t JOIN users u ON u.id=t.user_id WHERE t.department IN ($placeholders) ORDER BY FIELD(t.status,'open','customer_reply','in_progress','staff_reply','closed'),t.updated_at DESC");
+                $statement = $this->db->prepare("SELECT t.id,t.ticket_number,t.subject,t.department,t.priority,t.status,t.updated_at,u.name,u.email,assigned.name AS assigned_name FROM tickets t JOIN users u ON u.id=t.user_id LEFT JOIN ticket_assignments ta ON ta.ticket_id=t.id LEFT JOIN users assigned ON assigned.id=ta.assigned_to_user_id WHERE t.department IN ($placeholders) ORDER BY FIELD(t.status,'open','customer_reply','in_progress','staff_reply','closed'),t.updated_at DESC");
                 $statement->execute($departments);
                 $rows = $statement->fetchAll();
             }
         } else {
-            $rows=$this->db->query("SELECT t.id,t.ticket_number,t.subject,t.department,t.priority,t.status,t.updated_at,u.name,u.email FROM tickets t JOIN users u ON u.id=t.user_id ORDER BY FIELD(t.status,'open','customer_reply','in_progress','staff_reply','closed'),t.updated_at DESC")->fetchAll();
+            $rows=$this->db->query("SELECT t.id,t.ticket_number,t.subject,t.department,t.priority,t.status,t.updated_at,u.name,u.email,assigned.name AS assigned_name FROM tickets t JOIN users u ON u.id=t.user_id LEFT JOIN ticket_assignments ta ON ta.ticket_id=t.id LEFT JOIN users assigned ON assigned.id=ta.assigned_to_user_id ORDER BY FIELD(t.status,'open','customer_reply','in_progress','staff_reply','closed'),t.updated_at DESC")->fetchAll();
         }
         $this->startPage('Destek talepleri');
         echo '<div class="layout"><aside class="sidebar"><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a class="nav-item" href="'.$this->url('/admin').'">▦ Genel Bakış</a><a class="nav-item active" href="'.$this->url('/admin/tickets').'">✉ Destek Talepleri</a></aside><main class="main"><header class="topbar"><div><small>YÖNETİM / DESTEK</small><h1>Destek talepleri</h1></div><a class="logout" href="'.$this->url('/admin').'">Kontrol merkezi</a></header><article class="panel"><h3>Gelen talepler</h3>';
         if(!$rows) echo '<p>Henüz destek talebi yok.</p>';
-        foreach($rows as $t) echo '<a class="ticket-admin" href="'.$this->url('/admin/tickets/'.$t['id']).'"><span><b>#'.$this->e($t['ticket_number']).' · '.$this->e($t['subject']).'</b><small>'.$this->e($t['name']).' · '.$this->e($t['email']).' · '.$this->e($t['department']).'</small></span><em>'.$this->e($t['status']).'</em></a>';
+        foreach($rows as $t) echo '<a class="ticket-admin" href="'.$this->url('/admin/tickets/'.$t['id']).'"><span><b>#'.$this->e($t['ticket_number']).' · '.$this->e($t['subject']).'</b><small>'.$this->e($t['name']).' · '.$this->e($t['email']).' · '.$this->e($t['department']).' · Öncelik: '.$this->e($t['priority']).' · Atanan: '.$this->e((string)($t['assigned_name']??'Atanmamış')).'</small></span><em>'.$this->e($t['status']).'</em></a>';
         echo '</article></main></div>';
         $this->endPage();
     }
@@ -186,7 +186,7 @@ final class AdminController
         if (!Auth::check()) $this->redirect('/admin/login');
         $user=Auth::user();
         if (!in_array($user['role'], ['super_admin','admin','staff'], true)) { http_response_code(403); echo 'Yetkisiz erişim.'; return; }
-        $q=$this->db->prepare('SELECT t.*,u.name,u.email FROM tickets t JOIN users u ON u.id=t.user_id WHERE t.id=:id');
+        $q=$this->db->prepare('SELECT t.*,u.name,u.email,assigned.name AS assigned_name,ta.assigned_to_user_id FROM tickets t JOIN users u ON u.id=t.user_id LEFT JOIN ticket_assignments ta ON ta.ticket_id=t.id LEFT JOIN users assigned ON assigned.id=ta.assigned_to_user_id WHERE t.id=:id');
         $q->execute([':id'=>$id]);$ticket=$q->fetch();
         if(!$ticket){http_response_code(404);echo 'Talep bulunamadı.';return;}
         if (($user['role'] ?? '') === 'staff' && !in_array((string)$ticket['department'], $this->staffDepartments((int)$user['id']), true)) { http_response_code(404); echo 'Destek talebi bulunamadı.'; return; }
@@ -212,6 +212,43 @@ final class AdminController
                             error_log('[HostPilot] Internal ticket note failed: '.$exception->getMessage());
                             $error='İç not kaydedilemedi.';
                         }
+                    }
+                }elseif($action==='assign'){
+                    $target=(int)($_POST['assigned_to_user_id']??0);
+                    if(($user['role']??'')==='staff'&&$target!==(int)$user['id'])$error='Personel yalnızca kendi üzerine atama yapabilir.';
+                    elseif($target===0&&!in_array(($user['role']??''),['admin','super_admin'],true))$error='Atamayı kaldırmak için yönetici yetkisi gerekir.';
+                    else{
+                        try{
+                            $this->db->beginTransaction();
+                            $lock=$this->db->prepare('SELECT department FROM tickets WHERE id=:id FOR UPDATE');
+                            $lock->execute([':id'=>$id]);$department=(string)$lock->fetchColumn();
+                            if($department==='')throw new \RuntimeException('Destek talebi bulunamadı.');
+                            if($target>0){
+                                $valid=$this->db->prepare("SELECT u.id FROM users u JOIN staff_departments sd ON sd.user_id=u.id JOIN staff_permissions sp ON sp.user_id=u.id AND sp.permission='support.reply' WHERE u.id=:id AND u.role='staff' AND u.status='active' AND sd.department=:department LIMIT 1");
+                                $valid->execute([':id'=>$target,':department'=>$department]);
+                                if(!(int)$valid->fetchColumn())throw new \RuntimeException('Seçilen personel bu departmanda aktif destek yanıtı yetkisine sahip değil.');
+                                $save=$this->db->prepare('INSERT INTO ticket_assignments(ticket_id,assigned_to_user_id,assigned_by_user_id,created_at,updated_at) VALUES(:ticket,:assignee,:actor,:created,:updated) ON DUPLICATE KEY UPDATE assigned_to_user_id=VALUES(assigned_to_user_id),assigned_by_user_id=VALUES(assigned_by_user_id),updated_at=VALUES(updated_at)');
+                                $save->execute([':ticket'=>$id,':assignee'=>$target,':actor'=>(int)$user['id'],':created'=>$now,':updated'=>$now]);
+                            }else{
+                                $this->db->prepare('DELETE FROM ticket_assignments WHERE ticket_id=:ticket')->execute([':ticket'=>$id]);
+                            }
+                            \HostPilot\Core\SecurityAudit::record($this->db,'support.ticket_assignment_changed',(int)$user['id'],['resource_id'=>$id,'action'=>$target>0?'assigned':'unassigned']);
+                            $this->db->prepare('UPDATE tickets SET updated_at=:updated WHERE id=:id')->execute([':updated'=>$now,':id'=>$id]);
+                            $this->db->commit();
+                            $this->redirect('/admin/tickets/'.$id);
+                        }catch(Throwable $exception){
+                            if($this->db->inTransaction())$this->db->rollBack();
+                            $error=$exception->getMessage();
+                        }
+                    }
+                }elseif($action==='priority'){
+                    $priority=(string)($_POST['priority']??'');
+                    if(!in_array(($user['role']??''),['admin','super_admin'],true))$error='Önceliği yalnızca yönetici değiştirebilir.';
+                    elseif(!in_array($priority,['low','normal','high','urgent'],true))$error='Destek önceliği geçersiz.';
+                    else{
+                        $this->db->prepare('UPDATE tickets SET priority=:priority,updated_at=:updated WHERE id=:id')->execute([':priority'=>$priority,':updated'=>$now,':id'=>$id]);
+                        \HostPilot\Core\SecurityAudit::record($this->db,'support.ticket_priority_changed',(int)$user['id'],['resource_id'=>$id,'action'=>'updated']);
+                        $this->redirect('/admin/tickets/'.$id);
                     }
                 }elseif($action==='close'||$action==='reopen'){
                     $status=$action==='close'?'closed':'in_progress';
@@ -244,7 +281,7 @@ final class AdminController
         $notes->execute([':id'=>$id]);
         $m->execute([':id'=>$id]);$attachmentService=new TicketAttachmentController($this->db,$this->basePath,HOSTPILOT_STORAGE);
         $this->startPage('Talep #'.$ticket['ticket_number']);
-        echo '<div class="layout"><aside class="sidebar"><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a class="nav-item" href="'.$this->url('/admin/tickets').'">← Destek listesi</a></aside><main class="main"><header class="topbar"><div><small>DESTEK / TALEP DETAYI</small><h1>#'.$this->e($ticket['ticket_number']).'</h1></div></header><article class="panel"><h3>'.$this->e($ticket['subject']).'</h3><p>'.$this->e($ticket['name']).' · '.$this->e($ticket['email']).' · '.$this->e($ticket['department']).'</p>';
+        echo '<div class="layout"><aside class="sidebar"><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a class="nav-item" href="'.$this->url('/admin/tickets').'">← Destek listesi</a></aside><main class="main"><header class="topbar"><div><small>DESTEK / TALEP DETAYI</small><h1>#'.$this->e($ticket['ticket_number']).'</h1></div></header><article class="panel"><h3>'.$this->e($ticket['subject']).'</h3><p>'.$this->e($ticket['name']).' · '.$this->e($ticket['email']).' · '.$this->e($ticket['department']).' · Öncelik: '.$this->e($ticket['priority']).' · Atanan: '.$this->e((string)($ticket['assigned_name']??'Atanmamış')).'</p>';
         foreach($m->fetchAll() as $msg){
             echo '<div class="ticket-admin"><span><b>'.$this->e($msg['name']).($msg['is_staff']?' · Destek':' · Müşteri').'</b><small>'.date('d.m.Y H:i',strtotime($msg['created_at'])).'</small><p>'.nl2br($this->e($msg['message'])).'</p>';
             foreach($attachmentService->forMessage((int)$msg['id']) as $file)echo '<p>📎 <a href="'.$this->url('/admin/tickets/attachment/'.(int)$file['id']).'">'.$this->e($file['original_name']).' · '.number_format((int)$file['file_size']/1024,0).' KB</a></p>';
@@ -257,6 +294,18 @@ final class AdminController
             echo '</section>';
         }
         if($error!=='')echo '<div class="alert">'.$this->e($error).'</div>';
+        $assignees=$this->db->prepare("SELECT u.id,u.name FROM users u JOIN staff_departments sd ON sd.user_id=u.id JOIN staff_permissions sp ON sp.user_id=u.id AND sp.permission='support.reply' WHERE u.role='staff' AND u.status='active' AND sd.department=:department ORDER BY u.name");
+        $assignees->execute([':department'=>(string)$ticket['department']]);
+        echo '<section class="panel"><h3>Atama ve öncelik</h3><form method="post"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><label>Sorumlu personel<select name="assigned_to_user_id">';
+        if(in_array(($user['role']??''),['admin','super_admin'],true))echo '<option value="0">Atanmamış</option>';
+        foreach($assignees->fetchAll(PDO::FETCH_ASSOC) as $assignee)echo '<option value="'.(int)$assignee['id'].'" '.((int)($ticket['assigned_to_user_id']??((($user['role']??'')==='staff')?(int)$user['id']:0))===(int)$assignee['id']?'selected':'').'>'.$this->e($assignee['name']).'</option>';
+        echo '</select></label><button name="action" value="assign">Atamayı kaydet</button></form>';
+        if(in_array(($user['role']??''),['admin','super_admin'],true)){
+            echo '<form method="post" style="margin-top:12px"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><label>Öncelik<select name="priority">';
+            foreach(['low'=>'Düşük','normal'=>'Normal','high'=>'Yüksek','urgent'=>'Acil'] as $key=>$label)echo '<option value="'.$key.'" '.($ticket['priority']===$key?'selected':'').'>'.$label.'</option>';
+            echo '</select></label><button name="action" value="priority">Önceliği güncelle</button></form>';
+        }
+        echo '</section>';
         echo '<form method="post"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><label>Ekip iç notu <small>(Müşteriye gönderilmez)</small><textarea name="message" rows="3" maxlength="12000" required></textarea></label><button name="action" value="internal_note">İç not ekle</button></form>';
         echo '<form method="post" enctype="multipart/form-data"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><label>Yanıtınız<textarea name="message" rows="6" maxlength="12000" style="width:100%;padding:12px;background:#0b1425;color:#fff;border:1px solid #34445e;border-radius:8px"></textarea></label><label>Dosya ekleri (en fazla 3 dosya, her biri 5 MB; PDF, JPG, PNG, TXT)<input type="file" name="attachments[]" accept=".pdf,.jpg,.jpeg,.png,.txt,application/pdf,image/jpeg,image/png,text/plain" multiple></label><button>Yanıt gönder</button></form><form method="post" style="margin-top:12px"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><button name="action" value="'.($ticket['status']==='closed'?'reopen':'close').'">'.($ticket['status']==='closed'?'Talebi yeniden aç':'Talebi kapat').'</button></form></article></main></div>';
         $this->endPage();

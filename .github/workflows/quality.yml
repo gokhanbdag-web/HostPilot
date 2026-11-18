@@ -91,6 +91,8 @@ jobs:
         run: php tests/ticket_attachments.php
       - name: Test private ticket internal notes policy
         run: php tests/ticket_internal_notes_policy.php
+      - name: Test ticket assignment and priority policy
+        run: php tests/ticket_assignment_policy.php
       - name: Test ClamAV scanner policy
         run: php tests/clamav_scanner.php
       - name: Prevent Composer dependency
