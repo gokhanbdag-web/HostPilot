@@ -20,11 +20,10 @@ The report includes masked card information. HostPilot intentionally ignores car
 Upload an iyzico SFTP CSV transaction, cut-off or settlement report. iyzico documents these report types as CSV and documents fields including transactionDate, transactionType, paymentTxId, paymentId, paidPrice and transactionCurrency.
 
 Mapped fields:
-- paymentId → capture reference
-- paymentTxId (fallback refundConversationId) → refund reference
+- paymentId → parent payment reference for captures and refunds; conversationId is used only if paymentId is absent
 - transactionType=auth|postauth → capture; refund → refund
 - preauth and cancel → unknown/non-cash movement; these are retained but never auto-matched as captures or refunds
-- paidPrice (fallback price) → amount
+- paidPrice (fallback price) → capture amount; price → refund event amount (paidPrice on a refund row is the original payment amount)
 - transactionCurrency → currency
 
 The parser supports comma- and semicolon-delimited UTF-8 CSV and ignores non-transaction summary rows in cut-off/settlement exports. Provider timestamps without an explicit timezone are interpreted as Europe/Istanbul and converted to UTC. Buyer name/email, card data and other personal fields are not persisted.
