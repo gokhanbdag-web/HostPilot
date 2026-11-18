@@ -26,6 +26,7 @@ $checks=[
     'Tax settings route is registered and protected'=>str_contains($routes,"'/admin/tax'")&&str_contains($auth,"'/admin/tax'"),
     'Tax settings are visible in finance navigation'=>str_contains($nav,"['Vergi / KDV Ayarları','/admin/tax'"),
     'Tax settings are audited through the allowlisted event'=>str_contains($settings,'tax.settings_updated')&&str_contains($audit,"'tax.settings_updated'"),
+    'Tax settings save atomically'=>str_contains($settings,'beginTransaction()')&&str_contains($settings,'commit()')&&str_contains($settings,'rollBack()'),
     'Existing invoice snapshots are not rewritten by settings changes'=>str_contains($settings,'mevcut faturalar değişmez'),
     'Tax inclusive/exclusive mode cannot be changed after orders exist'=>str_contains($settings,'$existingOrders > 0')&&str_contains($settings,'fiyat biçimi sipariş oluşturulduktan sonra değiştirilemez'),
 ];
