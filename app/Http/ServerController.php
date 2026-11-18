@@ -132,6 +132,45 @@ final class ServerController
         $this->end();
     }
 
+    public function viewService(int $id):void
+    {
+        if(!$this->allowed())return;
+        $q=$this->db->prepare("SELECT s.*,u.name AS customer_name,u.email,p.name AS product_name,sv.name AS server_name,o.currency AS currency FROM services s JOIN users u ON u.id=s.user_id JOIN products p ON p.id=s.product_id LEFT JOIN servers sv ON sv.id=s.server_id LEFT JOIN orders o ON o.id=s.order_id WHERE s.id=:id LIMIT 1");
+        $q->execute([':id'=>$id]);$service=$q->fetch(PDO::FETCH_ASSOC);
+        if(!$service){http_response_code(404);echo 'Hizmet bulunamadı.';return;}
+        $invoices=$this->db->prepare("SELECT id,invoice_number,status,currency,total,amount_paid,due_at,issued_at FROM invoices WHERE (service_id=:service OR order_id=:order) AND invoice_number NOT LIKE 'DEMO-%' ORDER BY id DESC LIMIT 50");
+        $invoices->execute([':service'=>$id,':order'=>(int)$service['order_id']]);$invoiceRows=$invoices->fetchAll(PDO::FETCH_ASSOC);
+        $logs=$this->db->prepare('SELECT action,status,message,created_at FROM provisioning_logs WHERE service_id=:id ORDER BY id DESC LIMIT 50');
+        $logs->execute([':id'=>$id]);$logRows=$logs->fetchAll(PDO::FETCH_ASSOC);
+        $servers=$this->db->query('SELECT id,name FROM servers WHERE enabled=1 ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
+        $currency=(string)($service['currency']??'TRY');
+        $money=static fn(mixed $amount,string $code):string=>number_format((float)$amount,2,',','.').' '.htmlspecialchars($code,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');
+
+        $this->start('Hizmet detayı','services');
+        echo '<div class="hero"><div><small>OPERASYON / HİZMETLER / DETAY</small><h1>'.$this->e((string)$service['product_name']).'</h1><p>'.$this->e((string)($service['domain']??'Domain atanmamış')).' · '.$this->e((string)$service['customer_name']).'</p></div><span class="pill">'.$this->e((string)$service['status']).'</span></div>';
+        echo '<section class="panel"><h2>Hizmet bilgileri</h2><div class="status"><span>Müşteri</span><strong><a href="'.$this->url('/admin/customers/'.(int)$service['user_id']).'">'.$this->e((string)$service['customer_name']).' · '.$this->e((string)$service['email']).'</a></strong></div><div class="status"><span>Ürün</span><strong>'.$this->e((string)$service['product_name']).'</strong></div><div class="status"><span>Domain</span><strong>'.$this->e((string)($service['domain']??'—')).'</strong></div><div class="status"><span>Hizmet durumu</span><strong>'.$this->e((string)$service['status']).'</strong></div><div class="status"><span>Provisioning</span><strong>'.$this->e((string)($service['provisioning_status']??'not_started')).'</strong></div><div class="status"><span>Sunucu</span><strong>'.$this->e((string)($service['server_name']??'Atanmadı')).'</strong></div><div class="status"><span>Fiyat / dönem</span><strong>'.$money($service['amount'],$currency).' · '.$this->e((string)$service['billing_cycle']).'</strong></div><div class="status"><span>Sonraki yenileme</span><strong>'.$this->e((string)($service['next_due_date']??'—')).'</strong></div><div class="status"><span>Askıya alma kaynağı</span><strong>'.$this->e((string)($service['suspension_source']??'none')).'</strong></div><div class="status"><span>Uzak hesap kullanıcı adı</span><strong>'.$this->e((string)($service['remote_username']??'—')).'</strong></div><div class="status"><span>Uzak domain / kimlik</span><strong>'.$this->e((string)($service['remote_domain']??'—')).' · '.$this->e((string)($service['remote_identifier']??'—')).'</strong></div>';
+        if(!empty($service['provisioning_error']))echo '<p class="error">Son işlem hatası: '.$this->e((string)$service['provisioning_error']).'</p>';
+        echo '<p class="muted">Uzak hesap parolası bu ekranda gösterilmez. Şifrelenmiş müşteri erişim bilgileri gizli tutulur.</p><div class="provision">';
+        if(empty($service['provisioned_at'])&&$service['status']==='pending'&&($service['provisioning_status']??'')!=='needs_review'){
+            echo '<form method="post" action="'.$this->url('/admin/services/provision').'"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="service_id" value="'.$id.'"><label>Sunucu<select name="server_id" required><option value="">Sunucu seçin</option>';
+            foreach($servers as $server)echo '<option value="'.(int)$server['id'].'">'.$this->e((string)$server['name']).'</option>';
+            echo '</select></label><label>Domain<input name="domain" required value="'.$this->e((string)($service['domain']??'')).'" placeholder="example.com"></label><button>Hosting hesabını oluştur</button></form>';
+        }elseif(!empty($service['provisioned_at'])&&in_array($service['status'],['active','suspended'],true)){
+            $operation=$service['status']==='active'?'suspend':'unsuspend';$label=$operation==='suspend'?'Hizmeti askıya al':'Yeniden etkinleştir';
+            echo '<form method="post" action="'.$this->url('/admin/services/lifecycle').'"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="service_id" value="'.$id.'"><input type="hidden" name="operation" value="'.$operation.'"><button class="secondary">'.$label.'</button></form>';
+            if(empty($service['termination_pending']))echo '<details><summary style="color:#ff9da8;cursor:pointer">Kalıcı sonlandırma kuyruğuna al</summary><form method="post" action="'.$this->url('/admin/services/terminate').'" onsubmit="return confirm(\'Uzak hosting hesabı kalıcı olarak silinecek. Devam edilsin mi?\')"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="service_id" value="'.$id.'"><label>Onay için uzak domaini yazın<input name="confirm_domain" required autocomplete="off" placeholder="'.$this->e((string)$service['remote_domain']).'"></label><button style="background:#a93248">Kalıcı sonlandır</button></form></details>';
+        }elseif($service['status']==='terminated')echo '<span class="muted">Hizmet sonlandırılmış.</span>';
+        else echo '<span class="muted">Bu hizmet mevcut durumunda doğrudan işlem için uygun değil.</span>';
+        echo '</div></section><section class="panel"><h2>Fatura geçmişi</h2>';
+        if(!$invoiceRows)echo '<p>Bu hizmete bağlı gerçek fatura bulunmuyor.</p>';
+        foreach($invoiceRows as $invoice)echo '<div class="status"><span>'.$this->e((string)$invoice['invoice_number']).'<small>'.$this->e((string)$invoice['status']).' · Vade: '.$this->e((string)($invoice['due_at']??'—')).'</small></span><strong>'.$money($invoice['amount_paid'],(string)$invoice['currency']).' / '.$money($invoice['total'],(string)$invoice['currency']).'</strong></div>';
+        echo '</section><section class="panel"><h2>İşlem geçmişi</h2>';
+        if(!$logRows)echo '<p>Henüz provisioning işlem kaydı yok.</p>';
+        foreach($logRows as $log)echo '<div class="status"><span>'.$this->e((string)$log['action']).' · '.$this->e((string)$log['status']).'<small>'.$this->e((string)$log['created_at']).'</small></span><strong>'.$this->e((string)$log['message']).'</strong></div>';
+        echo '</section>';
+        $this->end();
+    }
+
     public function provision():void
     {
         if(!$this->allowed())return;
