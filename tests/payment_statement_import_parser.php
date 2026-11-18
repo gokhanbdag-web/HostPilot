@@ -55,4 +55,15 @@ foreach([
  ['source'=>'iyzico','contents'=>"transactionDate,transactionType,paymentId,price,paidPrice,transactionCurrency\n2026-11-17,REFUND,p1,,150.00,TRY\n"],
 ] as $case){$failed=false;try{StatementImport::parseFile($case['contents'],$case['source']);}catch(RuntimeException){$failed=true;}if(!$failed)throw new RuntimeException('Invalid provider report was accepted.');}
 $failed=false;try{StatementImport::parseCsv(str_repeat('x',StatementImport::MAX_FILE_BYTES+1));}catch(RuntimeException){$failed=true;}if(!$failed)throw new RuntimeException('Oversized CSV was accepted.');
+
+$canonicalPaytr = StatementImport::toCanonicalCsv($paytr, 'paytr');
+if (count(StatementImport::parseCsv($canonicalPaytr)) !== 2) throw new RuntimeException('PayTR canonical CSV conversion failed.');
+$canonicalIyzico = StatementImport::toCanonicalCsv($iyzico, 'iyzico');
+if (count(StatementImport::parseCsv($canonicalIyzico)) !== 3) throw new RuntimeException('iyzico canonical CSV conversion failed.');
+if (str_contains($canonicalIyzico, 'private@example.test')) throw new RuntimeException('Provider PII leaked into canonical CSV.');
+$formulaPayload = json_encode(['status'=>'success','data'=>[
+ ['islem_tipi'=>'S','islem_tutari'=>'10.00','islem_tarihi'=>'17.11.2026','para_birimi'=>'TRY','siparis_no'=>'=HYPERLINK("https://example.test")'],
+]], JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
+$formulaCsv = StatementImport::toCanonicalCsv($formulaPayload, 'paytr');
+if (!str_contains($formulaCsv, "'=HYPERLINK")) throw new RuntimeException('Spreadsheet formula injection was not neutralized.');
 echo "HostPilot statement import parser tests passed.\n";

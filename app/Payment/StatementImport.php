@@ -76,6 +76,39 @@ final class StatementImport
         };
     }
 
+    /**
+     * Convert a provider-native report into the canonical, spreadsheet-friendly CSV.
+     * The same strict provider parsers used by import validate every movement.
+     */
+    public static function toCanonicalCsv(string $contents, string $source): string
+    {
+        $rows = self::parseFile($contents, $source);
+        $stream = fopen('php://temp', 'w+b');
+        if ($stream === false) throw new RuntimeException('Standart CSV oluşturulamadı.');
+        try {
+            fwrite($stream, "\xEF\xBB\xBF");
+            fputcsv($stream, ['date','reference','description','amount','currency','type'], ',', '"', '');
+            foreach ($rows as $row) {
+                $values = [];
+                foreach (['date','reference','description','amount','currency','type'] as $field) {
+                    $value = (string)$row[$field];
+                    if (in_array($field, ['reference','description'], true)
+                        && preg_match('/^[\s]*[=+@-]/u', $value)) {
+                        $value = "'" . $value;
+                    }
+                    $values[] = $value;
+                }
+                fputcsv($stream, $values, ',', '"', '');
+            }
+            rewind($stream);
+            $csv = stream_get_contents($stream);
+            if (!is_string($csv)) throw new RuntimeException('Standart CSV okunamadı.');
+            return $csv;
+        } finally {
+            fclose($stream);
+        }
+    }
+
     /** Parse the official iyzico daily reporting API response. */
     private static function parseIyzicoJson(string $contents): array
     {

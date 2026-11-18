@@ -55,6 +55,7 @@ final class StatementImportController
         if($notice!=='')echo '<div class="notice">'.$this->e($notice).'</div>';
         if($error!=='')echo '<div class="alert">'.$this->e($error).'</div>';
         if(in_array(($user['role']??''),['admin','super_admin'],true)) echo '<section class="box"><h2>CSV dosyası yükle</h2><p class="muted">Maksimum 2 MB / 5.000 hareket. Banka: ortak CSV başlıkları date,reference,description,amount,currency,type. PayTR: resmî Satış ve İade İşlem Dökümü servisinden kaydedilen JSON yanıtı. iyzico: SFTP işlem, cut-off veya para gönderim CSV raporu. Sağlayıcı tarihleri Europe/Istanbul kabul edilerek UTC’ye dönüştürülür. Kart sahibi adı/e-postası ve kart verileri içe aktarılmaz.</p><form method="post" enctype="multipart/form-data"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><label>Kaynak<select name="source" required><option value="bank">Banka ekstresi (CSV)</option><option value="paytr">PayTR işlem dökümü (JSON)</option><option value="iyzico">iyzico raporu (CSV)</option></select></label><label>Rapor dosyası<input type="file" name="statement" accept=".csv,.json,text/csv,application/json" required></label><button class="button" type="submit">İçe aktar ve eşleşmeleri öner</button></form></section>';
+        echo '<section class="box"><h2>Standart CSV dönüştürücü</h2><p class="muted">PayTR JSON veya iyzico CSV raporunu içe aktarmadan, ortak date,reference,description,amount,currency,type biçiminde indir. Kişisel kart ve müşteri bilgileri dışa aktarılmaz.</p><form method="post" action="'.$this->url('/admin/finance/import/convert').'" enctype="multipart/form-data"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><label>Kaynak<select name="source" required><option value="paytr">PayTR JSON</option><option value="iyzico">iyzico CSV</option></select></label><label>Rapor dosyası<input type="file" name="statement" accept=".csv,.json,text/csv,application/json" required></label><button class="button" type="submit">Standart CSV indir</button></form></section>';
         if(in_array(($user['role']??''),['admin','super_admin'],true)) {
             $localToday = (new \DateTimeImmutable('now', new \DateTimeZone('Europe/Istanbul')))->format('Y-m-d');
             $localStart = (new \DateTimeImmutable('now', new \DateTimeZone('Europe/Istanbul')))->modify('-1 day')->format('Y-m-d');
@@ -92,6 +93,42 @@ final class StatementImportController
         $this->endPage();
     }
 
+
+
+    public function convert(): void
+    {
+        $user = Auth::user();
+        if (!$user || !in_array(($user['role'] ?? ''), ['admin','super_admin'], true)) {
+            http_response_code(403); echo 'Bu işlem yalnızca yönetici tarafından yapılabilir.'; return;
+        }
+        if (!Auth::verifyCsrf($_POST['_token'] ?? null)) {
+            http_response_code(419); echo 'Güvenlik doğrulaması başarısız.'; return;
+        }
+        try {
+            $source = (string)($_POST['source'] ?? '');
+            if (!in_array($source, ['paytr','iyzico'], true)) throw new \RuntimeException('Dönüştürme kaynağı geçersiz.');
+            if (!isset($_FILES['statement']) || !is_array($_FILES['statement'])
+                || (int)($_FILES['statement']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+                throw new \RuntimeException('Rapor dosyası yüklenemedi.');
+            }
+            $file = $_FILES['statement'];
+            if ((int)($file['size'] ?? 0) > StatementImport::MAX_FILE_BYTES) throw new \RuntimeException('Dosya 2 MB sınırını aşıyor.');
+            if (!is_uploaded_file((string)($file['tmp_name'] ?? ''))) throw new \RuntimeException('Geçersiz dosya yüklemesi.');
+            $contents = file_get_contents((string)$file['tmp_name']);
+            if (!is_string($contents)) throw new \RuntimeException('Dosya okunamadı.');
+            $csv = StatementImport::toCanonicalCsv($contents, $source);
+            header('Content-Type: text/csv; charset=UTF-8');
+            header('Content-Disposition: attachment; filename="hostpilot-'.$source.'-standard.csv"');
+            header('Content-Length: '.strlen($csv));
+            header('Cache-Control: no-store, max-age=0');
+            echo $csv;
+            exit;
+        } catch (Throwable $exception) {
+            $_SESSION['hostpilot_statement_error'] = $exception->getMessage();
+            header('Location: '.$this->url('/admin/finance/import'));
+            exit;
+        }
+    }
 
     public function fetchPaytr(): void
     {
