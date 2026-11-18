@@ -322,10 +322,53 @@ final class ClientController
 
     public function knowledgebase():void
     {
-        $rows=$this->db->query("SELECT title,excerpt,content,category FROM knowledgebase_articles WHERE status='published' ORDER BY sort_order,title")->fetchAll();$this->start('Bilgi bankası');echo '<main class="public"><div class="brand">HOST<span>PILOT</span></div><h1>Yardım merkezi</h1><p>Sıkça sorulan sorular ve destek makaleleri.</p>';
-        if(!$rows)echo '<article class="kb"><h2>Bilgi bankası hazırlanıyor</h2><p>Yardım içerikleri yayınlandıkça burada görünecek.</p></article>';
-        foreach($rows as $a)echo '<article class="kb"><small>'.$this->e($a['category']).'</small><h2>'.$this->e($a['title']).'</h2><p>'.nl2br($this->e($a['excerpt']?:substr(strip_tags($a['content']),0,540))).'</p></article>';
-        echo '<a href="'.$this->url('/client/login').'">Müşteri paneline giriş →</a></main>';$this->end();
+        $term=trim((string)($_GET['q']??''));$category=trim((string)($_GET['category']??''));
+        if(strlen($term)>120)$term=substr($term,0,120);
+        $categories=$this->db->query("SELECT DISTINCT category FROM knowledgebase_articles WHERE status='published' ORDER BY category")->fetchAll(PDO::FETCH_COLUMN);
+        $sql="SELECT id,title,slug,excerpt,content,category FROM knowledgebase_articles WHERE status='published'";
+        $params=[];
+        if($term!==''){$sql.=" AND (title LIKE :title OR excerpt LIKE :excerpt OR content LIKE :content)";$like='%'.$term.'%';$params=[':title'=>$like,':excerpt'=>$like,':content'=>$like];}
+        if($category!==''&&in_array($category,$categories,true)){$sql.=" AND category=:category";$params[':category']=$category;}
+        $sql.=" ORDER BY sort_order,title LIMIT 100";
+        $q=$this->db->prepare($sql);$q->execute($params);$rows=$q->fetchAll(PDO::FETCH_ASSOC);
+        $this->start('Bilgi bankası');
+        echo '<main class="public"><div class="brand">HOST<span>PILOT</span></div><h1>Yardım merkezi</h1><p>Aradığınız cevabı bulun veya destek ekibimizle iletişime geçin.</p>';
+        echo '<form method="get" action="'.$this->url('/knowledgebase').'" class="kb-search"><label for="kb-q">Makale ara</label><div><input id="kb-q" name="q" type="search" maxlength="120" value="'.$this->e($term).'" placeholder="Örn. alan adı, ödeme, hosting"><select name="category"><option value="">Tüm kategoriler</option>';
+        foreach($categories as $item)echo '<option value="'.$this->e((string)$item).'" '.($category===(string)$item?'selected':'').'>'.$this->e((string)$item).'</option>';
+        echo '</select><button type="submit">Ara</button></div></form>';
+        if(!$rows)echo '<article class="kb"><h2>Sonuç bulunamadı</h2><p>Farklı bir kelime veya kategori deneyebilirsiniz.</p></article>';
+        foreach($rows as $a){
+            $excerpt=trim((string)($a['excerpt']??''));if($excerpt==='')$excerpt=substr(trim(strip_tags((string)$a['content'])),0,260);
+            echo '<article class="kb"><small>'.$this->e((string)$a['category']).'</small><h2><a href="'.$this->url('/knowledgebase/'.$a['slug']).'">'.$this->e((string)$a['title']).'</a></h2><p>'.$this->e($excerpt).'</p><a class="kb-read" href="'.$this->url('/knowledgebase/'.$a['slug']).'">Makaleyi oku →</a></article>';
+        }
+        echo '<p><a href="'.$this->url('/client/login').'">Müşteri paneline giriş →</a></p></main>';$this->end();
+    }
+
+    public function knowledgebaseArticle(string $slug):void
+    {
+        $q=$this->db->prepare("SELECT id,title,slug,excerpt,content,category FROM knowledgebase_articles WHERE slug=:slug AND status='published' LIMIT 1");$q->execute([':slug'=>$slug]);$article=$q->fetch(PDO::FETCH_ASSOC);
+        if(!$article){http_response_code(404);$this->start('Makale bulunamadı');echo '<main class="public"><h1>Makale bulunamadı</h1><a href="'.$this->url('/knowledgebase').'">Yardım merkezine dön</a></main>';$this->end();return;}
+        $feedback=$this->db->prepare('SELECT SUM(vote=1) AS helpful,SUM(vote=0) AS not_helpful FROM knowledgebase_feedback WHERE article_id=:id');$feedback->execute([':id'=>$article['id']]);$counts=$feedback->fetch(PDO::FETCH_ASSOC)?:[];
+        $message='';
+        if(($_SERVER['REQUEST_METHOD']??'GET')==='POST'){
+            if(!Auth::verifyCsrf($_POST['_token']??null))$message='Güvenlik doğrulaması başarısız. Sayfayı yenileyip tekrar deneyin.';
+            else{
+                $vote=(string)($_POST['vote']??'');
+                if(!in_array($vote,['0','1'],true))$message='Geçersiz geri bildirim.';
+                else{
+                    $visitor=hash_hmac('sha256',session_id(),$this->applicationKey);
+                    $save=$this->db->prepare('INSERT INTO knowledgebase_feedback(article_id,visitor_hash,vote,created_at,updated_at) VALUES(:article,:visitor,:vote,UTC_TIMESTAMP(),UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE vote=VALUES(vote),updated_at=UTC_TIMESTAMP()');
+                    $save->execute([':article'=>$article['id'],':visitor'=>$visitor,':vote'=>(int)$vote]);
+                    $this->go('/knowledgebase/'.$article['slug'].'?feedback=1');
+                }
+            }
+        }elseif(isset($_GET['feedback']))$message='Geri bildiriminiz için teşekkür ederiz.';
+        $this->start((string)$article['title']);
+        echo '<main class="public"><div class="brand">HOST<span>PILOT</span></div><p><a href="'.$this->url('/knowledgebase').'">← Yardım merkezine dön</a></p><article class="kb kb-article"><small>'.$this->e((string)$article['category']).'</small><h1>'.$this->e((string)$article['title']).'</h1>';
+        if(trim((string)$article['excerpt'])!=='')echo '<p class="kb-excerpt">'.$this->e((string)$article['excerpt']).'</p>';
+        echo '<div class="kb-content">'.nl2br($this->e((string)$article['content'])).'</div></article>';
+        if($message!=='')echo '<p class="kb-notice">'.$this->e($message).'</p>';
+        echo '<section class="kb kb-vote"><h2>Bu makale faydalı oldu mu?</h2><p>'.(int)($counts['helpful']??0).' kişi faydalı buldu · '.(int)($counts['not_helpful']??0).' kişi faydalı bulmadı</p><form method="post"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><button name="vote" value="1" type="submit">Evet, faydalı</button><button name="vote" value="0" type="submit">Hayır, faydalı değil</button></form></section><p><a href="'.$this->url('/client/tickets/new').'">Destek talebi oluştur →</a></p></main>';$this->end();
     }
 
     public function logout():void{if($_SERVER['REQUEST_METHOD']!=='POST'||!Auth::verifyCsrf($_POST['_token']??null)){http_response_code(400);echo 'Geçersiz istek.';return;}Auth::logout();$this->go('/client/login');}
