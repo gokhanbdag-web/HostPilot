@@ -14,7 +14,7 @@ $checks=[
  'factory creates the ResellerClub adapter'=>str_contains($factory,'$provider===\'resellerclub\'')&&str_contains($factory,'new ResellerClubClient'),
  'factory rejects unsupported providers'=>str_contains($factory,'Desteklenmeyen domain registrar sağlayıcısı'),
  'domain controller no longer constructs a provider directly'=>!str_contains($domain,'new ResellerClubClient')&&str_contains($domain,"RegistrarFactory::create('resellerclub'"),
- 'registrar contract retains optional EAQ polling'=>str_contains($interface,"actionStatus(string $orderId,string $eaqId='')"),
+ 'registrar contract retains optional EAQ polling'=>str_contains($interface,'actionStatus(string $orderId,string $eaqId=\'\')'),
 ];
 foreach($checks as $label=>$ok){if(!$ok)throw new RuntimeException('FAIL '.$label);echo 'PASS '.$label.PHP_EOL;}
 echo "HostPilot registrar abstraction policy tests passed.".PHP_EOL;
