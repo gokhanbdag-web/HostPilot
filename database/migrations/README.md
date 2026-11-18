@@ -8,11 +8,11 @@ Use a unique, monotonically increasing filename in YYYYMMDD_NNNN_short_descripti
 
 ## Current inventory
 
-There are 34 SQL migration files:
+There are 35 SQL migration files:
 - 17 historical migrations converted from app/Core/Schema.php.
 - Two standalone migrations for password reset tokens and admin first/last names.
 - One forward repair migration for a legacy invoice/service foreign-key omission.
-- Fourteen additional forward migrations covering staff permissions, customer verification and MFA, audit/privacy, ticket attachments, payment reconciliation/refunds, statement imports/review, and private support-ticket notes, and department-scoped ticket assignments.
+- Fifteen additional forward migrations covering staff permissions, customer verification and MFA, audit/privacy, ticket attachments, payment reconciliation/refunds, statement imports/review, and private support-ticket notes, department-scoped ticket assignments, and configurable support departments.
 
 The original PHP migration implementations remain in app/Core/Schema.php and the two standalone migration classes as compatibility references and as the independent schema-parity test baseline. The public front controller no longer executes schema migrations automatically on every request.
 
@@ -41,9 +41,9 @@ MySQL DDL may implicitly commit. A partially executed migration therefore cannot
 ## Test coverage
 
 GitHub Actions uses isolated disposable databases and never contacts the live HostPilot database:
-- Parser/discovery tests verify statement splitting and all 34 migration identifiers in order.
+- Parser/discovery tests verify statement splitting and all 35 migration identifiers in order.
 - MySQL 8.0 and MariaDB 10.11 execute all SQL migrations.
-- The actual browser installer is smoke-tested over HTTP against disposable databases at the root and in a nested subdirectory; the test verifies all 34 migrations, the first super-administrator and the installation lock.
+- The actual browser installer is smoke-tested over HTTP against disposable databases at the root and in a nested subdirectory; the test verifies all 35 migrations, the first super-administrator and the installation lock.
 - The HTTP test also exercises authenticated admin upgrade, CSRF confirmation, maintenance-mode 503, pre-upgrade backup, invalid database connection failure and retry after a partially-created first migration.
 - A deliberately interrupted first migration verifies partial-DDL retry.
 - The test verifies explicit confirmation, tracking records, expected tables and a second run as a no-op.
@@ -67,3 +67,5 @@ These tests validate the migration and backup mechanisms. They are not a substit
 - `20261118_0001_ticket_internal_notes.sql`: stores private staff-only notes separately from customer-visible ticket messages; notes are audited and never queued as customer replies.
 
 - `20261118_0002_ticket_assignments.sql`: stores one current staff assignment per ticket, with foreign keys to the ticket, assignee and assigning operator.
+
+- `20261118_0003_support_departments.sql`: creates the active/inactive support department registry and seeds the four original department names for existing installations.

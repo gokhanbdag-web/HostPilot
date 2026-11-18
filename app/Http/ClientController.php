@@ -247,13 +247,14 @@ final class ClientController
 
     public function newTicket():void
     {
-        $u=$this->customer();if(!$u)return;$error='';
+        $u=$this->customer();if(!$u)return;$error='';$department=(string)($_POST['department']??'');
+        $departments=$this->db->query("SELECT name FROM support_departments WHERE status='active' ORDER BY sort_order,name")->fetchAll(PDO::FETCH_COLUMN);
         if(($_SERVER['REQUEST_METHOD']??'GET')==='POST'){
-            $subject=trim((string)($_POST['subject']??''));$message=trim((string)($_POST['message']??''));$department=(string)($_POST['department']??'General Support');
+            $subject=trim((string)($_POST['subject']??''));$message=trim((string)($_POST['message']??''));
             if(!Auth::verifyCsrf($_POST['_token']??null))$error='Güvenlik doğrulaması başarısız.';
             elseif($subject===''||strlen($subject)>190||strlen($message)<10||strlen($message)>12000)$error='Konu ve mesaj alanlarını kontrol edin.';
+            elseif(!in_array($department,$departments,true))$error='Lütfen aktif bir destek departmanı seçin.';
             else{
-                if(!in_array($department,['General Support','Billing','Technical Support','Sales'],true))$department='General Support';
                 $storedFiles=[];
                 try{
                     $this->db->beginTransaction();$now=gmdate('Y-m-d H:i:s');$no='HP'.gmdate('ymd').strtoupper(bin2hex(random_bytes(3)));
@@ -266,7 +267,14 @@ final class ClientController
             }
         }
         $this->shell($u,'Yeni destek talebi');$this->err($error);
-        echo '<section class="panel formpanel"><h1>Yeni destek talebi</h1><form method="post" enctype="multipart/form-data"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><label>Konu<input name="subject" maxlength="190" required></label><label>Departman<select name="department"><option value="General Support">Genel destek</option><option value="Technical Support">Teknik destek</option><option value="Billing">Faturalandırma</option><option value="Sales">Satış</option></select></label><label>Mesaj<textarea name="message" rows="7" minlength="10" maxlength="12000" required></textarea></label><label>Dosya ekleri (en fazla 3 dosya, her biri 5 MB; PDF, JPG, PNG, TXT)<input type="file" name="attachments[]" accept=".pdf,.jpg,.jpeg,.png,.txt,application/pdf,image/jpeg,image/png,text/plain" multiple></label><button class="button">Talebi gönder</button></form></section>';$this->shellEnd();
+        echo '<section class="panel formpanel"><h1>Yeni destek talebi</h1>';
+        if(!$departments)echo '<p>Şu anda yeni destek talebi oluşturmak için aktif departman bulunmuyor.</p>';
+        else{
+            echo '<form method="post" enctype="multipart/form-data"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><label>Konu<input name="subject" maxlength="190" required></label><label>Departman<select name="department" required>';
+            foreach($departments as $name)echo '<option value="'.$this->e((string)$name).'" '.($department===(string)$name?'selected':'').'>'.$this->e((string)$name).'</option>';
+            echo '</select></label><label>Mesaj<textarea name="message" rows="7" minlength="10" maxlength="12000" required></textarea></label><label>Dosya ekleri (en fazla 3 dosya, her biri 5 MB; PDF, JPG, PNG, TXT)<input type="file" name="attachments[]" accept=".pdf,.jpg,.jpeg,.png,.txt,application/pdf,image/jpeg,image/png,text/plain" multiple></label><button class="button">Talebi gönder</button></form>';
+        }
+        echo '</section>';$this->shellEnd();
     }
 
     public function viewTicket(int $id):void
