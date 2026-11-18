@@ -101,6 +101,8 @@ jobs:
         run: php tests/admin_knowledgebase_policy.php
       - name: Test CMS page management policy
         run: php tests/cms_pages_policy.php
+      - name: Test CMS menu management policy
+        run: php tests/cms_menus_policy.php
       - name: Test ClamAV scanner policy
         run: php tests/clamav_scanner.php
       - name: Prevent Composer dependency
