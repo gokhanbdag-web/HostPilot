@@ -123,6 +123,44 @@ $manualReview = \HostPilot\Payment\StatementImport::review($pdo,$mismatchMovemen
 if (($manualReview['review_status']??'') !== 'reviewed') throw new RuntimeException('Manual review decision was not recorded.');
 if ((int)$pdo->query('SELECT COUNT(*) FROM payment_transactions')->fetchColumn() !== $paymentCountBeforeReview) throw new RuntimeException('Statement review unexpectedly changed payment transactions.');
 
+// Verify provider-native capture/refund matching against the exact parent payment and refund event amount.
+$pdo->prepare("INSERT INTO orders(order_number,user_id,status,currency,subtotal,tax_total,total,created_at,updated_at) VALUES(:number,:user,'paid','TRY',:subtotal,0,:total,UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':number'=>'PROVIDER-REFUND-CI',':user'=>$adminUserId,':subtotal'=>'275.50',':total'=>'275.50']);
+$providerOrderId=(int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,status,currency,subtotal,tax_total,total,amount_paid,issued_at,created_at,updated_at) VALUES('INV-PROVIDER-REFUND-CI',:order,:user,'paid','TRY',275.50,0,275.50,275.50,UTC_TIMESTAMP(),UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':order'=>$providerOrderId,':user'=>$adminUserId]);
+$providerInvoiceId=(int)$pdo->lastInsertId();
+$providerPayment=$pdo->prepare("INSERT INTO payment_transactions(invoice_id,user_id,gateway,gateway_transaction_id,idempotency_key,status,currency,amount,request_reference,created_at,updated_at) VALUES(:invoice,:user,:gateway,:gateway_id,:idempotency,'success','TRY',:amount,:reference,UTC_TIMESTAMP(),UTC_TIMESTAMP())");
+$providerPayment->execute([':invoice'=>$providerInvoiceId,':user'=>$adminUserId,':gateway'=>'iyzico',':gateway_id'=>'IYZICO-PAY-CI',':idempotency'=>'IYZICO-CONV-CI',':amount'=>'150.00',':reference'=>'IYZICO-TOKEN-CI']);
+$iyzicoPaymentId=(int)$pdo->lastInsertId();
+$providerPayment->execute([':invoice'=>$providerInvoiceId,':user'=>$adminUserId,':gateway'=>'paytr',':gateway_id'=>'',':idempotency'=>'PAYTR-IDEM-CI',':amount'=>'125.50',':reference'=>'PAYTR-OID-CI']);
+$paytrPaymentId=(int)$pdo->lastInsertId();
+$providerRefund=$pdo->prepare("INSERT INTO payment_refunds(payment_transaction_id,admin_user_id,provider_reference,amount,currency,reason,created_at) VALUES(:payment,:admin,:reference,:amount,'TRY','CI provider refund',UTC_TIMESTAMP())");
+$providerRefund->execute([':payment'=>$iyzicoPaymentId,':admin'=>$adminUserId,':reference'=>'IYZICO-REFUND-CI',':amount'=>'25.00']);
+$iyzicoRefundId=(int)$pdo->lastInsertId();
+$providerRefund->execute([':payment'=>$paytrPaymentId,':admin'=>$adminUserId,':reference'=>'PAYTR-REFUND-CI',':amount'=>'25.00']);
+$paytrRefundId=(int)$pdo->lastInsertId();
+
+$iyzicoCsv="transactionDate,transactionType,paymentTxId,paymentId,conversationId,price,paidPrice,transactionCurrency,refundConversationId,buyerEmail\n2026-11-17 13:30:00,AUTH,9901,IYZICO-PAY-CI,IYZICO-CONV-CI,150.00,150.00,TRY,,private@example.test\n2026-11-17 14:00:00,REFUND,9902,IYZICO-PAY-CI,IYZICO-CONV-CI,25.00,150.00,TRY,refund-ci,private@example.test\n2026-11-17 14:05:00,REFUND,9903,IYZICO-PAY-CI,IYZICO-CONV-CI,15.00,150.00,TRY,refund-ci-2,\n";
+$iyzicoImport=\HostPilot\Payment\StatementImport::import($pdo,'iyzico','iyzico-refund-ci.csv',$iyzicoCsv,$adminUserId);
+$providerRows=$pdo->prepare('SELECT match_status,suggested_payment_transaction_id,suggested_refund_id FROM payment_statement_movements WHERE import_id=:import ORDER BY source_row_number');
+$providerRows->execute([':import'=>$iyzicoImport['import_id']]);
+$iyzicoMatches=$providerRows->fetchAll(PDO::FETCH_ASSOC);
+if(count($iyzicoMatches)!==3||$iyzicoMatches[0]['match_status']!=='matched'||(int)$iyzicoMatches[0]['suggested_payment_transaction_id']!==$iyzicoPaymentId||$iyzicoMatches[1]['match_status']!=='matched'||(int)$iyzicoMatches[1]['suggested_refund_id']!==$iyzicoRefundId||$iyzicoMatches[2]['match_status']!=='amount_mismatch')throw new RuntimeException('iyzico refund event amount/parent payment matching failed.');
+
+$paytrJson=json_encode(['status'=>'success','data'=>[
+ ['islem_tipi'=>'S','islem_tutari'=>'125.50','islem_tarihi'=>'17.11.2026','para_birimi'=>'TL','siparis_no'=>'PAYTR-OID-CI'],
+ ['islem_tipi'=>'I','islem_tutari'=>'25.00','islem_tarihi'=>'17.11.2026','para_birimi'=>'TL','siparis_no'=>'PAYTR-OID-CI'],
+]],JSON_THROW_ON_ERROR);
+$paytrImport=\HostPilot\Payment\StatementImport::import($pdo,'paytr','paytr-refund-ci.json',$paytrJson,$adminUserId);
+$providerRows->execute([':import'=>$paytrImport['import_id']]);
+$paytrMatches=$providerRows->fetchAll(PDO::FETCH_ASSOC);
+if(count($paytrMatches)!==2||$paytrMatches[0]['match_status']!=='matched'||(int)$paytrMatches[0]['suggested_payment_transaction_id']!==$paytrPaymentId||$paytrMatches[1]['match_status']!=='matched'||(int)$paytrMatches[1]['suggested_refund_id']!==$paytrRefundId)throw new RuntimeException('PayTR payment/refund matching failed.');
+
+$pdo->prepare("DELETE FROM payment_statement_imports WHERE original_filename IN (:iyzico_file,:paytr_file)")->execute([':iyzico_file'=>'iyzico-refund-ci.csv',':paytr_file'=>'paytr-refund-ci.json']);
+$pdo->prepare('DELETE FROM payment_transactions WHERE id IN (:iyzico_payment,:paytr_payment)')->execute([':iyzico_payment'=>$iyzicoPaymentId,':paytr_payment'=>$paytrPaymentId]);
+$pdo->prepare('DELETE FROM invoices WHERE id=:invoice')->execute([':invoice'=>$providerInvoiceId]);
+$pdo->prepare('DELETE FROM orders WHERE id=:order')->execute([':order'=>$providerOrderId]);
+
+
 
 $pdo->exec("INSERT INTO users(name,email,username,password_hash,role,status,created_at,updated_at) VALUES('Verification Test','verify@example.test','verify-test','test-hash','customer','pending_verification',UTC_TIMESTAMP(),UTC_TIMESTAMP())");
 $verificationUserId=(int)$pdo->lastInsertId();
