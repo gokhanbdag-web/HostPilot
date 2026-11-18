@@ -16,14 +16,22 @@ final class CmsPageController
         if(!$page){http_response_code(404);$this->start('Sayfa bulunamadı');echo '<main class="cms"><a class="brand" href="'.$this->url('/').'">HOST<span>PILOT</span></a><h1>Sayfa bulunamadı</h1><a href="'.$this->url('/').'">Ana sayfaya dön</a></main>';$this->end();return;}
         $this->start((string)($page['meta_title']?:$page['title']));
         if(trim((string)$page['meta_description'])!=='')echo '<meta name="description" content="'.$this->e((string)$page['meta_description']).'">';
-        echo '<main class="cms"><header><a class="brand" href="'.$this->url('/').'">HOST<span>PILOT</span></a><nav><a href="'.$this->url('/').'">Ana sayfa</a><a href="'.$this->url('/knowledgebase').'">Yardım merkezi</a><a href="'.$this->url('/client').'">Müşteri paneli</a></nav></header><article><h1>'.$this->e((string)$page['title']).'</h1>';
+        echo '<main class="cms"><header><a class="brand" href="'.$this->url('/').'">HOST<span>PILOT</span></a><nav><a href="'.$this->url('/').'">Ana sayfa</a>'.$this->publicPageLinks().'<a href="'.$this->url('/knowledgebase').'">Yardım merkezi</a><a href="'.$this->url('/client').'">Müşteri paneli</a></nav></header><article><h1>'.$this->e((string)$page['title']).'</h1>';
         if(trim((string)$page['excerpt'])!=='')echo '<p class="excerpt">'.$this->e((string)$page['excerpt']).'</p>';
         echo '<div class="content">'.nl2br($this->e((string)$page['content'])).'</div></article></main>';$this->end();
     }
 
+    private function publicPageLinks():string
+    {
+        $rows=$this->db->query("SELECT title,slug FROM cms_pages WHERE status='published' ORDER BY sort_order,title LIMIT 20")->fetchAll(PDO::FETCH_ASSOC);
+        $html='';
+        foreach($rows as $row)$html.='<a href="'.$this->url('/page/'.$this->e((string)$row['slug'])).'">'.$this->e((string)$row['title']).'</a>';
+        return $html;
+    }
+
     private function start(string $title,string $description=''):void
     {
-        echo '<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'.$this->e($title).' · HostPilot</title><style>body{margin:0;background:#0a1020;color:#e8edf7;font:15px system-ui}.cms{max-width:1080px;margin:auto;padding:24px}.cms header{display:flex;justify-content:space-between;align-items:center;gap:18px;border-bottom:1px solid #26354c;padding-bottom:18px}.brand{font-size:19px;font-weight:900;letter-spacing:.12em;color:#fff;text-decoration:none}.brand span{color:#7898ff}nav{display:flex;gap:18px;flex-wrap:wrap}nav a,.cms a{color:#9bb4ff;text-decoration:none}.cms article{max-width:850px;margin:55px auto;background:#111c2f;border:1px solid #26354c;border-radius:16px;padding:34px}.cms h1{font-size:32px;margin:0 0 16px}.excerpt{color:#9aabc2;font-size:17px;line-height:1.6}.content{white-space:normal;line-height:1.9;color:#d5dfed;overflow-wrap:anywhere}@media(max-width:650px){.cms{padding:16px}.cms header{align-items:flex-start;flex-direction:column}.cms article{margin:28px auto;padding:22px}.cms h1{font-size:25px}}</style></head><body>';
+        echo '<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'.$this->e($title).' · HostPilot</title>'.($description!==''?'<meta name="description" content="'.$this->e($description).'">':'').'<style>body{margin:0;background:#0a1020;color:#e8edf7;font:15px system-ui}.cms{max-width:1080px;margin:auto;padding:24px}.cms header{display:flex;justify-content:space-between;align-items:center;gap:18px;border-bottom:1px solid #26354c;padding-bottom:18px}.brand{font-size:19px;font-weight:900;letter-spacing:.12em;color:#fff;text-decoration:none}.brand span{color:#7898ff}nav{display:flex;gap:18px;flex-wrap:wrap}nav a,.cms a{color:#9bb4ff;text-decoration:none}.cms article{max-width:850px;margin:55px auto;background:#111c2f;border:1px solid #26354c;border-radius:16px;padding:34px}.cms h1{font-size:32px;margin:0 0 16px}.excerpt{color:#9aabc2;font-size:17px;line-height:1.6}.content{white-space:normal;line-height:1.9;color:#d5dfed;overflow-wrap:anywhere}@media(max-width:650px){.cms{padding:16px}.cms header{align-items:flex-start;flex-direction:column}.cms article{margin:28px auto;padding:22px}.cms h1{font-size:25px}}</style></head><body>';
     }
     private function end():void{echo '</body></html>';}
     private function url(string $path):string{return rtrim($this->basePath,'/').$path;}
