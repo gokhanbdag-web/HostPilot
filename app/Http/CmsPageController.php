@@ -20,13 +20,7 @@ final class CmsPageController
         echo '<div class="content">'.nl2br($this->e((string)$page['content'])).'</div></article></main>';$this->end();
     }
 
-    private function publicPageLinks():string
-    {
-        $rows=$this->db->query("SELECT title,slug FROM cms_pages WHERE status='published' ORDER BY sort_order,title LIMIT 20")->fetchAll(PDO::FETCH_ASSOC);
-        $html='';
-        foreach($rows as $row)$html.='<a href="'.$this->url('/page/'.$this->e((string)$row['slug'])).'">'.$this->e((string)$row['title']).'</a>';
-        return $html;
-    }
+    private function publicPageLinks():string{return CmsMenuRenderer::links($this->db,$this->basePath,'header');}
 
     private function start(string $title,string $description=''):void
     {
