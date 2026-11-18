@@ -472,15 +472,15 @@ final class DomainController
                     if($customerId===''||$contactId===''||!ctype_digit($customerId)||!ctype_digit($contactId))throw new \RuntimeException('Registrar müşteri/iletişim kimliği eksik; manuel kontrol gerekli.');
                     $remoteCallStarted=true;
                     $result=$api->registerDomain((string)$row['domain_name'],(int)$row['years'],$customerId,$contactId,(array)($payload['nameservers']??[]),(string)($payload['invoiceOption']??'OnlyAdd'),(bool)($payload['autoRenew']??false));
-                    $this->db->prepare("UPDATE domain_registrations SET registrar_order_id=:order_id,status='pending_remote',action_status=:action,action_message=:message,locked_at=NULL,available_at=:available,updated_at=:updated WHERE id=:id")
-                        ->execute([':order_id'=>(string)$result['orderId'],':action'=>(string)($result['actionStatus']??'Added'),':message'=>substr((string)($result['message']??'Kayıt talebi registrar tarafından alındı.'),0,500),':available'=>gmdate('Y-m-d H:i:s',time()+45),':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
+                    $this->db->prepare("UPDATE domain_registrations SET registrar_order_id=:order_id,registrar_action_id=:action_id,status='pending_remote',action_status=:action,action_message=:message,locked_at=NULL,available_at=:available,updated_at=:updated WHERE id=:id")
+                        ->execute([':order_id'=>(string)$result['orderId'],':action_id'=>isset($result['eaqId'])&&ctype_digit((string)$result['eaqId'])?(string)$result['eaqId']:null,':action'=>(string)($result['actionStatus']??'Added'),':message'=>substr((string)($result['message']??'Kayıt talebi registrar tarafından alındı.'),0,500),':available'=>gmdate('Y-m-d H:i:s',time()+45),':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$row['id']]);
                     echo json_encode(['ok'=>true,'processed'=>1,'domain'=>$row['domain_name'],'status'=>'pending_remote'],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);return;
                 }
             }
             if($stage==='pending_remote'){
                 $orderId=(string)($row['registrar_order_id']??'');
                 if($orderId==='')throw new \RuntimeException('Registrar orderId eksik; otomatik tekrar güvenli değil.');
-                $remoteCallStarted=true;$statusData=$api->actionStatus($orderId);
+                $eaqId=(string)($row['registrar_action_id']??'');$remoteCallStarted=true;$statusData=$api->actionStatus($orderId,$eaqId);
                 $actions=$statusData['actions']??[];$action=is_array($actions)&&isset($actions[0])&&is_array($actions[0])?$actions[0]:null;
                 $actionStatus=(string)($action['actionStatus']??'');
                 $message=substr((string)($action['actionStatusDesc']??$action['message']??''),0,500);
