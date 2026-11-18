@@ -8,11 +8,11 @@ Use a unique, monotonically increasing filename in YYYYMMDD_NNNN_short_descripti
 
 ## Current inventory
 
-There are 38 SQL migration files:
+There are 39 SQL migration files:
 - 17 historical migrations converted from app/Core/Schema.php.
 - Two standalone migrations for password reset tokens and admin first/last names.
 - One forward repair migration for a legacy invoice/service foreign-key omission.
-- Eighteen additional forward migrations covering staff permissions, customer verification and MFA, audit/privacy, ticket attachments, payment reconciliation/refunds, statement imports/review, and private support-ticket notes, department-scoped ticket assignments, configurable support departments, knowledge-base feedback, dynamic CMS pages, and configurable header/footer menus.
+- Nineteen additional forward migrations covering staff permissions, customer verification and MFA, audit/privacy, ticket attachments, payment reconciliation/refunds, statement imports/review, and private support-ticket notes, department-scoped ticket assignments, configurable support departments, knowledge-base feedback, dynamic CMS pages, configurable header/footer menus, and customer announcements with per-user dismissal.
 
 The original PHP migration implementations remain in app/Core/Schema.php and the two standalone migration classes as compatibility references and as the independent schema-parity test baseline. The public front controller no longer executes schema migrations automatically on every request.
 
@@ -75,3 +75,5 @@ These tests validate the migration and backup mechanisms. They are not a substit
 - `20261118_0005_cms_pages.sql`: creates the dynamic public CMS page registry with unique SEO slugs, draft/published status and metadata fields.
 
 - `20261118_0006_cms_menus.sql`: creates header/footer menu registries and ordered menu items, seeding the default site navigation links idempotently.
+
+- `20261118_0007_cms_announcements.sql`: adds scheduled customer announcements and per-user dismissals, with cascading cleanup and audit-ready ownership.
