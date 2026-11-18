@@ -6,6 +6,7 @@ use HostPilot\Core\Auth;
 use HostPilot\Core\CronAuthenticator;
 use HostPilot\Core\EmailService;
 use HostPilot\Core\SecretVault;
+use HostPilot\Core\TaxCalculator;
 use HostPilot\Hosting\CpanelWhmAdapter;
 use HostPilot\Hosting\DirectAdminAdapter;
 use HostPilot\Hosting\PleskXmlAdapter;
