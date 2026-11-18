@@ -20,7 +20,7 @@ $checks=[
  'central authorization maps knowledgebase admin routes'=>str_contains($auth,'knowledgebase.manage'),
  'staff cannot manage articles through a staff permission'=>!str_contains($auth,"'knowledgebase.manage' =>"),
  'admin navigation links to knowledgebase management'=>str_contains($admin,"['Bilgi Bankası','/admin/knowledgebase','▧']"),
- 'published article preview is linked from editor'=>str_contains($controller,'/knowledgebase/'.(string)$article[\'slug\']'),
+ 'published article preview is linked from editor'=>str_contains($controller,'$this->url(\'/knowledgebase/\'.(string)$article[\'slug\'])'),
 ];
 foreach($checks as $label=>$ok){if(!$ok)throw new RuntimeException('FAIL '.$label);echo 'PASS '.$label.PHP_EOL;}
 echo "HostPilot admin knowledgebase management policy tests passed.".PHP_EOL;
