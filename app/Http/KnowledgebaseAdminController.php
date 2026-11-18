@@ -21,7 +21,7 @@ final class KnowledgebaseAdminController
         }
         $error='';$notice='';
         $article=['id'=>0,'title'=>'','slug'=>'','excerpt'=>'','content'=>'','category'=>'Genel','status'=>'draft','sort_order'=>0];
-        if($articleId!==null){
+        if($articleId!==null && $articleId>0){
             $q=$this->db->prepare('SELECT id,title,slug,excerpt,content,category,status,sort_order FROM knowledgebase_articles WHERE id=:id LIMIT 1');
             $q->execute([':id'=>$articleId]);$found=$q->fetch(PDO::FETCH_ASSOC);
             if(!$found){http_response_code(404);echo 'Bilgi bankası makalesi bulunamadı.';return;}
@@ -33,7 +33,7 @@ final class KnowledgebaseAdminController
                 $action=(string)($_POST['action']??'save');
                 try{
                     if($action==='delete'){
-                        if($articleId===null||(string)($_POST['confirm_delete']??'')!=='1')throw new \RuntimeException('Silme işlemini onaylamanız gerekiyor.');
+                        if(!$articleId||(string)($_POST['confirm_delete']??'')!=='1')throw new \RuntimeException('Silme işlemini onaylamanız gerekiyor.');
                         $this->db->beginTransaction();
                         $delete=$this->db->prepare('DELETE FROM knowledgebase_articles WHERE id=:id');
                         $delete->execute([':id'=>$articleId]);
@@ -42,15 +42,15 @@ final class KnowledgebaseAdminController
                         $this->db->commit();$this->redirect('/admin/knowledgebase?deleted=1');
                     }
                     if($action!=='save')throw new \RuntimeException('Geçersiz makale işlemi.');
-                    $title=trim((string)($_POST['title']??''));$slug=$this->slug((string)($_POST['slug']??''));$category=trim((string)($_POST['category']??'Genel'));
+                    $title=trim((string)($_POST['title']??''));$slug=$this->slug((string)($_POST['slug']??''));if($slug==='')$slug=$this->slug($title);$category=trim((string)($_POST['category']??'Genel'));
                     $excerpt=trim((string)($_POST['excerpt']??''));$content=trim((string)($_POST['content']??''));$status=(string)($_POST['status']??'draft');$sort=(int)($_POST['sort_order']??0);
-                    if($title===''||mb_strlen($title)>190)throw new \RuntimeException('Makale başlığı 1–190 karakter olmalıdır.');
+                    if($title===''||$this->length($title)>190)throw new \RuntimeException('Makale başlığı 1–190 karakter olmalıdır.');
                     if($slug===''||strlen($slug)>190||!preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/D',$slug))throw new \RuntimeException('SEO bağlantısı geçerli bir kısa ad olmalıdır.');
-                    if($category===''||mb_strlen($category)>100)throw new \RuntimeException('Kategori 1–100 karakter olmalıdır.');
-                    if(mb_strlen($excerpt)>2000||$content===''||mb_strlen($content)>50000)throw new \RuntimeException('Açıklama en fazla 2.000, makale içeriği 1–50.000 karakter olmalıdır.');
+                    if($category===''||$this->length($category)>100)throw new \RuntimeException('Kategori 1–100 karakter olmalıdır.');
+                    if($this->length($excerpt)>2000||$content===''||$this->length($content)>50000)throw new \RuntimeException('Açıklama en fazla 2.000, makale içeriği 1–50.000 karakter olmalıdır.');
                     if(!in_array($status,['draft','published'],true))throw new \RuntimeException('Yayın durumu geçersiz.');
                     $this->db->beginTransaction();
-                    if($articleId===null){
+                    if(!$articleId){
                         $save=$this->db->prepare('INSERT INTO knowledgebase_articles(title,slug,excerpt,content,category,status,sort_order,created_at,updated_at) VALUES(:title,:slug,:excerpt,:content,:category,:status,:sort,UTC_TIMESTAMP(),UTC_TIMESTAMP())');
                         $save->execute([':title'=>$title,':slug'=>$slug,':excerpt'=>$excerpt,':content'=>$content,':category'=>$category,':status'=>$status,':sort'=>$sort]);
                         $savedId=(int)$this->db->lastInsertId();$event='knowledgebase.article_created';
@@ -105,6 +105,8 @@ final class KnowledgebaseAdminController
         if($notice!=='')echo '<p class="notice">'.$this->e($notice).'</p>';
         if($error!=='')echo '<p class="error">'.$this->e($error).'</p>';
     }
+
+    private function length(string $value):int{return function_exists('mb_strlen')?mb_strlen($value,'UTF-8'):strlen($value);}
 
     private function slug(string $value):string
     {
