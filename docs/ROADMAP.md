@@ -53,7 +53,8 @@
 
 ## Phase 4 — Billing and payment
 - [x] Initial unpaid invoice generation with order-linked invoice line snapshots (legal e-invoice integration and full accounting rules remain pending).
-- [ ] Tax rules, currency conversion, credit balance, partial payments, refunds.
+- [x] Initial global tax settings for enabled/disabled, tax rate and tax-inclusive/exclusive catalog prices; line-level tax snapshots on checkout, domain renewal, package upgrade and recurring service invoices. Product-specific rates, jurisdiction/exemption rules and legal e-invoice compliance remain pending.
+- [ ] Currency conversion, credit balance, partial payments, provider refund API calls and full accounting rules.
 - [x] PayTR iFrame token flow and HMAC-verified callback (merchant sandbox/live testing pending).
 - [x] iyzico Checkout Form initialize/retrieve with IYZWSv2 request signing and response signature validation (merchant sandbox/live testing pending).
 - [x] Administrator payment transaction history view.
