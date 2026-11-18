@@ -48,6 +48,7 @@ final class SecurityAudit
         'server.created',
         'server.connection_tested',
         'server.product_mapping_updated',
+        'customer.status_updated',
         'service.provision_completed',
         'service.provision_failed',
         'service.lifecycle_completed',
