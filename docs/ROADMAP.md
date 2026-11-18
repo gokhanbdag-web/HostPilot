@@ -98,7 +98,8 @@
 **Exit criteria:** Test registrar transactions and domain state reconciliation pass.
 
 ## Phase 7 — Support and customer self-service
-- [ ] Ticket departments, priorities, assignment, attachments.
+- [ ] Ticket departments, attachments.
+- [x] Department-scoped ticket assignment, admin-only priority changes, and assignment/priority audit events.
 - [x] Staff-only internal ticket notes stored separately from customer messages, audited, and excluded from customer email notifications (PR in progress).
 - [ ] Customer ticket portal and email notifications.
 - [ ] FAQ and knowledge base search/feedback.
