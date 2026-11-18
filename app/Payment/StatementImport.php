@@ -112,7 +112,7 @@ final class StatementImport
             if ($date === '' || $reference === '' || $amount === '' || $currency === '') {
                 throw new RuntimeException('iyzico CSV satır '.$line.' için transactionDate, paymentId/conversationId, price/paidPrice ve transactionCurrency alanları zorunludur.');
             }
-            $rows[] = self::providerMovement($date, $reference, 'iyzico '.($type === 'refund' ? 'iade' : ($type === 'capture' ? 'ödeme' : 'diğer hareket')), $amount, $currency, $type, $line);
+            $rows[] = self::providerMovement($date, $reference, 'iyzico '.($type === 'refund' ? 'iade' : ($type === 'capture' ? 'ödeme' : 'diğer hareket')), $amount, $currency, $type, $line, true);
         }
         if ($rows === []) throw new RuntimeException('iyzico CSV içinde işlem satırı bulunamadı.');
         if (count($rows) > self::MAX_ROWS) throw new RuntimeException('CSV en fazla 5.000 hareket içerebilir.');
