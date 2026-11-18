@@ -4,14 +4,20 @@ declare(strict_types=1);
 namespace HostPilot\Http;
 
 use HostPilot\Core\Auth;
+use HostPilot\Core\SecretVault;
 use HostPilot\Core\SecurityAudit;
+use HostPilot\Payment\GatewayTransport;
 use HostPilot\Payment\StatementImport;
 use PDO;
 use Throwable;
 
 final class StatementImportController
 {
-    public function __construct(private readonly PDO $db, private readonly string $basePath) {}
+    private SecretVault $vault;
+    public function __construct(private readonly PDO $db, private readonly string $basePath, string $applicationKey)
+    {
+        $this->vault = new SecretVault($applicationKey);
+    }
 
     public function index(): void
     {
@@ -20,6 +26,7 @@ final class StatementImportController
         $notice=(string)($_SESSION['hostpilot_statement_notice']??'');
         $error=(string)($_SESSION['hostpilot_statement_error']??'');
         unset($_SESSION['hostpilot_statement_notice'],$_SESSION['hostpilot_statement_error']);
+        $paymentSettings = $this->paymentSettings();
         if(($_SERVER['REQUEST_METHOD']??'GET')==='POST'){
             if(!in_array(($user['role']??''),['admin','super_admin'],true)){http_response_code(403);echo 'Ekstre içe aktarma işlemi yalnızca admin tarafından yapılabilir.';return;}
             if(!Auth::verifyCsrf($_POST['_token']??null))$error='Güvenlik doğrulaması başarısız.';
@@ -48,6 +55,19 @@ final class StatementImportController
         if($notice!=='')echo '<div class="notice">'.$this->e($notice).'</div>';
         if($error!=='')echo '<div class="alert">'.$this->e($error).'</div>';
         if(in_array(($user['role']??''),['admin','super_admin'],true)) echo '<section class="box"><h2>CSV dosyası yükle</h2><p class="muted">Maksimum 2 MB / 5.000 hareket. Banka: ortak CSV başlıkları date,reference,description,amount,currency,type. PayTR: resmî Satış ve İade İşlem Dökümü servisinden kaydedilen JSON yanıtı. iyzico: SFTP işlem, cut-off veya para gönderim CSV raporu. Sağlayıcı tarihleri Europe/Istanbul kabul edilerek UTC’ye dönüştürülür. Kart sahibi adı/e-postası ve kart verileri içe aktarılmaz.</p><form method="post" enctype="multipart/form-data"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><label>Kaynak<select name="source" required><option value="bank">Banka ekstresi (CSV)</option><option value="paytr">PayTR işlem dökümü (JSON)</option><option value="iyzico">iyzico raporu (CSV)</option></select></label><label>Rapor dosyası<input type="file" name="statement" accept=".csv,.json,text/csv,application/json" required></label><button class="button" type="submit">İçe aktar ve eşleşmeleri öner</button></form></section>';
+        if(in_array(($user['role']??''),['admin','super_admin'],true)) {
+            $localToday = (new \DateTimeImmutable('now', new \DateTimeZone('Europe/Istanbul')))->format('Y-m-d');
+            $localStart = (new \DateTimeImmutable('now', new \DateTimeZone('Europe/Istanbul')))->modify('-1 day')->format('Y-m-d');
+            if ($paymentSettings['paytr_merchant_id'] !== '' && $paymentSettings['paytr_merchant_key'] !== '' && $paymentSettings['paytr_merchant_salt'] !== '') {
+                echo '<section class="box"><h2>PayTR raporunu API üzerinden getir</h2><p class="muted">Kayıtlı ve şifreli PayTR mağaza anahtarları kullanılır. İstek yalnızca bu formu gönderdiğinde yapılır. PayTR en fazla 3 günlük aralığı destekler.</p><form method="post" action="'.$this->url('/admin/finance/import/paytr-fetch').'"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><label>Başlangıç tarihi<input type="date" name="from" value="'.$this->e($localStart).'" required></label><label>Bitiş tarihi<input type="date" name="to" value="'.$this->e($localToday).'" required></label><button class="button" type="submit">PayTR raporunu getir ve içe aktar</button></form></section>';
+            }
+            if ($paymentSettings['iyzico_api_key'] !== '' && $paymentSettings['iyzico_secret_key'] !== '') {
+                echo '<section class="box"><h2>iyzico günlük raporunu API üzerinden getir</h2><p class="muted">Kayıtlı ve şifreli iyzico API anahtarları kullanılır. Her günün raporu sayfalanarak alınır. En fazla 7 günlük aralık; istekler yalnızca formu gönderdiğinde yapılır.</p><form method="post" action="'.$this->url('/admin/finance/import/iyzico-fetch').'"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><label>Başlangıç tarihi<input type="date" name="from" value="'.$this->e($localStart).'" required></label><label>Bitiş tarihi<input type="date" name="to" value="'.$this->e($localToday).'" required></label><button class="button" type="submit">iyzico raporunu getir ve içe aktar</button></form></section>';
+            }
+            if (($paymentSettings['paytr_merchant_id'] === '' || $paymentSettings['paytr_merchant_key'] === '' || $paymentSettings['paytr_merchant_salt'] === '') && ($paymentSettings['iyzico_api_key'] === '' || $paymentSettings['iyzico_secret_key'] === '')) {
+                echo '<section class="box"><p class="muted">API üzerinden rapor almak için önce <a href="'.$this->url('/admin/payments').'">Ödeme ayarları</a> bölümünde sağlayıcı bilgilerini kaydetmelisin. Anahtarlar tekrar görüntülenmez.</p></section>';
+            }
+        }
         echo '<section class="box"><h2>Son içe aktarımlar</h2><div style="overflow-x:auto"><table><thead><tr><th>Tarih</th><th>Kaynak</th><th>Dosya</th><th>Satır</th><th>Eşleşti</th><th>Tutar farklı</th><th>Belirsiz</th><th>Eşleşmedi</th></tr></thead><tbody>';
         if(!$imports)echo '<tr><td colspan="8">Henüz ekstre içe aktarılmadı.</td></tr>';
         foreach($imports as $item)echo '<tr><td>'.$this->e((string)$item['created_at']).'</td><td>'.$this->e(strtoupper((string)$item['source'])).'</td><td>'.$this->e((string)$item['original_filename']).'</td><td>'.(int)$item['total_rows'].'</td><td>'.(int)$item['matched_count'].'</td><td>'.(int)$item['mismatch_count'].'</td><td>'.(int)$item['ambiguous_count'].'</td><td>'.(int)$item['unmatched_count'].'</td></tr>';
@@ -72,6 +92,125 @@ final class StatementImportController
         $this->endPage();
     }
 
+
+    public function fetchPaytr(): void
+    {
+        $user = Auth::user();
+        if (!$user || !in_array(($user['role'] ?? ''), ['admin','super_admin'], true)) { http_response_code(403); echo 'Bu işlem yalnızca yönetici tarafından yapılabilir.'; return; }
+        if (!Auth::verifyCsrf($_POST['_token'] ?? null)) { http_response_code(419); echo 'Güvenlik doğrulaması başarısız.'; return; }
+        try {
+            $settings = $this->paymentSettings();
+            if ($settings['paytr_merchant_id'] === '' || $settings['paytr_merchant_key'] === '' || $settings['paytr_merchant_salt'] === '') {
+                throw new \RuntimeException('PayTR rapor erişimi için ödeme ayarlarında mağaza bilgileri eksik.');
+            }
+            [$from,$to] = $this->validatedReportRange(3);
+            $start = $from.' 00:00:00';
+            $end = $to.' 23:59:59';
+            $merchantId = $settings['paytr_merchant_id'];
+            $merchantKey = $this->vault->decrypt($settings['paytr_merchant_key']);
+            $merchantSalt = $this->vault->decrypt($settings['paytr_merchant_salt']);
+            $token = base64_encode(hash_hmac('sha256', $merchantId.$start.$end.$merchantSalt, $merchantKey, true));
+            $response = GatewayTransport::postForm('https://www.paytr.com/rapor/islem-dokumu', [
+                'merchant_id'=>$merchantId,'start_date'=>$start,'end_date'=>$end,'paytr_token'=>$token,
+            ]);
+            $status = strtolower((string)($response['status'] ?? ''));
+            if ($status === 'failed') {
+                $_SESSION['hostpilot_statement_notice'] = 'Seçilen PayTR tarih aralığında işlem bulunamadı.';
+            } elseif ($status !== 'success') {
+                throw new \RuntimeException('PayTR rapor servisi isteği kabul etmedi. Mağaza yetkilerini ve tarih aralığını kontrol edin.');
+            } else {
+                $contents = json_encode($response, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);
+                $result = StatementImport::import($this->db, 'paytr', 'paytr-api-'.$from.'-'.$to.'.json', $contents, (int)$user['id']);
+                SecurityAudit::record($this->db,'payment.statement_imported',(int)$user['id'],['resource_id'=>(int)$result['import_id'],'action'=>'created']);
+                $_SESSION['hostpilot_statement_notice'] = 'PayTR raporu alındı. '.$result['rows'].' hareket içe aktarıldı: '.json_encode($result['counts'],JSON_UNESCAPED_UNICODE);
+            }
+        } catch (Throwable $exception) {
+            $_SESSION['hostpilot_statement_error'] = $exception->getMessage();
+        }
+        header('Location: '.$this->url('/admin/finance/import'));
+        exit;
+    }
+
+    public function fetchIyzico(): void
+    {
+        $user = Auth::user();
+        if (!$user || !in_array(($user['role'] ?? ''), ['admin','super_admin'], true)) { http_response_code(403); echo 'Bu işlem yalnızca yönetici tarafından yapılabilir.'; return; }
+        if (!Auth::verifyCsrf($_POST['_token'] ?? null)) { http_response_code(419); echo 'Güvenlik doğrulaması başarısız.'; return; }
+        try {
+            $settings = $this->paymentSettings();
+            if ($settings['iyzico_api_key'] === '' || $settings['iyzico_secret_key'] === '') {
+                throw new \RuntimeException('iyzico rapor erişimi için ödeme ayarlarında API bilgileri eksik.');
+            }
+            [$from,$to,$days] = $this->validatedReportRange(7);
+            $apiKey = $this->vault->decrypt($settings['iyzico_api_key']);
+            $secretKey = $this->vault->decrypt($settings['iyzico_secret_key']);
+            $baseUrl = $settings['iyzico_test_mode'] === '1' ? 'https://sandbox-api.iyzipay.com' : 'https://api.iyzipay.com';
+            $allTransactions = [];
+            for ($offset = 0; $offset < $days; $offset++) {
+                $date = (new \DateTimeImmutable($from, new \DateTimeZone('Europe/Istanbul')))->modify('+'.$offset.' days')->format('Y-m-d');
+                $first = GatewayTransport::getJson($baseUrl,'/v2/reporting/payment/transactions',[
+                    'locale'=>'tr','page'=>1,'transactionDate'=>$date,
+                ],$apiKey,$secretKey);
+                if (strtolower((string)($first['status'] ?? '')) !== 'success' || !isset($first['transactions']) || !is_array($first['transactions']) || !array_is_list($first['transactions'])) {
+                    throw new \RuntimeException('iyzico günlük raporu alınamadı. API yetkilerini ve seçilen tarihi kontrol edin.');
+                }
+                $totalPages = (int)($first['totalPageCount'] ?? 1);
+                if ($totalPages < 1 || $totalPages > 100) throw new \RuntimeException('iyzico rapor sayfa sayısı güvenli sınırı aşıyor.');
+                foreach ($first['transactions'] as $transaction) $allTransactions[] = $transaction;
+                for ($page = 2; $page <= $totalPages; $page++) {
+                    $response = GatewayTransport::getJson($baseUrl,'/v2/reporting/payment/transactions',[
+                        'locale'=>'tr','page'=>$page,'transactionDate'=>$date,
+                    ],$apiKey,$secretKey);
+                    if (strtolower((string)($response['status'] ?? '')) !== 'success' || !isset($response['transactions']) || !is_array($response['transactions']) || !array_is_list($response['transactions'])) {
+                        throw new \RuntimeException('iyzico raporunun sonraki sayfası alınamadı.');
+                    }
+                    foreach ($response['transactions'] as $transaction) $allTransactions[] = $transaction;
+                    if (count($allTransactions) > StatementImport::MAX_ROWS) throw new \RuntimeException('iyzico raporu 5.000 hareket sınırını aşıyor; daha kısa tarih aralığı seçin.');
+                }
+                if (count($allTransactions) > StatementImport::MAX_ROWS) throw new \RuntimeException('iyzico raporu 5.000 hareket sınırını aşıyor; daha kısa tarih aralığı seçin.');
+            }
+            if ($allTransactions === []) {
+                $_SESSION['hostpilot_statement_notice'] = 'Seçilen iyzico tarih aralığında işlem bulunamadı.';
+            } else {
+                $contents = json_encode(['status'=>'success','transactions'=>$allTransactions],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);
+                $result = StatementImport::import($this->db,'iyzico','iyzico-api-'.$from.'-'.$to.'.json',$contents,(int)$user['id']);
+                SecurityAudit::record($this->db,'payment.statement_imported',(int)$user['id'],['resource_id'=>(int)$result['import_id'],'action'=>'created']);
+                $_SESSION['hostpilot_statement_notice'] = 'iyzico raporu alındı. '.$result['rows'].' hareket içe aktarıldı: '.json_encode($result['counts'],JSON_UNESCAPED_UNICODE);
+            }
+        } catch (Throwable $exception) {
+            $_SESSION['hostpilot_statement_error'] = $exception->getMessage();
+        }
+        header('Location: '.$this->url('/admin/finance/import'));
+        exit;
+    }
+
+    /** @return array{0:string,1:string,2:int} */
+    private function validatedReportRange(int $maxDays): array
+    {
+        $fromRaw = trim((string)($_POST['from'] ?? ''));
+        $toRaw = trim((string)($_POST['to'] ?? ''));
+        $zone = new \DateTimeZone('Europe/Istanbul');
+        $from = \DateTimeImmutable::createFromFormat('!Y-m-d',$fromRaw,$zone);
+        $fromErrors = \DateTimeImmutable::getLastErrors();
+        $to = \DateTimeImmutable::createFromFormat('!Y-m-d',$toRaw,$zone);
+        $toErrors = \DateTimeImmutable::getLastErrors();
+        if ($from === false || $to === false || ($fromErrors !== false && ($fromErrors['warning_count']>0 || $fromErrors['error_count']>0)) || ($toErrors !== false && ($toErrors['warning_count']>0 || $toErrors['error_count']>0)) || $from->format('Y-m-d') !== $fromRaw || $to->format('Y-m-d') !== $toRaw || $from > $to) {
+            throw new \RuntimeException('Başlangıç ve bitiş tarihlerini kontrol edin.');
+        }
+        $days = (int)$from->diff($to)->days + 1;
+        if ($days > $maxDays) throw new \RuntimeException('Seçilen sağlayıcı raporu en fazla '.$maxDays.' günlük aralık içerebilir.');
+        return [$fromRaw,$toRaw,$days];
+    }
+
+    private function paymentSettings(): array
+    {
+        $defaults = ['paytr_merchant_id'=>'','paytr_merchant_key'=>'','paytr_merchant_salt'=>'','iyzico_api_key'=>'','iyzico_secret_key'=>'','iyzico_test_mode'=>'1'];
+        $query = $this->db->query("SELECT setting_key,setting_value FROM settings WHERE setting_group='payment'");
+        foreach ($query->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            if (array_key_exists((string)$row['setting_key'],$defaults)) $defaults[(string)$row['setting_key']] = (string)$row['setting_value'];
+        }
+        return $defaults;
+    }
 
     public function review(): void
     {
