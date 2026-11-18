@@ -60,6 +60,21 @@ $pdo->exec("CREATE TABLE ticket_messages (
     CONSTRAINT fk_ticket_messages_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+$pdo->exec("CREATE TABLE knowledgebase_articles (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(190) NOT NULL,
+    slug VARCHAR(190) NOT NULL,
+    excerpt TEXT NULL,
+    content LONGTEXT NOT NULL,
+    category VARCHAR(100) NOT NULL DEFAULT 'Genel',
+    status VARCHAR(20) NOT NULL DEFAULT 'published',
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    UNIQUE KEY uq_kb_slug (slug),
+    KEY idx_kb_status_sort (status, sort_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
 $pdo->prepare("INSERT INTO users (name,first_name,last_name,email,username,password_hash,role,status,created_at,updated_at) VALUES ('Ada Lovelace',NULL,NULL,:email,:username,'test-hash','admin','active',UTC_TIMESTAMP(),UTC_TIMESTAMP())")
     ->execute([':email' => 'ada@example.test', ':username' => 'ada-admin']);
 
@@ -67,7 +82,7 @@ $pdo->exec("INSERT INTO users (name,email,username,password_hash,role,status,cre
 
 $directory = dirname(__DIR__) . '/database/migrations';
 $files = MigrationRunner::discover($directory);
-if (count($files) !== 35) throw new RuntimeException('Expected 35 SQL migrations; discovered ' . count($files) . '.');
+if (count($files) !== 36) throw new RuntimeException('Expected 36 SQL migrations; discovered ' . count($files) . '.');
 
 // Simulate interruption after the first DDL statement; the migration must safely retry.
 $firstSql = file_get_contents($files[0]['path']);
@@ -83,15 +98,15 @@ try {
     if (!str_contains($exception->getMessage(), 'Explicit administrator confirmation')) throw $exception;
 }
 $applied = MigrationRunner::runPending($pdo, $directory, true);
-if (count($applied) !== 35) throw new RuntimeException('Expected 35 applied migrations; got ' . count($applied) . '.');
+if (count($applied) !== 36) throw new RuntimeException('Expected 36 applied migrations; got ' . count($applied) . '.');
 $appliedCount = (int)$pdo->query('SELECT COUNT(*) FROM migrations')->fetchColumn();
-if ($appliedCount !== 35) throw new RuntimeException('Expected exactly 35 migration tracking rows.');
+if ($appliedCount !== 36) throw new RuntimeException('Expected exactly 36 migration tracking rows.');
 if (MigrationRunner::pending($pdo, $directory) !== []) throw new RuntimeException('Pending migrations remain after successful run.');
 if (MigrationRunner::runPending($pdo, $directory, true) !== []) throw new RuntimeException('Second run was not a no-op.');
 
 if ((int)$pdo->query("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='email_verified_at'")->fetchColumn() !== 1) throw new RuntimeException('Email verification migration did not add email_verified_at to a legacy users table.');
 if ((int)$pdo->query("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='auth_version'")->fetchColumn() !== 1) throw new RuntimeException('Session security migration did not add auth_version to a legacy users table.');
-$requiredTables = ['product_groups','products','product_pricing','orders','order_items','services','invoices','invoice_items','payment_transactions','servers','provisioning_jobs','service_package_changes','email_outbox','domain_registrations','domain_renewals','password_reset_tokens','staff_permissions','staff_departments','email_verification_tokens','security_audit_logs', 'admin_mfa', 'admin_mfa_recovery_codes','customer_mfa','customer_mfa_recovery_codes','privacy_requests','ticket_attachments','payment_reconciliations','payment_refunds','payment_statement_imports','payment_statement_movements','ticket_internal_notes','ticket_assignments','support_departments'];
+$requiredTables = ['product_groups','products','product_pricing','orders','order_items','services','invoices','invoice_items','payment_transactions','servers','provisioning_jobs','service_package_changes','email_outbox','domain_registrations','domain_renewals','password_reset_tokens','staff_permissions','staff_departments','email_verification_tokens','security_audit_logs', 'admin_mfa', 'admin_mfa_recovery_codes','customer_mfa','customer_mfa_recovery_codes','privacy_requests','ticket_attachments','payment_reconciliations','payment_refunds','payment_statement_imports','payment_statement_movements','ticket_internal_notes','ticket_assignments','support_departments','knowledgebase_feedback'];
 $check = $pdo->prepare('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table_name');
 foreach ($requiredTables as $table) {
     $check->execute([':table_name' => $table]);
@@ -180,7 +195,7 @@ $verified=$pdo->prepare("SELECT status,email_verified_at FROM users WHERE id=:id
 $verified->execute([':id'=>$verificationUserId]);
 $verifiedRow=$verified->fetch(PDO::FETCH_ASSOC);
 if (($verifiedRow['status']??'')!=='active'||empty($verifiedRow['email_verified_at'])) throw new RuntimeException('Email verification did not activate the pending customer.');
-echo 'MySQL/MariaDB migration integration passed: 35 migrations, customer/admin MFA and refund ledger tables, staff defaults, partial-DDL retry, confirmation guard, tracking and idempotent second run.' . PHP_EOL;
+echo 'MySQL/MariaDB migration integration passed: 36 migrations, customer/admin MFA and refund ledger tables, staff defaults, partial-DDL retry, confirmation guard, tracking and idempotent second run.' . PHP_EOL;
 
 // Compare the SQL migration path with the retained legacy PHP migration path
 // on an independent clean schema. This remains an ephemeral CI-only database.
@@ -236,6 +251,21 @@ $legacy->exec("CREATE TABLE ticket_messages (
     CONSTRAINT fk_ticket_messages_ticket FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE,
     CONSTRAINT fk_ticket_messages_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+$legacy->exec("CREATE TABLE knowledgebase_articles (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(190) NOT NULL,
+    slug VARCHAR(190) NOT NULL,
+    excerpt TEXT NULL,
+    content LONGTEXT NOT NULL,
+    category VARCHAR(100) NOT NULL DEFAULT 'Genel',
+    status VARCHAR(20) NOT NULL DEFAULT 'published',
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    UNIQUE KEY uq_kb_slug (slug),
+    KEY idx_kb_status_sort (status, sort_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
 $seedUser = $legacy->prepare("INSERT INTO users (name,first_name,last_name,email,username,password_hash,role,status,created_at,updated_at) VALUES ('Ada Lovelace',NULL,NULL,:email,:username,'test-hash','admin','active',UTC_TIMESTAMP(),UTC_TIMESTAMP())");
 $seedUser->execute([':email' => 'ada@example.test', ':username' => 'ada-admin']);
 
@@ -247,7 +277,7 @@ require_once dirname(__DIR__) . '/app/Core/AdminProfileMigration.php';
 \HostPilot\Core\AdminProfileMigration::migrate($legacy);
 
 $schemaSignature = static function (PDO $connection): array {
-    $tables = $connection->query("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE' AND TABLE_NAME NOT IN ('users','migrations','staff_permissions','staff_departments','email_verification_tokens','security_audit_logs','admin_mfa','admin_mfa_recovery_codes','customer_mfa','customer_mfa_recovery_codes','privacy_requests','ticket_attachments','ticket_internal_notes','ticket_assignments','support_departments') ORDER BY TABLE_NAME")->fetchAll(PDO::FETCH_COLUMN);
+    $tables = $connection->query("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE' AND TABLE_NAME NOT IN ('users','migrations','staff_permissions','staff_departments','email_verification_tokens','security_audit_logs','admin_mfa','admin_mfa_recovery_codes','customer_mfa','customer_mfa_recovery_codes','privacy_requests','ticket_attachments','ticket_internal_notes','ticket_assignments','support_departments','knowledgebase_feedback') ORDER BY TABLE_NAME")->fetchAll(PDO::FETCH_COLUMN);
     $signature = [];
     foreach ($tables as $table) {
         $columns = $connection->prepare("SELECT COLUMN_NAME,COLUMN_TYPE,IS_NULLABLE,COLUMN_DEFAULT,EXTRA,COLUMN_KEY,ORDINAL_POSITION FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=:table_name ORDER BY ORDINAL_POSITION");
@@ -297,11 +327,11 @@ foreach ([$pdo, $legacy] as $connection) {
     }
 }
 $legacyPending = MigrationRunner::pending($legacy, $directory);
-if ($legacyPending !== ['20261115_0002_staff_permissions_departments', '20261115_0003_customer_email_verification', '20261115_0004_user_auth_version', '20261115_0005_security_audit_logs', '20261116_0001_admin_mfa', '20261116_0002_privacy_requests', '20261116_0003_ticket_attachments', '20261116_0004_payment_reconciliations', '20261116_0005_customer_mfa', '20261117_0001_payment_refund_ledger', '20261117_0002_payment_statement_imports', '20261117_0003_payment_statement_review', '20261118_0001_ticket_internal_notes', '20261118_0002_ticket_assignments', '20261118_0003_support_departments']) {
+if ($legacyPending !== ['20261115_0002_staff_permissions_departments', '20261115_0003_customer_email_verification', '20261115_0004_user_auth_version', '20261115_0005_security_audit_logs', '20261116_0001_admin_mfa', '20261116_0002_privacy_requests', '20261116_0003_ticket_attachments', '20261116_0004_payment_reconciliations', '20261116_0005_customer_mfa', '20261117_0001_payment_refund_ledger', '20261117_0002_payment_statement_imports', '20261117_0003_payment_statement_review', '20261118_0001_ticket_internal_notes', '20261118_0002_ticket_assignments', '20261118_0003_support_departments', '20261118_0004_knowledgebase_feedback']) {
     throw new RuntimeException('SQL runner did not isolate the new staff permission migration on a legacy-upgraded database: ' . json_encode($legacyPending));
 }
 $legacyApplied = MigrationRunner::runPending($legacy, $directory, true);
-if ($legacyApplied !== ['20261115_0002_staff_permissions_departments', '20261115_0003_customer_email_verification', '20261115_0004_user_auth_version', '20261115_0005_security_audit_logs', '20261116_0001_admin_mfa', '20261116_0002_privacy_requests', '20261116_0003_ticket_attachments', '20261116_0004_payment_reconciliations', '20261116_0005_customer_mfa', '20261117_0001_payment_refund_ledger', '20261117_0002_payment_statement_imports', '20261117_0003_payment_statement_review', '20261118_0001_ticket_internal_notes', '20261118_0002_ticket_assignments', '20261118_0003_support_departments']) {
+if ($legacyApplied !== ['20261115_0002_staff_permissions_departments', '20261115_0003_customer_email_verification', '20261115_0004_user_auth_version', '20261115_0005_security_audit_logs', '20261116_0001_admin_mfa', '20261116_0002_privacy_requests', '20261116_0003_ticket_attachments', '20261116_0004_payment_reconciliations', '20261116_0005_customer_mfa', '20261117_0001_payment_refund_ledger', '20261117_0002_payment_statement_imports', '20261117_0003_payment_statement_review', '20261118_0001_ticket_internal_notes', '20261118_0002_ticket_assignments', '20261118_0003_support_departments', '20261118_0004_knowledgebase_feedback']) {
     throw new RuntimeException('SQL runner did not apply only the pending security and payment migrations to a legacy-upgraded database.');
 }
 if (MigrationRunner::pending($legacy, $directory) !== []) {
