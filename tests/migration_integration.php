@@ -297,11 +297,11 @@ foreach ([$pdo, $legacy] as $connection) {
     }
 }
 $legacyPending = MigrationRunner::pending($legacy, $directory);
-if ($legacyPending !== ['20261115_0002_staff_permissions_departments', '20261115_0003_customer_email_verification', '20261115_0004_user_auth_version', '20261115_0005_security_audit_logs', '20261116_0001_admin_mfa', '20261116_0002_privacy_requests', '20261116_0003_ticket_attachments', '20261116_0004_payment_reconciliations', '20261116_0005_customer_mfa', '20261117_0001_payment_refund_ledger', '20261117_0002_payment_statement_imports', '20261117_0003_payment_statement_review']) {
+if ($legacyPending !== ['20261115_0002_staff_permissions_departments', '20261115_0003_customer_email_verification', '20261115_0004_user_auth_version', '20261115_0005_security_audit_logs', '20261116_0001_admin_mfa', '20261116_0002_privacy_requests', '20261116_0003_ticket_attachments', '20261116_0004_payment_reconciliations', '20261116_0005_customer_mfa', '20261117_0001_payment_refund_ledger', '20261117_0002_payment_statement_imports', '20261117_0003_payment_statement_review', '20261118_0001_ticket_internal_notes']) {
     throw new RuntimeException('SQL runner did not isolate the new staff permission migration on a legacy-upgraded database: ' . json_encode($legacyPending));
 }
 $legacyApplied = MigrationRunner::runPending($legacy, $directory, true);
-if ($legacyApplied !== ['20261115_0002_staff_permissions_departments', '20261115_0003_customer_email_verification', '20261115_0004_user_auth_version', '20261115_0005_security_audit_logs', '20261116_0001_admin_mfa', '20261116_0002_privacy_requests', '20261116_0003_ticket_attachments', '20261116_0004_payment_reconciliations', '20261116_0005_customer_mfa', '20261117_0001_payment_refund_ledger', '20261117_0002_payment_statement_imports', '20261117_0003_payment_statement_review']) {
+if ($legacyApplied !== ['20261115_0002_staff_permissions_departments', '20261115_0003_customer_email_verification', '20261115_0004_user_auth_version', '20261115_0005_security_audit_logs', '20261116_0001_admin_mfa', '20261116_0002_privacy_requests', '20261116_0003_ticket_attachments', '20261116_0004_payment_reconciliations', '20261116_0005_customer_mfa', '20261117_0001_payment_refund_ledger', '20261117_0002_payment_statement_imports', '20261117_0003_payment_statement_review', '20261118_0001_ticket_internal_notes']) {
     throw new RuntimeException('SQL runner did not apply only the pending security and payment migrations to a legacy-upgraded database.');
 }
 if (MigrationRunner::pending($legacy, $directory) !== []) {
