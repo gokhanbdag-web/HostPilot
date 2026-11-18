@@ -109,6 +109,8 @@ jobs:
         run: php tests/customer_announcements_policy.php
       - name: Test registrar registration action tracking policy
         run: php tests/registrar_action_tracking_policy.php
+      - name: Test multi-item cart checkout policy
+        run: php tests/cart_checkout_policy.php
       - name: Test ClamAV scanner policy
         run: php tests/clamav_scanner.php
       - name: Prevent Composer dependency
