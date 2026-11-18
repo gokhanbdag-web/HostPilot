@@ -17,13 +17,13 @@ if (count($paytrRows)!==2 || $paytrRows[0]['type']!=='capture' || $paytrRows[0][
     throw new RuntimeException('PayTR native JSON parsing or normalization failed.');
 }
 
-$iyzicoCsv = "transactionDate,transactionType,paymentTxId,paymentId,conversationId,paidPrice,transactionCurrency,refundConversationId,buyerName,buyerEmail\n"
-    ."2026-01-13 10:30:00,AUTH,88001,77001,order-77001,150.00,TRY,,, \n"
-    ."2026-01-13 11:30:00,REFUND,88002,77001,order-77001,25.00,TRY,refund-order-1,Private Buyer,private@example.test\n"
-    ."2026-01-13 12:30:00,PREAUTH,88003,77002,order-77002,50.00,TRY,,,\n"
-    ."2026-01-13 13:30:00,CANCEL,88004,77003,order-77003,75.00,TRY,,,\n";
+$iyzicoCsv = "transactionDate,transactionType,paymentTxId,paymentId,conversationId,price,paidPrice,transactionCurrency,refundConversationId,buyerName,buyerEmail\n"
+    ."2026-01-13 10:30:00,AUTH,88001,77001,order-77001,150.00,150.00,TRY,,, \n"
+    ."2026-01-13 11:30:00,REFUND,88002,77001,order-77001,25.00,150.00,TRY,refund-order-1,Private Buyer,private@example.test\n"
+    ."2026-01-13 12:30:00,PREAUTH,88003,77002,order-77002,50.00,50.00,TRY,,,\n"
+    ."2026-01-13 13:30:00,CANCEL,88004,77003,order-77003,75.00,75.00,TRY,,,\n";
 $iyzicoRows = StatementImport::parseIyzicoCsv($iyzicoCsv);
-if (count($iyzicoRows)!==4 || $iyzicoRows[0]['type']!=='capture' || $iyzicoRows[0]['reference']!=='77001' || $iyzicoRows[1]['type']!=='refund' || $iyzicoRows[1]['reference']!=='refund-order-1' || $iyzicoRows[2]['type']!=='unknown' || $iyzicoRows[3]['type']!=='unknown') {
+if (count($iyzicoRows)!==4 || $iyzicoRows[0]['type']!=='capture' || $iyzicoRows[0]['reference']!=='77001' || $iyzicoRows[1]['type']!=='refund' || $iyzicoRows[1]['reference']!=='77001' || $iyzicoRows[1]['amount']!=='25.00' || $iyzicoRows[2]['type']!=='unknown' || $iyzicoRows[3]['type']!=='unknown') {
     throw new RuntimeException('iyzico SFTP CSV mapping failed.');
 }
 if (str_contains(json_encode($iyzicoRows, JSON_THROW_ON_ERROR), 'private@example.test') || str_contains(json_encode($iyzicoRows, JSON_THROW_ON_ERROR), 'Private Buyer')) {
