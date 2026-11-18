@@ -30,6 +30,16 @@ $payRows=StatementImport::parseFile($paytr,'paytr');
 if(count($payRows)!==2||$payRows[0]['reference']!=='merchant-oid-1'||$payRows[0]['type']!=='capture'||$payRows[0]['currency']!=='TRY'||$payRows[1]['type']!=='refund'||$payRows[1]['amount']!=='5.00')throw new RuntimeException('PayTR JSON report mapping failed.');
 if($payRows[0]['date']!=='2026-11-16 21:00:00')throw new RuntimeException('PayTR local date-only UTC normalization failed.');
 
+
+$iyzicoApi=json_encode(['status'=>'success','transactions'=>[
+ ['transactionType'=>'PAYMENT','transactionDate'=>'2026-11-17 13:30:00','transactionId'=>9001,'paymentTxId'=>88001,'paymentId'=>77001,'paidPrice'=>'150.00','price'=>'125.00','transactionCurrency'=>'TRY','transactionStatus'=>2,'buyerEmail'=>'private@example.test'],
+ ['transactionType'=>'REFUND','transactionDate'=>'2026-11-17 14:00:00','transactionId'=>9002,'paymentTxId'=>88001,'paymentId'=>77001,'paidPrice'=>'150.00','price'=>'25.00','transactionCurrency'=>'TRY','buyerEmail'=>'private@example.test'],
+ ['transactionType'=>'PAYMENT','transactionDate'=>'2026-11-17 14:30:00','transactionId'=>9003,'paymentTxId'=>88002,'paymentId'=>77002,'paidPrice'=>'50.00','price'=>'50.00','transactionCurrency'=>'TRY','transactionStatus'=>1],
+]],JSON_THROW_ON_ERROR);
+$apiRows=StatementImport::parseFile($iyzicoApi,'iyzico');
+if(count($apiRows)!==3||$apiRows[0]['type']!=='capture'||$apiRows[0]['reference']!=='77001'||$apiRows[0]['amount']!=='150.00'||$apiRows[1]['type']!=='refund'||$apiRows[1]['reference']!=='9002'||$apiRows[1]['amount']!=='25.00'||$apiRows[2]['type']!=='unknown')throw new RuntimeException('iyzico daily reporting API JSON mapping failed.');
+if($apiRows[0]['date']!=='2026-11-17 10:30:00'||str_contains(json_encode($apiRows,JSON_THROW_ON_ERROR),'private@example.test'))throw new RuntimeException('iyzico API local time or PII filtering failed.');
+
 $invalid=[
  "reference,date,description,amount,currency,type\n2026-11-17 10:30:00,TX,Test,1,TRY,capture\n",
  "date,reference,description,amount,currency,type\n2026-11-17,TX,Test,1,TRY,capture\n",
