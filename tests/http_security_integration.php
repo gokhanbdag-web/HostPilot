@@ -45,6 +45,7 @@ $admin = $makeUser('HTTP Admin', 'http-admin@example.test', 'http-admin', 'admin
 $superAdmin = $makeUser('HTTP Super Admin', 'http-super@example.test', 'http-super', 'super_admin');
 $financeStaff = $makeUser('HTTP Finance Staff', 'http-finance@example.test', 'http-finance', 'staff');
 $c = $makeUser('HTTP Erasure Customer', 'http-c@example.test', 'http-customer', 'customer');
+$statusCustomer = $makeUser('HTTP Status Customer', 'http-status@example.test', 'http-status-customer', 'customer');
 $pdo->prepare("INSERT INTO staff_permissions(user_id,permission,created_at) VALUES(:id,'support.view',UTC_TIMESTAMP())")->execute([':id'=>$staff]);
 $pdo->prepare("INSERT INTO staff_permissions(user_id,permission,created_at) VALUES(:id,'dashboard.view',UTC_TIMESTAMP())")->execute([':id'=>$staff]);
 $pdo->prepare("INSERT INTO staff_departments(user_id,department,created_at) VALUES(:id,'General Support',UTC_TIMESTAMP())")->execute([':id'=>$staff]);
@@ -69,6 +70,7 @@ $orderA = (int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO orders(order_number,user_id,status,currency,subtotal,tax_total,total,created_at,updated_at) VALUES('HTTP-B-ORDER',:user,'paid','TRY',100,0,100,UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':user'=>$b]);
 $orderB = (int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO services(user_id,product_id,order_id,domain,status,billing_cycle,amount,created_at,updated_at) VALUES(:user,:product,:order_id,:domain,'active','monthly',100,UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':user'=>$b, ':product'=>$product, ':order_id'=>$orderB, ':domain'=>'private-customer-b.example']);
+$serviceB = (int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,status,currency,subtotal,tax_total,total,amount_paid,issued_at,created_at,updated_at) VALUES('HTTP-B-INV',:order_id,:user,'unpaid','TRY',100,0,100,0,UTC_TIMESTAMP(),UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':order_id'=>$orderB, ':user'=>$b]);
 $invoiceB = (int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO invoice_items(invoice_id,description,quantity,unit_price,tax_rate,tax_amount,line_total,created_at) VALUES(:invoice,'Customer B confidential line',1,100,0,0,100,UTC_TIMESTAMP())")->execute([':invoice'=>$invoiceB]);
@@ -381,6 +383,25 @@ try {
         'customer MFA enrollment, challenge and recovery actions are security-audited');
     $login('/admin/login','http-staff@example.test',$cookieStaff);
     $login('/admin/login','http-admin@example.test',$cookieAdmin);
+    $customerDetail=$request('/admin/customers/'.$b,$cookieAdmin);
+    $assert($customerDetail['status']===200&&str_contains($customerDetail['body'],'http-b@example.test')
+        &&str_contains($customerDetail['body'],'private-customer-b.example')&&str_contains($customerDetail['body'],'HTTP-B-INV'),
+        'admin customer detail consolidates customer orders invoices services and support');
+    $serviceDetail=$request('/admin/services/'.$serviceB,$cookieAdmin);
+    $assert($serviceDetail['status']===200&&str_contains($serviceDetail['body'],'private-customer-b.example')
+        &&str_contains($serviceDetail['body'],'HTTP-B-INV')&&str_contains($serviceDetail['body'],'Uzak hesap parolası bu ekranda gösterilmez'),
+        'admin service detail shows lifecycle and invoice history without revealing remote password');
+    $statusDetail=$request('/admin/customers/'.$statusCustomer,$cookieAdmin);
+    $statusBefore=$pdo->prepare('SELECT auth_version FROM users WHERE id=:id');$statusBefore->execute([':id'=>$statusCustomer]);$versionBefore=(int)$statusBefore->fetchColumn();
+    $disableCustomer=$request('/admin/customers/status',$cookieAdmin,'POST',['_token'=>$getToken($statusDetail['body']),'customer_id'=>$statusCustomer,'status'=>'disabled']);
+    $statusAfter=$pdo->prepare('SELECT status,auth_version FROM users WHERE id=:id');$statusAfter->execute([':id'=>$statusCustomer]);$statusRow=$statusAfter->fetch(PDO::FETCH_ASSOC);
+    $assert($disableCustomer['status']===200&&($statusRow['status']??'')==='disabled'&&(int)$statusRow['auth_version']>$versionBefore,
+        'admin can disable a customer with CSRF protection and revoke existing sessions');
+    $statusDetail=$request('/admin/customers/'.$statusCustomer,$cookieAdmin);
+    $enableCustomer=$request('/admin/customers/status',$cookieAdmin,'POST',['_token'=>$getToken($statusDetail['body']),'customer_id'=>$statusCustomer,'status'=>'active']);
+    $statusAfter->execute([':id'=>$statusCustomer]);$statusRow=$statusAfter->fetch(PDO::FETCH_ASSOC);
+    $assert($enableCustomer['status']===200&&($statusRow['status']??'')==='active',
+        'admin can safely reactivate a previously disabled customer account');
     $login('/admin/login','http-super@example.test',$cookieSuper);
     $reportsPage=$request('/admin/reports',$cookieAdmin);
     $assert($reportsPage['status']===200&&str_contains($reportsPage['body'],'İşletme raporları')
