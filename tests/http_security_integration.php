@@ -51,6 +51,19 @@ $pdo->prepare("INSERT INTO staff_departments(user_id,department,created_at) VALU
 
 $pdo->exec("INSERT INTO products(name,slug,product_type,status,featured,sort_order,created_at,updated_at) VALUES('HTTP Test Hosting','http-test-hosting','hosting','active',0,0,UTC_TIMESTAMP(),UTC_TIMESTAMP())");
 $product = (int)$pdo->lastInsertId();
+
+$cartProductInsert=$pdo->prepare("INSERT INTO products(name,slug,product_type,status,featured,sort_order,created_at,updated_at) VALUES(:name,:slug,:type,'active',0,0,UTC_TIMESTAMP(),UTC_TIMESTAMP())");
+$cartPriceInsert=$pdo->prepare("INSERT INTO product_pricing(product_id,currency,billing_cycle,price,setup_fee,is_active,created_at,updated_at) VALUES(:product,:currency,:cycle,:price,:setup,1,UTC_TIMESTAMP(),UTC_TIMESTAMP())");
+$makeCartProduct=static function(string $name,string $slug,string $type,string $currency,string $cycle,string $price,string $setup)use($pdo,$cartProductInsert,$cartPriceInsert):int{
+    $cartProductInsert->execute([':name'=>$name,':slug'=>$slug,':type'=>$type]);$id=(int)$pdo->lastInsertId();
+    $cartPriceInsert->execute([':product'=>$id,':currency'=>$currency,':cycle'=>$cycle,':price'=>$price,':setup'=>$setup]);return $id;
+};
+$cartHostingA=$makeCartProduct('HTTP Cart Hosting A','http-cart-hosting-a','hosting','TRY','monthly','100.00','25.00');
+$cartHostingB=$makeCartProduct('HTTP Cart Hosting B','http-cart-hosting-b','hosting','TRY','annually','200.00','10.00');
+$cartUsdProduct=$makeCartProduct('HTTP Cart USD Product','http-cart-usd','ssl','USD','monthly','50.00','0.00');
+$cartDomainA=$makeCartProduct('HTTP Cart Domain A','http-cart-domain-a','domain','TRY','annually','500.00','0.00');
+$cartDomainB=$makeCartProduct('HTTP Cart Domain B','http-cart-domain-b','domain','TRY','annually','600.00','0.00');
+
 $pdo->prepare("INSERT INTO orders(order_number,user_id,status,currency,subtotal,tax_total,total,created_at,updated_at) VALUES('HTTP-A-ORDER',:user,'paid','TRY',100,0,100,UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':user'=>$a]);
 $orderA = (int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO orders(order_number,user_id,status,currency,subtotal,tax_total,total,created_at,updated_at) VALUES('HTTP-B-ORDER',:user,'paid','TRY',100,0,100,UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([':user'=>$b]);
@@ -205,7 +218,85 @@ $cookieFinance = sys_get_temp_dir().'/hp-http-finance-'.getmypid().'.cookie';
 $cookieCron = sys_get_temp_dir().'/hp-http-cron-'.getmypid().'.cookie';
 try {
     for ($i=0;$i<20;$i++) { $probe=@fsockopen('127.0.0.1',8091,$errno,$errstr,0.2); if($probe){fclose($probe);break;} usleep(100000); }
+    // A guest can build a cart before login; the session cart must survive customer authentication.
+    $guestProductPage=$request('/product/http-cart-hosting-a',$cookieA);
+    $guestAdd=$request('/cart/add',$cookieA,'POST',[
+        '_token'=>$getToken($guestProductPage['body']),'product_id'=>$cartHostingA,'billing_cycle'=>'monthly',
+    ]);
+    $assert($guestAdd['status']===200&&str_contains($guestAdd['body'],'Alışveriş sepetiniz')&&str_contains($guestAdd['body'],'HTTP Cart Hosting A'),
+        'guest can add a product to the session cart before login');
     $login('/client/login','http-a@example.test',$cookieA);
+    $cartAfterLogin=$request('/cart',$cookieA);
+    $assert($cartAfterLogin['status']===200&&str_contains($cartAfterLogin['body'],'HTTP Cart Hosting A'),
+        'guest cart is preserved after customer login');
+    $productBPage=$request('/product/http-cart-hosting-b',$cookieA);
+    $addB=$request('/cart/add',$cookieA,'POST',[
+        '_token'=>$getToken($productBPage['body']),'product_id'=>$cartHostingB,'billing_cycle'=>'annually',
+    ]);
+    $assert($addB['status']===200&&str_contains($addB['body'],'HTTP Cart Hosting A')&&str_contains($addB['body'],'HTTP Cart Hosting B'),
+        'cart accepts multiple products in a single currency');
+    $duplicateAdd=$request('/cart/add',$cookieA,'POST',[
+        '_token'=>$getToken($productBPage['body']),'product_id'=>$cartHostingA,'billing_cycle'=>'monthly',
+    ]);
+    $assert($duplicateAdd['status']===409,'cart prevents duplicate product and billing-cycle entries');
+    $usdPage=$request('/product/http-cart-usd',$cookieA);
+    $currencyAdd=$request('/cart/add',$cookieA,'POST',[
+        '_token'=>$getToken($usdPage['body']),'product_id'=>$cartUsdProduct,'billing_cycle'=>'monthly',
+    ]);
+    $assert($currencyAdd['status']===409,'cart prevents mixed-currency orders');
+    $domainPage=$request('/product/http-cart-domain-a',$cookieA);
+    $domainFields=['domain_name'=>'cart-domain.example','addressLine1'=>'Test Address 1','city'=>'Ankara','country'=>'TR','zipcode'=>'06000','phoneCountryCode'=>'90','phone'=>'5321234567'];
+    $domainAdd=$request('/cart/add',$cookieA,'POST',array_merge(['_token'=>$getToken($domainPage['body']),'product_id'=>$cartDomainA,'billing_cycle'=>'annually'],$domainFields));
+    $assert($domainAdd['status']===200&&str_contains($domainAdd['body'],'cart-domain.example'),
+        'cart accepts one domain with validated registrant details');
+    $domainPageB=$request('/product/http-cart-domain-b',$cookieA);
+    $domainSecond=$request('/cart/add',$cookieA,'POST',array_merge(['_token'=>$getToken($domainPageB['body']),'product_id'=>$cartDomainB,'billing_cycle'=>'annually'],array_merge($domainFields,['domain_name'=>'cart-domain-two.example'])));
+    $assert($domainSecond['status']===409,'cart prevents a second domain in the same order');
+    $invalidRemove=$request('/cart/remove',$cookieA,'POST',['_token'=>'invalid','cart_key'=>$cartDomainA.':annually']);
+    $assert($invalidRemove['status']===400,'cart removal rejects invalid CSRF tokens');
+    $cartPageBeforeRemove=$request('/cart',$cookieA);
+    $removeDomain=$request('/cart/remove',$cookieA,'POST',['_token'=>$getToken($cartPageBeforeRemove['body']),'cart_key'=>$cartDomainA.':annually']);
+    $assert($removeDomain['status']===200&&!str_contains($removeDomain['body'],'cart-domain.example'),
+        'customer can remove a domain from the cart using CSRF protection');
+    // Price and setup-fee changes made after adding items are reflected at checkout.
+    $pdo->prepare("UPDATE product_pricing SET price='220.00',setup_fee='15.00' WHERE product_id=:id AND billing_cycle='annually'")->execute([':id'=>$cartHostingB]);
+    $cartPageBeforeCheckout=$request('/cart',$cookieA);
+    $assert(str_contains($cartPageBeforeCheckout['body'],'235,00')&&str_contains($cartPageBeforeCheckout['body'],'15,00'),
+        'cart re-reads current product pricing and setup fees');
+    $cartCheckout=$request('/order/create',$cookieA,'POST',['_token'=>$getToken($cartPageBeforeCheckout['body'])]);
+    $assert($cartCheckout['status']===200&&str_contains($cartCheckout['body'],'Faturalarım'),
+        'customer can create one consolidated order and invoice from multiple cart items');
+    $cartOrderQuery=$pdo->prepare('SELECT id,subtotal,total,currency FROM orders WHERE user_id=:user ORDER BY id DESC LIMIT 1');
+    $cartOrderQuery->execute([':user'=>$a]);$cartOrder=$cartOrderQuery->fetch(PDO::FETCH_ASSOC);
+    $cartOrderItems=$pdo->prepare('SELECT COUNT(*) AS item_count,SUM(unit_price) AS unit_total,SUM(line_total) AS line_total FROM order_items WHERE order_id=:id');
+    $cartOrderItems->execute([':id'=>$cartOrder['id']]);$cartOrderItemTotals=$cartOrderItems->fetch(PDO::FETCH_ASSOC);
+    $cartInvoiceQuery=$pdo->prepare('SELECT id,subtotal,total FROM invoices WHERE order_id=:id LIMIT 1');
+    $cartInvoiceQuery->execute([':id'=>$cartOrder['id']]);$cartInvoice=$cartInvoiceQuery->fetch(PDO::FETCH_ASSOC);
+    $cartInvoiceItems=$pdo->prepare('SELECT COUNT(*) AS item_count,SUM(line_total) AS line_total FROM invoice_items WHERE invoice_id=:id');
+    $cartInvoiceItems->execute([':id'=>$cartInvoice['id']]);$cartInvoiceItemTotals=$cartInvoiceItems->fetch(PDO::FETCH_ASSOC);
+    $assert(is_array($cartOrder)&&is_array($cartInvoice)&&($cartOrder['currency']??'')==='TRY'
+        &&(float)$cartOrder['subtotal']===360.0&&(float)$cartOrder['total']===360.0
+        &&(int)$cartOrderItemTotals['item_count']===2&&(float)$cartOrderItemTotals['unit_total']===360.0&&(float)$cartOrderItemTotals['line_total']===360.0
+        &&(float)$cartInvoice['subtotal']===360.0&&(float)$cartInvoice['total']===360.0
+        &&(int)$cartInvoiceItemTotals['item_count']===4&&(float)$cartInvoiceItemTotals['line_total']===360.0,
+        'order items, setup fees and one invoice reconcile to the exact multi-item total');
+    $cartAfterCheckout=$request('/cart',$cookieA);
+    $assert(str_contains($cartAfterCheckout['body'],'Sepetiniz şu anda boş'),
+        'successful checkout clears the session cart');
+    $domainPage=$request('/product/http-cart-domain-a',$cookieA);
+    $domainAdd=$request('/cart/add',$cookieA,'POST',array_merge(['_token'=>$getToken($domainPage['body']),'product_id'=>$cartDomainA,'billing_cycle'=>'annually'],$domainFields));
+    $domainCartPage=$request('/cart',$cookieA);
+    $domainCheckout=$request('/order/create',$cookieA,'POST',['_token'=>$getToken($domainCartPage['body'])]);
+    $domainOrderQuery=$pdo->prepare('SELECT id FROM orders WHERE user_id=:user ORDER BY id DESC LIMIT 1');
+    $domainOrderQuery->execute([':user'=>$a]);$domainOrderId=(int)$domainOrderQuery->fetchColumn();
+    $domainRegistration=$pdo->prepare('SELECT domain_name,years,status,registrar_payload_enc FROM domain_registrations WHERE order_id=:id LIMIT 1');
+    $domainRegistration->execute([':id'=>$domainOrderId]);$domainRegistrationRow=$domainRegistration->fetch(PDO::FETCH_ASSOC);
+    $assert($domainCheckout['status']===200&&is_array($domainRegistrationRow)
+        &&$domainRegistrationRow['domain_name']==='cart-domain.example'&&(int)$domainRegistrationRow['years']===1
+        &&$domainRegistrationRow['status']==='awaiting_payment'&&$domainRegistrationRow['registrar_payload_enc']!=='',
+        'single-domain checkout preserves encrypted registrar payload and creates one pending domain registration');
+
+    $login('/client/login','http-b@example.test',$cookieB);
     $login('/client/login','http-b@example.test',$cookieB);
     $login('/client/login','http-c@example.test',$cookieC);
     // Customer MFA enrollment, login challenge, TOTP replay prevention and recovery-code use.
