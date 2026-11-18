@@ -3,6 +3,7 @@ declare(strict_types=1);
 namespace HostPilot\Http;
 use HostPilot\Core\Auth;
 use HostPilot\Core\SecretVault;
+use HostPilot\Core\TaxCalculator;
 use PDO;
 use Throwable;
 
@@ -61,7 +62,10 @@ final class CatalogController
             $p['base_cents']=$this->moneyCents($p['price']);$p['setup_cents']=$this->moneyCents($p['setup_fee']);$p['line_cents']=$p['base_cents']+$p['setup_cents'];
             $p['domain_name']=(string)($entry['domain']['domain_name']??'');$rows[]=$p;
         }
-        $_SESSION['hostpilot_cart']=$cart;$totalCents=array_sum(array_column($rows,'line_cents'));
+        $_SESSION['hostpilot_cart']=$cart;
+        $taxSettings=TaxCalculator::settings($this->db);$cartAmounts=[];
+        foreach($rows as $row){$cartAmounts[]=$row['base_cents'];if($row['setup_cents']>0)$cartAmounts[]=$row['setup_cents'];}
+        $cartTotals=TaxCalculator::totals($cartAmounts,$taxSettings);
         $this->start('Alışveriş sepeti');
         echo '<main class="detail"><a class="brand" href="'.$this->url('/').'">HOST<span>PILOT</span></a><section class="productdetail"><small>SİPARİŞ</small><h1>Alışveriş sepetiniz</h1>';
         if(!$rows)echo '<p>Sepetiniz şu anda boş. <a href="'.$this->url('/').'">Paketleri inceleyin.</a></p>';
@@ -72,7 +76,7 @@ final class CatalogController
                 if($p['product_type']==='domain')echo '<small>Alan adı: '.$this->e((string)$p['domain_name']).'</small>';
                 echo '<form method="post" action="'.$this->url('/cart/remove').'"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="cart_key" value="'.$this->e((string)$p['cart_key']).'"><button class="button" style="background:#6b3444">Sepetten çıkar</button></form></article>';
             }
-            if(!$currencyConflict)echo '<h2>Toplam: '.number_format($totalCents/100,2,',','.').' '.$this->e($currency).'</h2><p>Fiyatlar sipariş oluşturulurken yeniden doğrulanır.</p>';
+            if(!$currencyConflict)echo '<div class="order"><p>Ara toplam: <b>'.number_format($cartTotals['subtotal_cents']/100,2,',','.').' '.$this->e($currency).'</b></p><p>'.$this->e($taxSettings['label']).' ('.number_format($cartTotals['tax_cents']/100,2,',','.').' '.$this->e($currency).')</p><h2>Genel toplam: '.number_format($cartTotals['total_cents']/100,2,',','.').' '.$this->e($currency).'</h2><small>Vergi ayarı sipariş oluşturulurken yeniden doğrulanır.</small></div>';
             if($currencyConflict)echo '<p class="error">Sepette farklı para birimleri var. Sipariş vermek için ürünleri aynı para birimine getirin.</p>';
             elseif(Auth::check()&&(Auth::user()['role']??'')==='customer')echo '<form method="post" action="'.$this->url('/order/create').'"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><button class="button">Siparişi oluştur ve faturaya geç</button></form>';
             else echo '<p><a class="button" href="'.$this->url('/client/login').'">Giriş yaparak devam et</a></p>';
@@ -148,24 +152,30 @@ final class CatalogController
             $contact=['name'=>$customerName,'email'=>(string)$user['email'],'addressLine1'=>$domainData['addressLine1'],'city'=>$domainData['city'],'country'=>$domainData['country'],'zipcode'=>$domainData['zipcode'],'phoneCountryCode'=>$domainData['phoneCountryCode'],'phone'=>$domainData['phone']];
             $registrarPayload=['customer'=>$customer,'contact'=>$contact,'nameservers'=>[],'invoiceOption'=>'OnlyAdd','autoRenew'=>false];
         }
-        $now=gmdate('Y-m-d H:i:s');$number='HP'.gmdate('ymd').strtoupper(bin2hex(random_bytes(4)));$subtotal=$this->moneyDecimal($totalCents);
+        $taxSettings=TaxCalculator::settings($this->db);$invoiceRows=[];
+        foreach($items as $item){$invoiceRows[]=['description'=>$item['name'].' · '.$this->cycle($item['billing_cycle']),'amount_cents'=>$item['base_cents']];if($item['setup_cents']>0)$invoiceRows[]=['description'=>$item['name'].' · Kurulum ücreti','amount_cents'=>$item['setup_cents']];}
+        $taxTotals=TaxCalculator::totals(array_column($invoiceRows,'amount_cents'),$taxSettings);
+        $subtotal=TaxCalculator::decimal($taxTotals['subtotal_cents']);$taxTotal=TaxCalculator::decimal($taxTotals['tax_cents']);$grandTotal=TaxCalculator::decimal($taxTotals['total_cents']);
+        $now=gmdate('Y-m-d H:i:s');$number='HP'.gmdate('ymd').strtoupper(bin2hex(random_bytes(4)));
         try{
             $this->db->beginTransaction();
-            $o=$this->db->prepare("INSERT INTO orders(order_number,user_id,status,currency,subtotal,tax_total,total,created_at,updated_at) VALUES(:number,:uid,'pending',:currency,:subtotal,0,:total,:created,:updated)");
-            $o->execute([':number'=>$number,':uid'=>$user['id'],':currency'=>$currency,':subtotal'=>$subtotal,':total'=>$subtotal,':created'=>$now,':updated'=>$now]);$orderId=(int)$this->db->lastInsertId();
+            $o=$this->db->prepare("INSERT INTO orders(order_number,user_id,status,currency,subtotal,tax_total,total,created_at,updated_at) VALUES(:number,:uid,'pending',:currency,:subtotal,:tax,:total,:created,:updated)");
+            $o->execute([':number'=>$number,':uid'=>$user['id'],':currency'=>$currency,':subtotal'=>$subtotal,':tax'=>$taxTotal,':total'=>$grandTotal,':created'=>$now,':updated'=>$now]);$orderId=(int)$this->db->lastInsertId();
             $orderLine=$this->db->prepare('INSERT INTO order_items(order_id,product_id,product_name,billing_cycle,quantity,unit_price,line_total,created_at) VALUES(:oid,:pid,:name,:cycle,1,:price,:line,:created)');
             $invoiceNumber='HPF'.gmdate('ymd').strtoupper(bin2hex(random_bytes(4)));
-            $invoice=$this->db->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,status,currency,subtotal,tax_total,total,amount_paid,issued_at,due_at,created_at,updated_at) VALUES(:number,:order_id,:user_id,'unpaid',:currency,:subtotal,0,:total,0,:issued,:due,:created,:updated)");
+            $invoice=$this->db->prepare("INSERT INTO invoices(invoice_number,order_id,user_id,status,currency,subtotal,tax_total,total,amount_paid,issued_at,due_at,created_at,updated_at) VALUES(:number,:order_id,:user_id,'unpaid',:currency,:subtotal,:tax,:total,0,:issued,:due,:created,:updated)");
             $due=(new \DateTimeImmutable('now',new \DateTimeZone('UTC')))->modify('+7 days')->format('Y-m-d H:i:s');
-            $invoice->execute([':number'=>$invoiceNumber,':order_id'=>$orderId,':user_id'=>$user['id'],':currency'=>$currency,':subtotal'=>$subtotal,':total'=>$subtotal,':issued'=>$now,':due'=>$due,':created'=>$now,':updated'=>$now]);$invoiceId=(int)$this->db->lastInsertId();
-            $invoiceLine=$this->db->prepare('INSERT INTO invoice_items(invoice_id,description,quantity,unit_price,tax_rate,tax_amount,line_total,created_at) VALUES(:invoice,:description,1,:price,0,0,:total,:created)');
+            $invoice->execute([':number'=>$invoiceNumber,':order_id'=>$orderId,':user_id'=>$user['id'],':currency'=>$currency,':subtotal'=>$subtotal,':tax'=>$taxTotal,':total'=>$grandTotal,':issued'=>$now,':due'=>$due,':created'=>$now,':updated'=>$now]);$invoiceId=(int)$this->db->lastInsertId();
+            $invoiceLine=$this->db->prepare('INSERT INTO invoice_items(invoice_id,description,quantity,unit_price,tax_rate,tax_amount,line_total,created_at) VALUES(:invoice,:description,1,:price,:rate,:tax,:total,:created)');
+            $taxIndex=0;
             foreach($items as $item){
                 $base=$this->moneyDecimal($item['base_cents']);$line=$this->moneyDecimal($item['line_cents']);
-                $orderLine->execute([':oid'=>$orderId,':pid'=>$item['id'],':name'=>$item['name'],':cycle'=>$item['billing_cycle'],':price'=>$line,':line'=>$line,':created'=>$now]);
-                $invoiceLine->execute([':invoice'=>$invoiceId,':description'=>$item['name'].' · '.$this->cycle($item['billing_cycle']),':price'=>$base,':total'=>$base,':created'=>$now]);
+                $orderLine->execute([':oid'=>$orderId,':pid'=>$item['id'],':name'=>$item['name'],':cycle'=>$item['billing_cycle'],':price'=>$base,':line'=>$base,':created'=>$now]);
+                $baseTax=$taxTotals['lines'][$taxIndex++];
+                $invoiceLine->execute([':invoice'=>$invoiceId,':description'=>$item['name'].' · '.$this->cycle($item['billing_cycle']),':price'=>TaxCalculator::decimal($baseTax['subtotal_cents']),':rate'=>$baseTax['tax_rate'],':tax'=>TaxCalculator::decimal($baseTax['tax_cents']),':total'=>TaxCalculator::decimal($baseTax['total_cents']),':created'=>$now]);
                 if($item['setup_cents']>0){
-                    $setup=$this->moneyDecimal($item['setup_cents']);
-                    $invoiceLine->execute([':invoice'=>$invoiceId,':description'=>$item['name'].' · Kurulum ücreti',':price'=>$setup,':total'=>$setup,':created'=>$now]);
+                    $setupTax=$taxTotals['lines'][$taxIndex++];
+                    $invoiceLine->execute([':invoice'=>$invoiceId,':description'=>$item['name'].' · Kurulum ücreti',':price'=>TaxCalculator::decimal($setupTax['subtotal_cents']),':rate'=>$setupTax['tax_rate'],':tax'=>TaxCalculator::decimal($setupTax['tax_cents']),':total'=>TaxCalculator::decimal($setupTax['total_cents']),':created'=>$now]);
                 }
             }
             if($registrarPayload!==null){

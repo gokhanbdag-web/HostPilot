@@ -163,6 +163,7 @@ if ($requestPath === '/knowledgebase' && $method === 'GET') { $client->knowledge
 if (preg_match('#^/knowledgebase/([a-z0-9][a-z0-9-]{0,189})$#D', $requestPath, $match) && $method === 'GET') { $client->knowledgebaseArticle($match[1]); exit; }
 if (preg_match('#^/knowledgebase/([a-z0-9][a-z0-9-]{0,189})$#D', $requestPath, $match) && $method === 'POST') { $client->knowledgebaseArticle($match[1]); exit; }
 
+if ($requestPath === '/admin/tax' && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\TaxSettingsController($pdo, $basePath))->index(); exit; }
 if ($requestPath === '/admin/settings' && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\EmailSettingsController($pdo, $basePath, (string)($config['app']['key'] ?? '')))->index(); exit; }
 if ($requestPath === '/admin/integrations' && $method === 'GET') { (new \HostPilot\Http\AdminWorkspaceController($pdo, $basePath))->integrations(); exit; }
 if ($requestPath === '/admin/themes' && $method === 'GET') { (new \HostPilot\Http\AdminWorkspaceController($pdo, $basePath))->themes(); exit; }

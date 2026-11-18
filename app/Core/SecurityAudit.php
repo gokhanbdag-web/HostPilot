@@ -34,6 +34,7 @@ final class SecurityAudit
         'privacy.erasure_requested',
         'privacy.request_reviewed',
         'privacy.erasure_completed',
+        'tax.settings_updated',
         'payment.gateway_settings_updated',
         'payment.transaction_reviewed',
         'payment.transaction_settled',
