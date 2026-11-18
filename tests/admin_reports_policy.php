@@ -9,6 +9,7 @@ $method=substr($source,$start,$end-$start);
 $checks=[
     'Reports are based on persisted business records'=>str_contains($method,'FROM orders')&&str_contains($method,'FROM invoices')&&str_contains($method,'FROM services')&&str_contains($method,'FROM tickets'),
     'Demo orders and invoices are excluded from financial reports'=>substr_count($method,"NOT LIKE 'DEMO-%'")>=4,
+    'Demo customer and support fixtures are excluded'=>str_contains($method,"demo.musteri%@example.invalid")&&str_contains($method,"DEMO-TKT-%"),
     'Financial totals are grouped by currency'=>str_contains($method,'GROUP BY currency')&&str_contains($method,'SUM(amount_paid)')&&str_contains($method,'outstanding'),
     'Order totals are grouped by currency'=>str_contains($method,'GROUP BY currency ORDER BY currency'),
     'Top products are separated by currency'=>str_contains($method,'GROUP BY o.currency,oi.product_id,oi.product_name'),
