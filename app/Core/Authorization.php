@@ -102,6 +102,8 @@ final class Authorization
         if (preg_match('#^/admin/knowledgebase/[1-9][0-9]*$#D', $path) && in_array($method, ['GET','POST'], true)) return 'knowledgebase.manage';
         if (in_array($path, ['/admin/pages','/admin/pages/new'], true) && in_array($method, ['GET','POST'], true)) return 'cms.pages.manage';
         if (preg_match('#^/admin/pages/[1-9][0-9]*$#D', $path) && in_array($method, ['GET','POST'], true)) return 'cms.pages.manage';
+        if ($path === '/admin/menus' && $method === 'GET') return 'cms.menus.manage';
+        if (preg_match('#^/admin/menus/[1-9][0-9]*$#D', $path) && in_array($method, ['GET','POST'], true)) return 'cms.menus.manage';
         if (preg_match('#^/admin/tickets/attachment/[0-9]+$#D', $path) && $method === 'GET') return 'support.view';
         if (preg_match('#^/admin/tickets/[0-9]+$#D', $path)) {
             if ($method === 'GET') return 'support.view';
