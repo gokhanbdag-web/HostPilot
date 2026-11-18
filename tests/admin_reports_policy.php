@@ -17,7 +17,7 @@ $checks=[
     'Support and service statuses use real records'=>str_contains($method,'FROM services s')&&str_contains($method,'FROM tickets WHERE ticket_number NOT LIKE'),
     'Report view does not expose customer email or personal identifiers'=>!str_contains($method,'u.email')&&!str_contains($method,'u.name'),
     'Report page is no longer labelled as demo-only'=>!str_contains($method,'Demo işletme raporları')&&str_contains($method,'İşletme raporları'),
-    'Currency totals are not hard-coded to TRY'=>!str_contains($method,'₺'),
+    'Currency totals use escaped currency codes from grouped data'=>str_contains($method,'$money($row[\\'total\\'],(string)$row[\\'currency\\'])')&&str_contains($method,'GROUP BY currency'),
 ];
 foreach($checks as $label=>$ok){if(!$ok)throw new RuntimeException('FAIL '.$label);echo 'PASS '.$label.PHP_EOL;}
 echo "HostPilot real business reports policy tests passed.".PHP_EOL;
