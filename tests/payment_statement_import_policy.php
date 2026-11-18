@@ -8,6 +8,10 @@ $index=file_get_contents(dirname(__DIR__).'/index.php');
 $auth=file_get_contents(dirname(__DIR__).'/app/Core/Authorization.php');
 $audit=file_get_contents(dirname(__DIR__).'/app/Core/SecurityAudit.php');
 $checks=[
+ 'provider files have source-specific adapters'=>str_contains($service,'parseProviderFile')&&str_contains($service,'parseIyzicoCsv')&&str_contains($service,'parsePaytrJson'),
+ 'iyzico provider references can match conversation IDs'=>str_contains($service,'idempotency_key=:idempotency_reference'),
+ 'provider refund candidates require exact amount and currency'=>str_contains($service,'pr.amount=:amount')&&str_contains($service,'pr.currency=:currency'),
+ 'PayTR and iyzico report parsing does not store buyer data'=>!str_contains($service,'buyerEmail')&&!str_contains($service,'buyerName'),
  'CSV parser requires canonical headers'=>str_contains($service,"['date','reference','description','amount','currency','type']"),
  'CSV upload has a strict size limit'=>str_contains($service,'MAX_FILE_BYTES = 2097152'),
  'CSV import has a row limit'=>str_contains($service,'MAX_ROWS = 5000'),
