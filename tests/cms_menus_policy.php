@@ -14,7 +14,7 @@ $checks=[
  'menu manager is restricted to admin and super-admin'=>str_contains($admin,"['admin','super_admin']"),
  'menu changes require CSRF validation'=>str_contains($admin,'Auth::verifyCsrf($_POST[\'_token\']??null)'),
  'menu and item create update delete actions exist'=>str_contains($admin,'save_menu')&&str_contains($admin,'create_item')&&str_contains($admin,'update_item')&&str_contains($admin,'delete_item'),
- 'menu item URL validation permits only safe relative or HTTPS URLs'=>str_contains($admin,"str_starts_with($url,'/')")&&str_contains($admin,"str_starts_with($url,'//')")&&str_contains($admin,"==='https'"),
+ 'menu item URL validation permits only safe relative or HTTPS URLs'=>str_contains($admin,'str_starts_with($url,\'/\')')&&str_contains($admin,'str_starts_with($url,\'//\')')&&str_contains($admin,"==='https'"),
  'menu item labels and URL lengths are validated'=>str_contains($admin,'100')&&str_contains($admin,'500'),
  'menu changes are audited'=>str_contains($admin,'cms.menu_updated')&&str_contains($admin,'cms.menu_item_created')&&str_contains($admin,'cms.menu_item_updated')&&str_contains($admin,'cms.menu_item_deleted'),
  'renderer selects active menus and active items'=>str_contains($renderer,"location=:location AND status='active'")&&str_contains($renderer,"menu_id=:id AND status='active'"),
