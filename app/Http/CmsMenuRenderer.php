@@ -9,6 +9,11 @@ final class CmsMenuRenderer
 {
     public static function links(PDO $db,string $basePath,string $location):string
     {
+        // A storefront must remain available if an existing installation has not yet
+        // applied the CMS menu migration. The authenticated upgrade screen applies it.
+        $tables=$db->query("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('cms_menus','cms_menu_items')");
+        if((int)$tables->fetchColumn()!==2)return '';
+
         $menu=$db->prepare("SELECT id FROM cms_menus WHERE location=:location AND status='active' LIMIT 1");
         $menu->execute([':location'=>$location]);$menuId=(int)$menu->fetchColumn();
         if($menuId<1)return '';

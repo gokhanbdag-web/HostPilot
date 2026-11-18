@@ -124,7 +124,7 @@ function installBrowserApp(PDO $admin, string $host, int $port, string $user, st
     if ($actualStorageDeny !== $expectedStorageDeny) {
         throw new RuntimeException('Installer must write a valid multiline Apache deny rule for storage.');
     }
-    foreach (['product_groups','products','orders','services','invoices','payment_transactions','servers','email_outbox','domain_registrations','domain_renewals','password_reset_tokens','admin_mfa','admin_mfa_recovery_codes','customer_mfa','customer_mfa_recovery_codes','privacy_requests','ticket_attachments','payment_refunds','payment_statement_imports','payment_statement_movements'] as $table) {
+    foreach (['product_groups','products','orders','services','invoices','payment_transactions','servers','email_outbox','domain_registrations','domain_renewals','password_reset_tokens','admin_mfa','admin_mfa_recovery_codes','customer_mfa','customer_mfa_recovery_codes','privacy_requests','ticket_attachments','payment_refunds','payment_statement_imports','payment_statement_movements','cms_pages','cms_menus','cms_menu_items'] as $table) {
         $check = $db->prepare('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=:table_name');
         $check->execute([':table_name' => $table]);
         if ((int)$check->fetchColumn() !== 1) throw new RuntimeException('Fresh installer schema is missing table ' . $table . '.');

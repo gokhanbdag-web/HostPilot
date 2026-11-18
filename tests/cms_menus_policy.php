@@ -17,6 +17,7 @@ $checks=[
  'menu item URL validation permits only safe relative or HTTPS URLs'=>str_contains($admin,'str_starts_with($url,\'/\')')&&str_contains($admin,'str_starts_with($url,\'//\')')&&str_contains($admin,"==='https'"),
  'menu item labels and URL lengths are validated'=>str_contains($admin,'100')&&str_contains($admin,'500'),
  'menu changes are audited'=>str_contains($admin,'cms.menu_updated')&&str_contains($admin,'cms.menu_item_created')&&str_contains($admin,'cms.menu_item_updated')&&str_contains($admin,'cms.menu_item_deleted'),
+ 'renderer checks CMS menu tables before querying and safely skips missing tables'=>str_contains($renderer,'information_schema.TABLES')&&str_contains($renderer,'if((int)$tables->fetchColumn()!==2)return \'\';'),
  'renderer selects active menus and active items'=>str_contains($renderer,"location=:location AND status='active'")&&str_contains($renderer,"menu_id=:id AND status='active'"),
  'renderer escapes labels and URLs'=>str_contains($renderer,'htmlspecialchars('),
  'renderer rejects unsafe database URLs'=>str_contains($renderer,'if(!$relative&&!$external)continue;'),
