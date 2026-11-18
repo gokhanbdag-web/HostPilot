@@ -1,9 +1,9 @@
 <?php
 declare(strict_types=1);
 
-namespace HostPilot\\Http;
+namespace HostPilot\Http;
 
-use HostPilot\\Core\\Auth;
+use HostPilot\Core\Auth;
 use PDO;
 use Throwable;
 
