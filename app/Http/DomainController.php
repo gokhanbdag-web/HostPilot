@@ -8,6 +8,7 @@ use HostPilot\Core\CronAuthenticator;
 use HostPilot\Core\SecurityAudit;
 use HostPilot\Core\RegistrarFactory;
 use HostPilot\Core\SecretVault;
+use HostPilot\Core\TaxCalculator;
 use PDO;
 use Throwable;
 
