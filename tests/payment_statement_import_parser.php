@@ -15,7 +15,7 @@ $iyzico="transactionDate,transactionType,paymentTxId,paymentId,conversationId,pr
  ."2026-11-17 14:00:00,REFUND,tx-ref-1,pay-100,conv-ref-1,25.00,125.50,TRY,private@example.test,settle-1\n"
  ."2026-11-17 14:30:00,PREAUTH,tx-pre-1,pay-pre-1,conv-pre-1,99.00,99.00,TRY,private@example.test,settle-1\n";
 $iyzRows=StatementImport::parseFile($iyzico,'iyzico');
-if(count($iyzRows)!==3||$iyzRows[0]['reference']!=='pay-100'||$iyzRows[0]['type']!=='capture'||$iyzRows[1]['reference']!=='pay-100' || $iyzRows[1]['amount']!=='25.00'||$iyzRows[1]['type']!=='refund'||$iyzRows[2]['type']!=='unknown')throw new RuntimeException('iyzico SFTP transaction report mapping failed.');
+if(count($iyzRows)!==3||$iyzRows[0]['reference']!=='pay-100'||$iyzRows[0]['type']!=='capture'||$iyzRows[1]['reference']!=='pay-100'||$iyzRows[1]['amount']!=='25.00'||$iyzRows[1]['type']!=='refund'||$iyzRows[2]['type']!=='unknown')throw new RuntimeException('iyzico SFTP transaction report mapping failed.');
 if($iyzRows[0]['date']!=='2026-11-17 10:30:00')throw new RuntimeException('iyzico Europe/Istanbul to UTC date conversion failed.');
 $semicolon="transactionDate;transactionType;paymentTxId;paymentId;conversationId;paidPrice;transactionCurrency\n2026-11-17 13:30:00;AUTH;tx-200;pay-200;conv-200;10.00;USD\n";
 if(StatementImport::parseFile($semicolon,'iyzico')[0]['currency']!=='USD')throw new RuntimeException('iyzico semicolon CSV parsing failed.');
@@ -29,6 +29,16 @@ $paytr=json_encode(['status'=>'success','data'=>[
 $payRows=StatementImport::parseFile($paytr,'paytr');
 if(count($payRows)!==2||$payRows[0]['reference']!=='merchant-oid-1'||$payRows[0]['type']!=='capture'||$payRows[0]['currency']!=='TRY'||$payRows[1]['type']!=='refund'||$payRows[1]['amount']!=='5.00')throw new RuntimeException('PayTR JSON report mapping failed.');
 if($payRows[0]['date']!=='2026-11-16 21:00:00')throw new RuntimeException('PayTR local date-only UTC normalization failed.');
+
+
+$iyzicoApi=json_encode(['status'=>'success','transactions'=>[
+ ['transactionType'=>'PAYMENT','transactionDate'=>'2026-11-17 13:30:00','transactionId'=>9001,'paymentTxId'=>88001,'paymentId'=>77001,'paidPrice'=>'150.00','price'=>'125.00','transactionCurrency'=>'TRY','transactionStatus'=>2,'buyerEmail'=>'private@example.test'],
+ ['transactionType'=>'REFUND','transactionDate'=>'2026-11-17 14:00:00','transactionId'=>9002,'paymentTxId'=>88001,'paymentId'=>77001,'paidPrice'=>'150.00','price'=>'25.00','transactionCurrency'=>'TRY','buyerEmail'=>'private@example.test'],
+ ['transactionType'=>'PAYMENT','transactionDate'=>'2026-11-17 14:30:00','transactionId'=>9003,'paymentTxId'=>88002,'paymentId'=>77002,'paidPrice'=>'50.00','price'=>'50.00','transactionCurrency'=>'TRY','transactionStatus'=>1],
+]],JSON_THROW_ON_ERROR);
+$apiRows=StatementImport::parseFile($iyzicoApi,'iyzico');
+if(count($apiRows)!==3||$apiRows[0]['type']!=='capture'||$apiRows[0]['reference']!=='77001'||$apiRows[0]['amount']!=='150.00'||$apiRows[1]['type']!=='refund'||$apiRows[1]['reference']!=='77001'||$apiRows[1]['amount']!=='25.00'||$apiRows[2]['type']!=='capture')throw new RuntimeException('iyzico daily reporting API JSON mapping failed.');
+if($apiRows[0]['date']!=='2026-11-17 10:30:00'||str_contains(json_encode($apiRows,JSON_THROW_ON_ERROR),'private@example.test'))throw new RuntimeException('iyzico API local time or PII filtering failed.');
 
 $invalid=[
  "reference,date,description,amount,currency,type\n2026-11-17 10:30:00,TX,Test,1,TRY,capture\n",
