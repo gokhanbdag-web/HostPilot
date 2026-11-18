@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 $source=(string)file_get_contents(dirname(__DIR__).'/app/Http/AdminController.php');
 $start=strpos($source,'public function reports(): void');
-$end=strpos('public function tickets(): void',$source,$start===false?0:$start);
+$end=strpos($source,'public function tickets(): void',$start===false?0:$start);
 if($start===false||$end===false)throw new RuntimeException('Admin reports method was not found.');
 $method=substr($source,$start,$end-$start);
 $checks=[
