@@ -155,6 +155,13 @@ $providerRows->execute([':import'=>$paytrProviderImport['import_id']]);
 $paytrProviderMatches=$providerRows->fetchAll(PDO::FETCH_ASSOC);
 if(count($paytrProviderMatches)!==2||$paytrProviderMatches[0]['match_status']!=='matched'||(int)$paytrProviderMatches[0]['suggested_payment_transaction_id']!==$paytrPaymentId||$paytrProviderMatches[1]['match_status']!=='matched'||(int)$paytrProviderMatches[1]['suggested_refund_id']!==$paytrRefundId)throw new RuntimeException('PayTR provider payment/refund matching failed.');
 
+// Keep this shared CI database pristine for the following finance-report integration suite.
+$pdo->prepare("DELETE FROM payment_statement_imports WHERE original_filename IN (:iyzico_file,:paytr_file)")->execute([':iyzico_file'=>'iyzico-provider-ci.csv',':paytr_file'=>'paytr-provider-ci.json']);
+$pdo->prepare('DELETE FROM payment_transactions WHERE id IN (:iyzico_payment,:paytr_payment)')->execute([':iyzico_payment'=>$iyzicoPaymentId,':paytr_payment'=>$paytrPaymentId]);
+$pdo->prepare('DELETE FROM invoices WHERE id=:invoice')->execute([':invoice'=>$providerInvoiceId]);
+$pdo->prepare('DELETE FROM orders WHERE id=:order')->execute([':order'=>$providerOrderId]);
+
+
 
 
 $pdo->exec("INSERT INTO users(name,email,username,password_hash,role,status,created_at,updated_at) VALUES('Verification Test','verify@example.test','verify-test','test-hash','customer','pending_verification',UTC_TIMESTAMP(),UTC_TIMESTAMP())");
