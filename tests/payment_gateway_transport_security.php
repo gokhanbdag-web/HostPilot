@@ -44,6 +44,8 @@ $assert($rejects(static fn()=>GatewayTransport::validateEndpoint($detail,'/payme
 GatewayTransport::assertResponseSize(0);GatewayTransport::assertResponseSize(1048576);
 $assert($rejects(static fn()=>GatewayTransport::assertResponseSize(1048577)),'oversized provider response is rejected');
 $source=file_get_contents(dirname(__DIR__).'/app/Payment/GatewayTransport.php');
+$assert(str_contains($source,'CURLOPT_HTTPGET=>true'),'iyzico reporting requests use GET without a request body');
+$assert(str_contains($source,'/rapor/islem-dokumu')&&str_contains($source,'/v2/reporting/payment/transactions'),'only explicit PayTR and iyzico report endpoints are added to the allowlist');
 $assert(str_contains($source,'CURLOPT_FOLLOWLOCATION=>false')&&str_contains($source,'CURLOPT_MAXREDIRS=>0'),'cURL redirects are disabled');
 $assert(str_contains($source,"'follow_location'=>0")&&str_contains($source,"'max_redirects'=>0"),'PHP stream redirects are disabled');
 $assert(str_contains($source,'CURLOPT_SSL_VERIFYPEER=>true')&&str_contains($source,'CURLOPT_SSL_VERIFYHOST=>2'),'cURL certificate and hostname verification stay enabled');
