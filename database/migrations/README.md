@@ -8,11 +8,11 @@ Use a unique, monotonically increasing filename in YYYYMMDD_NNNN_short_descripti
 
 ## Current inventory
 
-There are 37 SQL migration files:
+There are 38 SQL migration files:
 - 17 historical migrations converted from app/Core/Schema.php.
 - Two standalone migrations for password reset tokens and admin first/last names.
 - One forward repair migration for a legacy invoice/service foreign-key omission.
-- Seventeen additional forward migrations covering staff permissions, customer verification and MFA, audit/privacy, ticket attachments, payment reconciliation/refunds, statement imports/review, and private support-ticket notes, department-scoped ticket assignments, configurable support departments, knowledge-base feedback, and dynamic CMS pages.
+- Eighteen additional forward migrations covering staff permissions, customer verification and MFA, audit/privacy, ticket attachments, payment reconciliation/refunds, statement imports/review, and private support-ticket notes, department-scoped ticket assignments, configurable support departments, knowledge-base feedback, dynamic CMS pages, and configurable header/footer menus.
 
 The original PHP migration implementations remain in app/Core/Schema.php and the two standalone migration classes as compatibility references and as the independent schema-parity test baseline. The public front controller no longer executes schema migrations automatically on every request.
 
@@ -41,9 +41,9 @@ MySQL DDL may implicitly commit. A partially executed migration therefore cannot
 ## Test coverage
 
 GitHub Actions uses isolated disposable databases and never contacts the live HostPilot database:
-- Parser/discovery tests verify statement splitting and all 37 migration identifiers in order.
+- Parser/discovery tests verify statement splitting and all 38 migration identifiers in order.
 - MySQL 8.0 and MariaDB 10.11 execute all SQL migrations.
-- The actual browser installer is smoke-tested over HTTP against disposable databases at the root and in a nested subdirectory; the test verifies all 37 migrations, the first super-administrator and the installation lock.
+- The actual browser installer is smoke-tested over HTTP against disposable databases at the root and in a nested subdirectory; the test verifies all 38 migrations, the first super-administrator and the installation lock.
 - The HTTP test also exercises authenticated admin upgrade, CSRF confirmation, maintenance-mode 503, pre-upgrade backup, invalid database connection failure and retry after a partially-created first migration.
 - A deliberately interrupted first migration verifies partial-DDL retry.
 - The test verifies explicit confirmation, tracking records, expected tables and a second run as a no-op.
@@ -73,3 +73,5 @@ These tests validate the migration and backup mechanisms. They are not a substit
 - `20261118_0004_knowledgebase_feedback.sql`: stores one changeable helpful/not-helpful vote per browser session and article, without storing visitor IP addresses.
 
 - `20261118_0005_cms_pages.sql`: creates the dynamic public CMS page registry with unique SEO slugs, draft/published status and metadata fields.
+
+- `20261118_0006_cms_menus.sql`: creates header/footer menu registries and ordered menu items, seeding the default site navigation links idempotently.

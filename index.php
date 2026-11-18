@@ -98,6 +98,8 @@ if ($requestPath === '/admin/security/attachments' && in_array($method, ['GET','
 if ($requestPath === '/admin/ticket-departments' && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\SupportDepartmentController($pdo,$basePath))->index(); exit; }
 if ($requestPath === '/admin/knowledgebase' && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\KnowledgebaseAdminController($pdo,$basePath))->index(); exit; }
 if ($requestPath === '/admin/pages' && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\CmsPageAdminController($pdo,$basePath))->index(); exit; }
+if ($requestPath === '/admin/menus' && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\CmsMenuAdminController($pdo,$basePath))->index(); exit; }
+if (preg_match('#^/admin/menus/([1-9][0-9]*)$#D', $requestPath, $match) && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\CmsMenuAdminController($pdo,$basePath))->index((int)$match[1]); exit; }
 if ($requestPath === '/admin/pages/new' && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\CmsPageAdminController($pdo,$basePath))->index(0); exit; }
 if (preg_match('#^/admin/pages/([1-9][0-9]*)$#D', $requestPath, $match) && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\CmsPageAdminController($pdo,$basePath))->index((int)$match[1]); exit; }
 if ($requestPath === '/admin/knowledgebase/new' && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\KnowledgebaseAdminController($pdo,$basePath))->index(0); exit; }

@@ -43,7 +43,7 @@
 - [x] Product groups, products, initial pricing and billing-cycle records (multiple price editing and configurable options remain pending).
 - [x] Initial catalogue storefront and product detail pages (theme registry and multiple themes remain pending).
 - [x] CMS page management with public slug routes, SEO metadata, draft/published workflow and admin audit events.
-- [ ] Menu management.
+- [x] Header/footer menu management with ordered links, active/inactive states and HTTPS-only external URLs.
 - [x] Public knowledge base search, category filters, article detail pages and privacy-conscious feedback.
 - [x] Administrator knowledge-base article CRUD, draft/published workflow and audit events.
 - [x] Single-product pending order creation, customer order history, and staff order listing (cart, payment checkout, coupons remain pending).

@@ -20,7 +20,7 @@ final class CatalogController
         echo '<section class="products">';
         if(!$rows)echo '<div class="empty">Satışa açık ürün bulunmuyor. Paketler yakında burada yayınlanacak.</div>';
         foreach($rows as $p){$price=$p['from_price']!==null?number_format((float)$p['from_price'],2,',','.').' '.($p['currency']?:'TRY'):'Fiyat için iletişime geçin';echo '<article class="product"><span class="type">'.$this->e(strtoupper($p['product_type'])).'</span><h2>'.$this->e($p['name']).'</h2><p>'.$this->e(substr(strip_tags((string)$p['description']),0,220)).'</p><strong>'.$this->e($price).'</strong><a class="button" href="'.$this->url('/product/'.$this->e($p['slug'])).'">Paketi incele</a></article>';}
-        echo '</section><footer>HostPilot · Hosting ve domain hizmetleri</footer></main>';$this->end();
+        echo '</section><footer>HostPilot · Hosting ve domain hizmetleri<nav>'.$this->footerMenuLinks().'</nav></footer></main>';$this->end();
     }
 
     public function product(string $slug):void
@@ -217,13 +217,8 @@ final class CatalogController
     private function url(string $p):string{return htmlspecialchars(rtrim($this->basePath,'/').$p,ENT_QUOTES,'UTF-8');}
     private function redirect(string $p):never{header('Location: '.$this->url($p));exit;}
     private function e(string $s):string{return htmlspecialchars($s,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');}
-    private function publicPageLinks():string
-    {
-        $rows=$this->db->query("SELECT title,slug FROM cms_pages WHERE status='published' ORDER BY sort_order,title LIMIT 20")->fetchAll(PDO::FETCH_ASSOC);
-        $html='';
-        foreach($rows as $row)$html.='<a href="'.$this->url('/page/'.$this->e((string)$row['slug'])).'">'.$this->e((string)$row['title']).'</a>';
-        return $html;
-    }
+    private function publicPageLinks():string{return CmsMenuRenderer::links($this->db,$this->basePath,'header');}
+    private function footerMenuLinks():string{return CmsMenuRenderer::links($this->db,$this->basePath,'footer');}
 
     private function start(string $title):void{echo '<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'.$this->e($title).' · HostPilot</title><style>'.$this->css().'</style></head><body>';}
     private function end():void{echo '</body></html>';}

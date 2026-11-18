@@ -21,7 +21,7 @@ $checks=[
  'public renderer exposes published pages only'=>str_contains($public,"WHERE slug=:slug AND status='published'"),
  'public page body is escaped before display'=>str_contains($public,'nl2br(')&&str_contains($public,'$this->e('),
  'SEO description is emitted from the head renderer'=>str_contains($public,'private function start(string $title,string $description=')&&str_contains($public,'$description!=='),
- 'published pages appear in storefront navigation'=>str_contains($catalog,"FROM cms_pages WHERE status='published'")&&str_contains($catalog,'publicPageLinks()'),
+ 'storefront navigation uses the administrator-managed header menu'=>str_contains($catalog,'CmsMenuRenderer::links')&&str_contains($catalog,"'header'"),
  'public page route validates slug format'=>str_contains($index,"#^/page/([a-z0-9][a-z0-9-]{0,189})$#D"),
  'CMS admin route is centrally authorized'=>str_contains($auth,'cms.pages.manage'),
  'staff cannot access CMS page editor through staff permission'=>!str_contains($auth,"'cms.pages.manage' =>"),
