@@ -107,6 +107,10 @@ jobs:
         run: php tests/cms_menus_policy.php
       - name: Test admin integration and theme workspaces
         run: php tests/admin_workspace_policy.php
+      - name: Test integer-safe tax calculations
+        run: php tests/tax_calculator.php
+      - name: Test tax settings and invoice integration policy
+        run: php tests/tax_policy.php
       - name: Test customer announcements policy
         run: php tests/customer_announcements_policy.php
       - name: Test registrar registration action tracking policy
