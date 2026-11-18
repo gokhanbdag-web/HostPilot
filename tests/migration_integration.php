@@ -278,7 +278,7 @@ require_once dirname(__DIR__) . '/app/Core/AdminProfileMigration.php';
 \HostPilot\Core\AdminProfileMigration::migrate($legacy);
 
 $schemaSignature = static function (PDO $connection): array {
-    $tables = $connection->query("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE' AND TABLE_NAME NOT IN ('users','migrations','staff_permissions','staff_departments','email_verification_tokens','security_audit_logs','admin_mfa','admin_mfa_recovery_codes','customer_mfa','customer_mfa_recovery_codes','privacy_requests','ticket_attachments','ticket_internal_notes','ticket_assignments','support_departments','knowledgebase_feedback','cms_pages','cms_menus','cms_menu_items','cms_announcements','cms_announcement_dismissals') ORDER BY TABLE_NAME")->fetchAll(PDO::FETCH_COLUMN);
+    $tables = $connection->query("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE' AND TABLE_NAME NOT IN ('users','migrations','staff_permissions','staff_departments','email_verification_tokens','security_audit_logs','admin_mfa','admin_mfa_recovery_codes','customer_mfa','customer_mfa_recovery_codes','privacy_requests','ticket_attachments','ticket_internal_notes','ticket_assignments','support_departments','knowledgebase_feedback','cms_pages','cms_menus','cms_menu_items','cms_announcements','cms_announcement_dismissals','domain_registrations') ORDER BY TABLE_NAME")->fetchAll(PDO::FETCH_COLUMN);
     $signature = [];
     foreach ($tables as $table) {
         $columns = $connection->prepare("SELECT COLUMN_NAME,COLUMN_TYPE,IS_NULLABLE,COLUMN_DEFAULT,EXTRA,COLUMN_KEY,ORDINAL_POSITION FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=:table_name ORDER BY ORDINAL_POSITION");
@@ -332,6 +332,8 @@ if ($legacyPending !== ['20261115_0002_staff_permissions_departments', '20261115
     throw new RuntimeException('SQL runner did not isolate the new staff permission migration on a legacy-upgraded database: ' . json_encode($legacyPending));
 }
 $legacyApplied = MigrationRunner::runPending($legacy, $directory, true);
+if ((int)$legacy->query("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='domain_registrations' AND COLUMN_NAME='registrar_action_id'")->fetchColumn() !== 1) throw new RuntimeException('Legacy-upgraded database did not receive registrar_action_id.');
+
 if ($legacyApplied !== ['20261115_0002_staff_permissions_departments', '20261115_0003_customer_email_verification', '20261115_0004_user_auth_version', '20261115_0005_security_audit_logs', '20261116_0001_admin_mfa', '20261116_0002_privacy_requests', '20261116_0003_ticket_attachments', '20261116_0004_payment_reconciliations', '20261116_0005_customer_mfa', '20261117_0001_payment_refund_ledger', '20261117_0002_payment_statement_imports', '20261117_0003_payment_statement_review', '20261118_0001_ticket_internal_notes', '20261118_0002_ticket_assignments', '20261118_0003_support_departments', '20261118_0004_knowledgebase_feedback', '20261118_0005_cms_pages', '20261118_0006_cms_menus', '20261118_0007_cms_announcements', '20261118_0008_domain_registration_action_id']) {
     throw new RuntimeException('SQL runner did not apply only the pending security and payment migrations to a legacy-upgraded database.');
 }
