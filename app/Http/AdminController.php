@@ -147,7 +147,7 @@ final class AdminController
         $orders->execute([':id'=>$id]);$orderRows=$orders->fetchAll(PDO::FETCH_ASSOC);
         $invoices=$this->db->prepare("SELECT id,invoice_number,status,currency,total,amount_paid,due_at,issued_at FROM invoices WHERE user_id=:id AND invoice_number NOT LIKE 'DEMO-%' ORDER BY id DESC LIMIT 50");
         $invoices->execute([':id'=>$id]);$invoiceRows=$invoices->fetchAll(PDO::FETCH_ASSOC);
-        $services=$this->db->prepare("SELECT s.id,s.domain,s.status,s.billing_cycle,s.amount,s.next_due_date,p.name AS product_name FROM services s JOIN products p ON p.id=s.product_id LEFT JOIN orders o ON o.id=s.order_id WHERE s.user_id=:id AND (o.id IS NULL OR o.order_number NOT LIKE 'DEMO-%') ORDER BY s.id DESC LIMIT 50");
+        $services=$this->db->prepare("SELECT s.id,s.domain,s.status,s.billing_cycle,s.amount,s.next_due_date,p.name AS product_name,o.currency AS currency FROM services s JOIN products p ON p.id=s.product_id LEFT JOIN orders o ON o.id=s.order_id WHERE s.user_id=:id AND (o.id IS NULL OR o.order_number NOT LIKE 'DEMO-%') ORDER BY s.id DESC LIMIT 50");
         $services->execute([':id'=>$id]);$serviceRows=$services->fetchAll(PDO::FETCH_ASSOC);
         $tickets=$this->db->prepare("SELECT ticket_number,subject,status,department,updated_at FROM tickets WHERE user_id=:id AND ticket_number NOT LIKE 'DEMO-TKT-%' ORDER BY id DESC LIMIT 30");
         $tickets->execute([':id'=>$id]);$ticketRows=$tickets->fetchAll(PDO::FETCH_ASSOC);
@@ -171,7 +171,7 @@ final class AdminController
         foreach($invoiceRows as $row)echo '<div class="status"><span>'.$this->e((string)$row['invoice_number']).'<small>'.$this->e((string)$row['status']).' · Vade: '.$this->e((string)($row['due_at']??'—')).'</small></span><strong>'.$money($row['amount_paid'],(string)$row['currency']).' / '.$money($row['total'],(string)$row['currency']).'</strong></div>';
         echo '</section><section class="panel"><h3>Hizmetleri</h3>';
         if(!$serviceRows)echo '<p>Bağlı hizmet bulunmuyor.</p>';
-        foreach($serviceRows as $row)echo '<a class="ticket-admin" href="'.$this->url('/admin/services/'.(int)$row['id']).'"><span><b>'.$this->e((string)$row['product_name']).'</b><small>'.$this->e((string)($row['domain']??'Domain atanmadı')).' · '.$this->e((string)$row['billing_cycle']).' · Yenileme: '.$this->e((string)($row['next_due_date']??'—')).'</small></span><em>'.$this->e((string)$row['status']).' · '.$money($row['amount'],'TRY').' · Detay →</em></a>';
+        foreach($serviceRows as $row)echo '<a class="ticket-admin" href="'.$this->url('/admin/services/'.(int)$row['id']).'"><span><b>'.$this->e((string)$row['product_name']).'</b><small>'.$this->e((string)($row['domain']??'Domain atanmadı')).' · '.$this->e((string)$row['billing_cycle']).' · Yenileme: '.$this->e((string)($row['next_due_date']??'—')).'</small></span><em>'.$this->e((string)$row['status']).' · '.$money($row['amount'],(string)($row['currency']??'TRY')).' · Detay →</em></a>';
         echo '</section><section class="panel"><h3>Destek geçmişi</h3>';
         if(!$ticketRows)echo '<p>Gerçek destek talebi yok.</p>';
         foreach($ticketRows as $row)echo '<div class="status"><span>#'.$this->e((string)$row['ticket_number']).' · '.$this->e((string)$row['subject']).'<small>'.$this->e((string)$row['department']).' · '.$this->e((string)$row['updated_at']).'</small></span><strong>'.$this->e((string)$row['status']).'</strong></div>';
