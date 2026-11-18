@@ -148,6 +148,8 @@ if ($requestPath === '/client/tickets' && $method === 'GET') { $client->tickets(
 if ($requestPath === '/client/tickets/new' && in_array($method, ['GET', 'POST'], true)) { $client->newTicket(); exit; }
 if (preg_match('#^/client/tickets/([0-9]+)$#', $requestPath, $ticketMatch) && in_array($method, ['GET', 'POST'], true)) { $client->viewTicket((int)$ticketMatch[1]); exit; }
 if ($requestPath === '/knowledgebase' && $method === 'GET') { $client->knowledgebase(); exit; }
+if (preg_match('#^/knowledgebase/([a-z0-9][a-z0-9-]{0,189})$#D', $requestPath, $match) && $method === 'GET') { $client->knowledgebaseArticle($match[1]); exit; }
+if (preg_match('#^/knowledgebase/([a-z0-9][a-z0-9-]{0,189})$#D', $requestPath, $match) && $method === 'POST') { $client->knowledgebaseArticle($match[1]); exit; }
 
 if ($requestPath === '/admin/settings' && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\EmailSettingsController($pdo, $basePath, (string)($config['app']['key'] ?? '')))->index(); exit; }
 if ($requestPath === '/admin/email-queue' && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\EmailQueueController($pdo, $basePath))->index(); exit; }
