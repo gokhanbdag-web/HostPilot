@@ -125,7 +125,7 @@ final class StatementImport
     {
         self::assertFileContents($contents, 'iyzico CSV');
         $contents = preg_replace('/^\\xEF\\xBB\\xBF/', '', $contents) ?? $contents;
-        $firstLine = strtok($contents, "\\r\\n");
+        $firstLine = strtok($contents, "\r\n");
         if (!is_string($firstLine) || $firstLine === '') throw new RuntimeException('iyzico CSV başlık satırı bulunamadı.');
         $delimiters = [',' => substr_count($firstLine, ','), ';' => substr_count($firstLine, ';'), "\\t" => substr_count($firstLine, "\\t")];
         arsort($delimiters);
@@ -136,7 +136,7 @@ final class StatementImport
         try {
             fwrite($stream, $contents);
             rewind($stream);
-            $header = fgetcsv($stream, 0, $delimiter, '"', '\\\\');
+            $header = fgetcsv($stream, 0, $delimiter, '"', '\\');
             if (!is_array($header)) throw new RuntimeException('iyzico CSV başlıkları okunamadı.');
             $header = array_map(static fn($v): string => strtolower(trim((string)$v)), $header);
             $positions = [];
@@ -147,14 +147,16 @@ final class StatementImport
             if (!isset($positions['paidprice']) && !isset($positions['price'])) throw new RuntimeException('iyzico SFTP raporunda paidPrice veya price alanı bulunamadı.');
             $rows = [];
             $line = 1;
-            while (($values = fgetcsv($stream, 0, $delimiter, '"', '\\\\')) !== false) {
+            while (($values = fgetcsv($stream, 0, $delimiter, '"', '\\')) !== false) {
                 $line++;
                 if ($values === [null] || $values === []) continue;
                 if (count($rows) >= self::MAX_ROWS) throw new RuntimeException('iyzico raporu 5.000 hareket sınırını aşıyor.');
                 $get = static function (string $key) use ($positions, $values): string {
                     return isset($positions[$key]) ? trim((string)($values[$positions[$key]] ?? '')) : '';
                 };
-                $date = self::providerDate($get('transactiondate'));
+                $rawDate = $get('transactiondate');
+                if ($rawDate === '') continue; // iyzico cut-off/settlement CSV may append a summary row.
+                $date = self::providerDate($rawDate);
                 $providerType = strtolower($get('transactiontype'));
                 $type = match ($providerType) { 'auth','postauth' => 'capture', 'refund' => 'refund', default => 'unknown' };
                 $reference = $providerType === 'refund'
@@ -181,7 +183,7 @@ final class StatementImport
     private static function assertFileContents(string $contents, string $label): void
     {
         if ($contents === '' || strlen($contents) > self::MAX_FILE_BYTES) throw new RuntimeException($label.' dosyası boş veya 2 MB sınırını aşıyor.');
-        if (str_contains($contents, "\\0") || preg_match('//u', $contents) !== 1) throw new RuntimeException($label.' dosyası geçerli UTF-8 metin olmalıdır.');
+        if (str_contains($contents, "\0") || preg_match('//u', $contents) !== 1) throw new RuntimeException($label.' dosyası geçerli UTF-8 metin olmalıdır.');
     }
 
     private static function providerAmount(string $amount): string
@@ -196,9 +198,11 @@ final class StatementImport
         $value = trim($value);
         if ($value === '') throw new RuntimeException('Sağlayıcı raporunda işlem tarihi bulunamadı.');
         try {
-            $date = new \\DateTimeImmutable($value, new \\DateTimeZone('UTC'));
-            return $date->setTimezone(new \\DateTimeZone('UTC'))->format('Y-m-d H:i:s');
-        } catch (\\Throwable) {
+            $parsed = date_parse($value);
+            if (($parsed['error_count'] ?? 0) > 0 || ($parsed['warning_count'] ?? 0) > 0) throw new RuntimeException('invalid date');
+            $date = new \DateTimeImmutable($value, new \DateTimeZone('UTC'));
+            return $date->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+        } catch (\Throwable) {
             throw new RuntimeException('Sağlayıcı raporunda işlem tarihi tanınamadı.');
         }
     }
@@ -286,8 +290,8 @@ final class StatementImport
     private static function findCandidate(PDO $db, array $row): array
     {
         if ($row['type'] === 'refund') {
-            $q = $db->prepare('SELECT pr.id AS refund_id,pr.amount,pr.currency FROM payment_refunds pr WHERE pr.provider_reference=:reference AND pr.currency=:currency LIMIT 2');
-            $q->execute([':reference'=>$row['reference'],':currency'=>$row['currency']]);
+            $q = $db->prepare('SELECT DISTINCT pr.id AS refund_id,pr.amount,pr.currency FROM payment_refunds pr JOIN payment_transactions pt ON pt.id=pr.payment_transaction_id WHERE (pr.provider_reference=:reference OR pt.request_reference=:order_reference OR pt.gateway_transaction_id=:gateway_reference) AND pr.currency=:currency LIMIT 2');
+            $q->execute([':reference'=>$row['reference'],':order_reference'=>$row['reference'],':gateway_reference'=>$row['reference'],':currency'=>$row['currency']]);
             $matches = $q->fetchAll(PDO::FETCH_ASSOC);
             $idField = 'refund_id';
         } elseif ($row['type'] === 'capture') {
