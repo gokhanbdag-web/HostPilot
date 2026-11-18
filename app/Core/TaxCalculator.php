@@ -49,6 +49,7 @@ final class TaxCalculator
             $tax = intdiv(($net * $rate) + 5000, 10000);
             $total = $net + $tax;
         }
+        if ($total > 999999999999) throw new RuntimeException('Vergi dahil fatura toplamı izin verilen üst sınırı aşıyor.');
         return [
             'subtotal_cents' => $net,
             'tax_cents' => $tax,
@@ -69,6 +70,7 @@ final class TaxCalculator
             $subtotal += $line['subtotal_cents'];
             $tax += $line['tax_cents'];
             $total += $line['total_cents'];
+            if ($subtotal > 999999999999 || $tax > 999999999999 || $total > 999999999999) throw new RuntimeException('Vergi hesaplama toplamı izin verilen üst sınırı aşıyor.');
         }
         return [
             'lines' => $lines,
