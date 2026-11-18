@@ -72,7 +72,7 @@ final class CatalogController
                 if($p['product_type']==='domain')echo '<small>Alan adı: '.$this->e((string)$p['domain_name']).'</small>';
                 echo '<form method="post" action="'.$this->url('/cart/remove').'"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="cart_key" value="'.$this->e((string)$p['cart_key']).'"><button class="button" style="background:#6b3444">Sepetten çıkar</button></form></article>';
             }
-            echo '<h2>Toplam: '.number_format($totalCents/100,2,',','.').' '.$this->e($currency).'</h2><p>Fiyatlar sipariş oluşturulurken yeniden doğrulanır.</p>';
+            if(!$currencyConflict)echo '<h2>Toplam: '.number_format($totalCents/100,2,',','.').' '.$this->e($currency).'</h2><p>Fiyatlar sipariş oluşturulurken yeniden doğrulanır.</p>';
             if($currencyConflict)echo '<p class="error">Sepette farklı para birimleri var. Sipariş vermek için ürünleri aynı para birimine getirin.</p>';
             elseif(Auth::check()&&(Auth::user()['role']??'')==='customer')echo '<form method="post" action="'.$this->url('/order/create').'"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><button class="button">Siparişi oluştur ve faturaya geç</button></form>';
             else echo '<p><a class="button" href="'.$this->url('/client/login').'">Giriş yaparak devam et</a></p>';
@@ -161,7 +161,7 @@ final class CatalogController
             $invoiceLine=$this->db->prepare('INSERT INTO invoice_items(invoice_id,description,quantity,unit_price,tax_rate,tax_amount,line_total,created_at) VALUES(:invoice,:description,1,:price,0,0,:total,:created)');
             foreach($items as $item){
                 $base=$this->moneyDecimal($item['base_cents']);$line=$this->moneyDecimal($item['line_cents']);
-                $orderLine->execute([':oid'=>$orderId,':pid'=>$item['id'],':name'=>$item['name'],':cycle'=>$item['billing_cycle'],':price'=>$base,':line'=>$line,':created'=>$now]);
+                $orderLine->execute([':oid'=>$orderId,':pid'=>$item['id'],':name'=>$item['name'],':cycle'=>$item['billing_cycle'],':price'=>$line,':line'=>$line,':created'=>$now]);
                 $invoiceLine->execute([':invoice'=>$invoiceId,':description'=>$item['name'].' · '.$this->cycle($item['billing_cycle']),':price'=>$base,':total'=>$base,':created'=>$now]);
                 if($item['setup_cents']>0){
                     $setup=$this->moneyDecimal($item['setup_cents']);
