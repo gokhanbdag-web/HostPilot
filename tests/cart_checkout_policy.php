@@ -13,7 +13,7 @@ $checks=[
     'Cart mutations require CSRF validation'=>substr_count($catalog,'Auth::verifyCsrf($_POST[\'_token\']??null)')>=2,
     'Cart has a bounded item count'=>str_contains($catalog,'count($cart)>=10')&&str_contains($catalog,'count($cart)>10'),
     'Duplicate product-cycle entries are rejected'=>str_contains($catalog,'isset($cart[$key])'),
-    'Cart enforces one currency per order'=>str_contains($catalog,'same para birimindeki ürünler')&&str_contains($catalog,'farklı para birimleri kullanılamaz'),
+    'Cart enforces one currency per order'=>str_contains($catalog,'aynı para birimindeki ürünler')&&str_contains($catalog,'farklı para birimleri kullanılamaz'),
     'Cart limits an order to one domain'=>str_contains($catalog,'yalnızca bir domain bulunabilir'),
     'Cart re-reads active product prices'=>substr_count($catalog,"pp.is_active=1 LIMIT 1")>=3,
     'Cart includes setup fees in item totals'=>str_contains($catalog,'$setupCents=$this->moneyCents($p[\'setup_fee\'])')&&str_contains($catalog,'$lineCents=$baseCents+$setupCents'),
