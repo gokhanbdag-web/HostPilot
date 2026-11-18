@@ -1,7 +1,7 @@
 name: HostPilot quality checks
 on:
   push:
-    branches: [main, 'finance/**']
+    branches: [main, 'finance/**', 'support/**']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -89,6 +89,8 @@ jobs:
         run: php tests/security_output.php
       - name: Test ticket attachment policy
         run: php tests/ticket_attachments.php
+      - name: Test private ticket internal notes policy
+        run: php tests/ticket_internal_notes_policy.php
       - name: Test ClamAV scanner policy
         run: php tests/clamav_scanner.php
       - name: Prevent Composer dependency
