@@ -19,6 +19,7 @@ $checks=[
  'menu changes are audited'=>str_contains($admin,'cms.menu_updated')&&str_contains($admin,'cms.menu_item_created')&&str_contains($admin,'cms.menu_item_updated')&&str_contains($admin,'cms.menu_item_deleted'),
  'renderer selects active menus and active items'=>str_contains($renderer,"location=:location AND status='active'")&&str_contains($renderer,"menu_id=:id AND status='active'"),
  'renderer escapes labels and URLs'=>str_contains($renderer,'htmlspecialchars('),
+ 'renderer rejects unsafe database URLs'=>str_contains($renderer,'if(!$relative&&!$external)continue;'),
  'external new-tab links use noopener noreferrer'=>str_contains($renderer,'noopener noreferrer'),
  'storefront uses configurable header and footer menus'=>str_contains($catalog,"'header'")&&str_contains($catalog,"'footer'")&&str_contains($catalog,'CmsMenuRenderer::links'),
  'CMS page navigation uses configurable header menu'=>str_contains($public,'CmsMenuRenderer::links'),
