@@ -53,6 +53,8 @@ final class ResellerClubClient
         if($ns)$payload['ns']=$ns;
         $data=$this->request('POST','/domains',$payload);
         if(empty($data['orderId'])||!ctype_digit((string)$data['orderId']))throw new RuntimeException('Registrar kayıt yanıtında geçerli orderId bulunamadı.');
+        $eaqId=(string)($data['eaqId']??'');
+        if($eaqId!==''&&!ctype_digit($eaqId))throw new RuntimeException('Registrar kayıt yanıtındaki EAQ action ID geçersiz.');
         return $data;
     }
 
@@ -94,11 +96,13 @@ final class ResellerClubClient
         return $domain;
     }
 
-    public function actionStatus(string $orderId,string $eaqId):array
+    public function actionStatus(string $orderId,string $eaqId=''):array
     {
         if(!ctype_digit($orderId))throw new RuntimeException('Geçersiz registrar orderId.');
-        if(!ctype_digit($eaqId))throw new RuntimeException('Geçersiz registrar action ID.');
-        $query=http_build_query(['orderId'=>$orderId,'eaqId'=>$eaqId,'size'=>10,'page'=>1]);
+        if($eaqId!==''&&!ctype_digit($eaqId))throw new RuntimeException('Geçersiz registrar action ID.');
+        $filters=['orderId'=>$orderId,'size'=>10,'page'=>1];
+        if($eaqId!=='')$filters['eaqId']=$eaqId;
+        $query=http_build_query($filters);
         $current=$this->request('GET','/actions/search-current?'.$query);
         if(!empty($current['actions']))return $current;
         // Completed and failed actions move out of the current list after 24 hours.
