@@ -92,7 +92,7 @@ final class StatementImport
             if (!is_array($transaction)) throw new RuntimeException('iyzico işlem kaydı geçersiz.');
             $providerType = strtoupper(trim((string)($transaction['transactionType'] ?? '')));
             $type = match ($providerType) {
-                'PAYMENT' => ((int)($transaction['transactionStatus'] ?? 0) === 2 ? 'capture' : 'unknown'),
+                'PAYMENT' => (in_array((int)($transaction['transactionStatus'] ?? 0), [1, 2], true) ? 'capture' : 'unknown'),
                 'REFUND' => 'refund',
                 default => 'unknown',
             };
