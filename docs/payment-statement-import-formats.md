@@ -28,6 +28,10 @@ Mapped fields:
 
 The parser supports comma- and semicolon-delimited UTF-8 CSV and ignores non-transaction summary rows in cut-off/settlement exports. Provider timestamps without an explicit timezone are interpreted as Europe/Istanbul and converted to UTC. Buyer name/email, card data and other personal fields are not persisted.
 
+## Canonical CSV conversion
+
+Administrators can use the **Standart CSV dönüştürücü** on the statement import page to download a provider-native PayTR JSON or iyzico CSV report as the exact canonical header and column order shown below. Conversion runs in the browser request, does not create an import record, and excludes provider personal/card fields. The exported UTF-8 CSV can be uploaded later as a bank/canonical statement file. Spreadsheet formula-like reference and description values are neutralized in the download.
+
 ## Bank CSV
 
 Bank uploads continue to use the canonical format with the exact ordered header:
