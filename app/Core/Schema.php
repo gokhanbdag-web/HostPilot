@@ -349,6 +349,7 @@ final class Schema
                 registrar_customer_id VARCHAR(40) NULL,
                 registrar_contact_id VARCHAR(40) NULL,
                 registrar_order_id VARCHAR(40) NULL,
+                registrar_action_id VARCHAR(40) NULL,
                 registrar_payload_enc LONGTEXT NOT NULL,
                 idempotency_key CHAR(64) NOT NULL,
                 status VARCHAR(24) NOT NULL DEFAULT 'awaiting_payment',
