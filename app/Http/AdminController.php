@@ -118,7 +118,7 @@ final class AdminController
         if (!in_array($user['role'], ['super_admin','admin','staff'], true)) { http_response_code(403); echo 'Yetkisiz erişim.'; return; }
         $term=trim((string)($_GET['q']??''));
         $page=max(1,(int)($_GET['page']??1));$limit=25;$offset=($page-1)*$limit;
-        $where="role='customer'";$params=[];
+        $where="role='customer' AND email NOT LIKE 'demo.musteri%@example.invalid'";$params=[];
         if($term!==''){$where.=" AND (name LIKE :q1 OR email LIKE :q2 OR username LIKE :q3)";$like='%'.$term.'%';$params=[':q1'=>$like,':q2'=>$like,':q3'=>$like];}
         $count=$this->db->prepare("SELECT COUNT(*) FROM users WHERE ".$where);$count->execute($params);$total=(int)$count->fetchColumn();
         $list=$this->db->prepare("SELECT id,name,email,username,status,created_at FROM users WHERE ".$where." ORDER BY created_at DESC,id DESC LIMIT ".$limit." OFFSET ".$offset);$list->execute($params);$rows=$list->fetchAll();
