@@ -98,7 +98,7 @@ function installBrowserApp(PDO $admin, string $host, int $port, string $user, st
         [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true]
     );
     $count = (int)$db->query('SELECT COUNT(*) FROM migrations')->fetchColumn();
-    if ($count !== 32) throw new RuntimeException('Fresh browser install did not apply all 33 migrations; found ' . $count . '.');
+    if ($count !== 33) throw new RuntimeException('Fresh browser install did not apply all 33 migrations; found ' . $count . '.');
     $adminCheck = $db->prepare('SELECT role FROM users WHERE username=:username LIMIT 1');
     $adminCheck->execute([':username' => $username]);
     if ($adminCheck->fetchColumn() !== 'super_admin') throw new RuntimeException('Installer did not create the first super administrator.');
