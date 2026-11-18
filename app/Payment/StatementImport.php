@@ -102,14 +102,14 @@ final class StatementImport
                 $line++;
                 if ($values === [null] || $values === []) continue;
                 $typeValue = isset($columns['transactiontype']) ? trim((string)($values[$columns['transactiontype']] ?? '')) : '';
+                $normalizedType = strtolower($typeValue);
+                $knownTypes = ['auth','preauth','postauth','refund','cancel'];
+                $paymentReference = trim((string)($values[$columns['paymentid']] ?? ''));
+                $transactionReference = isset($columns['paymenttxid']) ? trim((string)($values[$columns['paymenttxid']] ?? '')) : '';
                 // Cut-off and settlement exports can append a summary block after the transaction rows.
-                if ($typeValue === '') {
-                    if (isset($columns['paymentid']) && trim((string)($values[$columns['paymentid']] ?? '')) !== '') {
-                        throw new RuntimeException('iyzico CSV satır '.$line.' işlem türü eksik.');
-                    }
-                    continue;
-                }
+                if (!in_array($normalizedType, $knownTypes, true) && $paymentReference === '' && $transactionReference === '') continue;
                 if (count($values) !== count($header)) throw new RuntimeException('iyzico CSV satır '.$line.' sütun sayısı geçersiz.');
+                if ($typeValue === '') throw new RuntimeException('iyzico CSV satır '.$line.' işlem türü eksik.');
                 if (count($rows) >= self::MAX_ROWS) throw new RuntimeException('iyzico CSV en fazla 5.000 hareket içerebilir.');
                 $value = static fn(string $key): string => isset($columns[$key]) ? trim((string)($values[$columns[$key]] ?? '')) : '';
                 $providerType = strtolower($value('transactiontype'));
