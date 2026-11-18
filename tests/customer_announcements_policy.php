@@ -20,7 +20,7 @@ $checks=[
  'announcement body is escaped before rendering'=>str_contains($client,'nl2br($this->e((string)$announcement[\'body\']))'),
  'dismiss action requires customer authentication and CSRF'=>str_contains($client,'public function dismissAnnouncement')&&str_contains($client,'Auth::verifyCsrf($_POST[\'_token\']??null)'),
  'dismissal is scoped to the current customer'=>str_contains($client,'cms_announcement_dismissals(announcement_id,user_id,dismissed_at)')&&str_contains($client,"':user'")&&str_contains($client,"user['id']"),
- 'dismiss route is POST-only'=>str_contains($index,"'/client/announcements/dismiss' && $method === 'POST'"),
+ 'dismiss route is POST-only'=>str_contains($index,'/client/announcements/dismiss')&&str_contains($index,'$method === \'POST\''),
  'admin announcement routes are registered'=>str_contains($index,"'/admin/announcements/new'")&&str_contains($index,"^/admin/announcements/"),
  'announcement routes are centrally authorized'=>str_contains($auth,'announcements.manage'),
  'staff cannot manage announcements through staff permissions'=>!str_contains($auth,"'announcements.manage' =>"),
