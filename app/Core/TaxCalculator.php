@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace HostPilot\\Core;
+namespace HostPilot\Core;
 
 use PDO;
 use RuntimeException;
@@ -82,7 +82,7 @@ final class TaxCalculator
     public static function toCents(mixed $amount): int
     {
         $value = trim((string)$amount);
-        if (!preg_match('/^(0|[1-9][0-9]{0,9})(?:\\.([0-9]{1,2}))?$/', $value, $match)) {
+        if (!preg_match('/^(0|[1-9][0-9]{0,9})(?:\.([0-9]{1,2}))?$/', $value, $match)) {
             throw new RuntimeException('Para tutarı geçersiz.');
         }
         $fraction = str_pad($match[2] ?? '', 2, '0');
@@ -98,7 +98,7 @@ final class TaxCalculator
     public static function rateBasisPoints(string $rate): int
     {
         $rate = trim(str_replace(',', '.', $rate));
-        if (!preg_match('/^(?:0|[1-9][0-9]?|100)(?:\\.([0-9]{1,2}))?$/', $rate, $match)) {
+        if (!preg_match('/^(?:0|[1-9][0-9]?|100)(?:\.([0-9]{1,2}))?$/', $rate, $match)) {
             throw new RuntimeException('Vergi oranı 0 ile 100 arasında olmalıdır.');
         }
         $parts = explode('.', $rate, 2);
