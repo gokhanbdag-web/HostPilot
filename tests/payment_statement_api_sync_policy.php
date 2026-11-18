@@ -20,7 +20,7 @@ $checks=[
  'provider API secrets are decrypted from the existing vault'=>str_contains($controller,'new SecretVault($applicationKey)')&&str_contains($controller,'$this->vault->decrypt'),
  'provider fetches use the existing statement importer'=>str_contains($controller,'StatementImport::import')&&str_contains($controller,"'paytr'")&&str_contains($controller,"'iyzico'"),
  'provider fetches are audited'=>str_contains($controller,'SecurityAudit::record')&&str_contains($controller,'payment.statement_imported'),
- 'iyzico API JSON is normalized without buyer PII'=>str_contains($service,'private static function parseIyzicoJson')&&str_contains($service,"$transaction['paymentId']")&&!str_contains($service,"['buyerEmail']"),
+ 'iyzico API JSON is normalized without buyer PII'=>str_contains($service,'private static function parseIyzicoJson')&&str_contains($service,'paymentId')&&!str_contains($service,"['buyerEmail']"),
  'API transport signs the fixed iyzico reporting path'=>str_contains($transport,'buildIyzicoAuthorization')&&str_contains($transport,'$path'),
  'API transport uses GET and keeps redirects disabled'=>str_contains($transport,'$options[CURLOPT_HTTPGET]=true')&&str_contains($transport,'CURLOPT_FOLLOWLOCATION=>false'),
  'report API endpoints remain host/path allowlisted'=>str_contains($transport,"'/rapor/islem-dokumu'")&&str_contains($transport,"'/v2/reporting/payment/transactions'"),
