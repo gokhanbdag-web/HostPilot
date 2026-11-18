@@ -33,6 +33,7 @@ The repository now contains the initial browser-installer flow, PDO connection l
 - [Integration research and contracts](docs/INTEGRATIONS.md)
 - [Security baseline](docs/SECURITY.md)
 - [Implementation roadmap](docs/ROADMAP.md)
+- [Admin menu completeness audit](docs/ADMIN-MENU-AUDIT.md)
 
 ## Target deployment
 
