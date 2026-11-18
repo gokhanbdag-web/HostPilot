@@ -154,9 +154,14 @@ final class StatementImportController
                 if (strtolower((string)($first['status'] ?? '')) !== 'success' || !isset($first['transactions']) || !is_array($first['transactions']) || !array_is_list($first['transactions'])) {
                     throw new \RuntimeException('iyzico günlük raporu alınamadı. API yetkilerini ve seçilen tarihi kontrol edin.');
                 }
+                if ($first['transactions'] === []) continue;
                 $totalPages = (int)($first['totalPageCount'] ?? 1);
                 if ($totalPages < 1 || $totalPages > 100) throw new \RuntimeException('iyzico rapor sayfa sayısı güvenli sınırı aşıyor.');
-                foreach ($first['transactions'] as $transaction) $allTransactions[] = $transaction;
+                $allowedFields = array_flip(['transactionType','transactionDate','transactionId','paymentTxId','paymentId','paidPrice','price','transactionCurrency','transactionStatus']);
+                foreach ($first['transactions'] as $transaction) {
+                    if (!is_array($transaction)) throw new \RuntimeException('iyzico raporunda geçersiz hareket bulundu.');
+                    $allTransactions[] = array_intersect_key($transaction,$allowedFields);
+                }
                 for ($page = 2; $page <= $totalPages; $page++) {
                     $response = GatewayTransport::getJson($baseUrl,'/v2/reporting/payment/transactions',[
                         'locale'=>'tr','page'=>$page,'transactionDate'=>$date,
@@ -164,7 +169,10 @@ final class StatementImportController
                     if (strtolower((string)($response['status'] ?? '')) !== 'success' || !isset($response['transactions']) || !is_array($response['transactions']) || !array_is_list($response['transactions'])) {
                         throw new \RuntimeException('iyzico raporunun sonraki sayfası alınamadı.');
                     }
-                    foreach ($response['transactions'] as $transaction) $allTransactions[] = $transaction;
+                    foreach ($response['transactions'] as $transaction) {
+                        if (!is_array($transaction)) throw new \RuntimeException('iyzico raporunda geçersiz hareket bulundu.');
+                        $allTransactions[] = array_intersect_key($transaction,$allowedFields);
+                    }
                     if (count($allTransactions) > StatementImport::MAX_ROWS) throw new \RuntimeException('iyzico raporu 5.000 hareket sınırını aşıyor; daha kısa tarih aralığı seçin.');
                 }
                 if (count($allTransactions) > StatementImport::MAX_ROWS) throw new \RuntimeException('iyzico raporu 5.000 hareket sınırını aşıyor; daha kısa tarih aralığı seçin.');
