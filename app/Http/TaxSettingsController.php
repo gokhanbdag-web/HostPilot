@@ -34,6 +34,11 @@ final class TaxSettingsController
                     $label = trim((string)($_POST['label'] ?? 'KDV'));
                     if (!in_array($mode, ['exclusive', 'inclusive'], true)) throw new \RuntimeException('Fiyat vergilendirme biçimi geçersiz.');
                     if ($label === '' || strlen($label) > 40 || preg_match('/[<>]/', $label)) throw new \RuntimeException('Vergi adı 1–40 karakter olmalı.');
+                    $current = TaxCalculator::settings($this->db);
+                    if ($current['mode'] !== $mode) {
+                        $existingOrders = (int)$this->db->query('SELECT COUNT(*) FROM orders')->fetchColumn();
+                        if ($existingOrders > 0) throw new \\RuntimeException('Vergi dahil/hariç fiyat biçimi sipariş oluşturulduktan sonra değiştirilemez; mevcut hizmet yenilemelerinin fiyat temeli korunmalıdır.');
+                    }
                     $rateValue = number_format($rate / 100, 2, '.', '');
                     $fields = ['enabled' => $enabled, 'rate' => $rateValue, 'mode' => $mode, 'label' => $label];
                     foreach ($fields as $key => $value) {
