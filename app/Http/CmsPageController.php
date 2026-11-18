@@ -14,8 +14,7 @@ final class CmsPageController
         $q=$this->db->prepare("SELECT title,slug,excerpt,content,meta_title,meta_description FROM cms_pages WHERE slug=:slug AND status='published' LIMIT 1");
         $q->execute([':slug'=>$slug]);$page=$q->fetch(PDO::FETCH_ASSOC);
         if(!$page){http_response_code(404);$this->start('Sayfa bulunamadı');echo '<main class="cms"><a class="brand" href="'.$this->url('/').'">HOST<span>PILOT</span></a><h1>Sayfa bulunamadı</h1><a href="'.$this->url('/').'">Ana sayfaya dön</a></main>';$this->end();return;}
-        $this->start((string)($page['meta_title']?:$page['title']));
-        if(trim((string)$page['meta_description'])!=='')echo '<meta name="description" content="'.$this->e((string)$page['meta_description']).'">';
+        $this->start((string)($page['meta_title']?:$page['title']),(string)($page['meta_description']??''));
         echo '<main class="cms"><header><a class="brand" href="'.$this->url('/').'">HOST<span>PILOT</span></a><nav><a href="'.$this->url('/').'">Ana sayfa</a>'.$this->publicPageLinks().'<a href="'.$this->url('/knowledgebase').'">Yardım merkezi</a><a href="'.$this->url('/client').'">Müşteri paneli</a></nav></header><article><h1>'.$this->e((string)$page['title']).'</h1>';
         if(trim((string)$page['excerpt'])!=='')echo '<p class="excerpt">'.$this->e((string)$page['excerpt']).'</p>';
         echo '<div class="content">'.nl2br($this->e((string)$page['content'])).'</div></article></main>';$this->end();
