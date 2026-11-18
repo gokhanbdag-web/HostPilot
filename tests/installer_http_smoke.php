@@ -119,7 +119,8 @@ function installBrowserApp(PDO $admin, string $host, int $port, string $user, st
     if ($adminCheck->fetchColumn() !== 'super_admin') throw new RuntimeException('Installer did not create the first super administrator.');
     $adminCheck->closeCursor();
     $expectedStorageDeny = "<IfModule mod_authz_core.c>\nRequire all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\nDeny from all\n</IfModule>\n";
-    $actualStorageDeny = is_file($storage . '/.htaccess') ? file_get_contents($storage . '/.htaccess') : false;
+    $storageHtaccessPath = dirname(__DIR__) . '/storage/.htaccess';
+    $actualStorageDeny = is_file($storageHtaccessPath) ? file_get_contents($storageHtaccessPath) : false;
     if ($actualStorageDeny !== $expectedStorageDeny) {
         throw new RuntimeException('Installer must write a valid multiline Apache deny rule for storage.');
     }
