@@ -159,11 +159,14 @@ final class StatementImport
                 $date = self::providerDate($rawDate);
                 $providerType = strtolower($get('transactiontype'));
                 $type = match ($providerType) { 'auth','postauth' => 'capture', 'refund' => 'refund', default => 'unknown' };
-                $reference = $providerType === 'refund'
-                    ? ($get('refundconversationid') !== '' ? $get('refundconversationid') : ($get('paymenttxid') !== '' ? $get('paymenttxid') : $get('paymentid')))
-                    : $get('paymentid');
+                // RefundConversationId identifies the refund request, not the original payment.
+                // Use the parent paymentId so the refund ledger can be matched safely.
+                $reference = $get('paymentid') !== '' ? $get('paymentid') : $get('conversationid');
                 $currency = strtoupper($get('transactioncurrency'));
-                $amount = self::providerAmount($get('paidprice') !== '' ? $get('paidprice') : $get('price'));
+                $rawAmount = $providerType === 'refund'
+                    ? $get('price')
+                    : ($get('paidprice') !== '' ? $get('paidprice') : $get('price'));
+                $amount = self::providerAmount($rawAmount);
                 if ($reference === '' || strlen($reference) > 190 || !preg_match('/^[A-Z]{3}$/D', $currency)) {
                     throw new RuntimeException('iyzico CSV satır '.$line.' referans veya para birimi alanı geçersiz.');
                 }
@@ -290,13 +293,18 @@ final class StatementImport
     private static function findCandidate(PDO $db, array $row): array
     {
         if ($row['type'] === 'refund') {
-            $q = $db->prepare('SELECT DISTINCT pr.id AS refund_id,pr.amount,pr.currency FROM payment_refunds pr JOIN payment_transactions pt ON pt.id=pr.payment_transaction_id WHERE (pr.provider_reference=:reference OR pt.request_reference=:order_reference OR pt.gateway_transaction_id=:gateway_reference) AND pr.currency=:currency LIMIT 2');
-            $q->execute([':reference'=>$row['reference'],':order_reference'=>$row['reference'],':gateway_reference'=>$row['reference'],':currency'=>$row['currency']]);
+            $q = $db->prepare('SELECT DISTINCT pr.id AS refund_id,pr.amount,pr.currency FROM payment_refunds pr JOIN payment_transactions pt ON pt.id=pr.payment_transaction_id WHERE (pr.provider_reference=:reference OR pt.request_reference=:order_reference OR pt.gateway_transaction_id=:gateway_reference OR pt.idempotency_key=:idempotency_reference) AND pr.currency=:currency AND pr.amount=:amount LIMIT 2');
+            $q->execute([':reference'=>$row['reference'],':order_reference'=>$row['reference'],':gateway_reference'=>$row['reference'],':idempotency_reference'=>$row['reference'],':currency'=>$row['currency'],':amount'=>$row['amount']]);
             $matches = $q->fetchAll(PDO::FETCH_ASSOC);
+            if (count($matches) === 0) {
+                $fallback = $db->prepare('SELECT DISTINCT pr.id AS refund_id,pr.amount,pr.currency FROM payment_refunds pr JOIN payment_transactions pt ON pt.id=pr.payment_transaction_id WHERE (pr.provider_reference=:reference OR pt.request_reference=:order_reference OR pt.gateway_transaction_id=:gateway_reference OR pt.idempotency_key=:idempotency_reference) AND pr.currency=:currency LIMIT 2');
+                $fallback->execute([':reference'=>$row['reference'],':order_reference'=>$row['reference'],':gateway_reference'=>$row['reference'],':idempotency_reference'=>$row['reference'],':currency'=>$row['currency']]);
+                $matches = $fallback->fetchAll(PDO::FETCH_ASSOC);
+            }
             $idField = 'refund_id';
         } elseif ($row['type'] === 'capture') {
-            $q = $db->prepare("SELECT pt.id AS payment_id,pt.amount,pt.currency FROM payment_transactions pt WHERE (pt.gateway_transaction_id=:gateway_reference OR pt.request_reference=:request_reference) AND pt.currency=:currency AND pt.status IN ('success','partially_refunded','refunded') LIMIT 2");
-            $q->execute([':gateway_reference'=>$row['reference'],':request_reference'=>$row['reference'],':currency'=>$row['currency']]);
+            $q = $db->prepare("SELECT pt.id AS payment_id,pt.amount,pt.currency FROM payment_transactions pt WHERE (pt.gateway_transaction_id=:gateway_reference OR pt.request_reference=:request_reference OR pt.idempotency_key=:idempotency_reference) AND pt.currency=:currency AND pt.status IN ('success','partially_refunded','refunded') LIMIT 2");
+            $q->execute([':gateway_reference'=>$row['reference'],':request_reference'=>$row['reference'],':idempotency_reference'=>$row['reference'],':currency'=>$row['currency']]);
             $matches = $q->fetchAll(PDO::FETCH_ASSOC);
             $idField = 'payment_id';
         } else {
