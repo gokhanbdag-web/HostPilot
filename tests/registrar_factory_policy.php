@@ -11,7 +11,7 @@ $checks=[
  'registrar interface declares every domain lifecycle operation'=>count(array_filter($methods,fn($m)=>str_contains($interface,'function '.$m.'(')))===count($methods),
  'ResellerClub client implements the provider contract'=>str_contains($client,'implements DomainRegistrarInterface'),
  'factory exposes supported provider identifiers'=>str_contains($factory,"return ['resellerclub'];"),
- 'factory creates the ResellerClub adapter'=>str_contains($factory,"$provider==='resellerclub'")&&str_contains($factory,'new ResellerClubClient'),
+ 'factory creates the ResellerClub adapter'=>str_contains($factory,'$provider===\'resellerclub\'')&&str_contains($factory,'new ResellerClubClient'),
  'factory rejects unsupported providers'=>str_contains($factory,'Desteklenmeyen domain registrar sağlayıcısı'),
  'domain controller no longer constructs a provider directly'=>!str_contains($domain,'new ResellerClubClient')&&str_contains($domain,"RegistrarFactory::create('resellerclub'"),
  'registrar contract retains optional EAQ polling'=>str_contains($interface,"actionStatus(string $orderId,string $eaqId='')"),
