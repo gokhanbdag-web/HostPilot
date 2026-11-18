@@ -115,6 +115,8 @@ final class StatementImportController
             ]);
             $status = strtolower((string)($response['status'] ?? ''));
             if ($status === 'failed') {
+                $providerError = trim((string)($response['err_no'] ?? ''));
+                if ($providerError !== '') throw new \RuntimeException('PayTR rapor servisi isteği reddetti (sağlayıcı kodu: '.substr($providerError,0,40).').');
                 $_SESSION['hostpilot_statement_notice'] = 'Seçilen PayTR tarih aralığında işlem bulunamadı.';
             } elseif ($status !== 'success') {
                 throw new \RuntimeException('PayTR rapor servisi isteği kabul etmedi. Mağaza yetkilerini ve tarih aralığını kontrol edin.');
@@ -146,8 +148,10 @@ final class StatementImportController
             $secretKey = $this->vault->decrypt($settings['iyzico_secret_key']);
             $baseUrl = $settings['iyzico_test_mode'] === '1' ? 'https://sandbox-api.iyzipay.com' : 'https://api.iyzipay.com';
             $allTransactions = [];
+            $apiRequests = 0;
             for ($offset = 0; $offset < $days; $offset++) {
                 $date = (new \DateTimeImmutable($from, new \DateTimeZone('Europe/Istanbul')))->modify('+'.$offset.' days')->format('Y-m-d');
+                if (++$apiRequests > 50) throw new \RuntimeException('iyzico raporu 50 sayfa API sınırını aşıyor; daha kısa tarih aralığı seçin.');
                 $first = GatewayTransport::getJson($baseUrl,'/v2/reporting/payment/transactions',[
                     'locale'=>'tr','page'=>1,'transactionDate'=>$date,
                 ],$apiKey,$secretKey);
@@ -162,7 +166,9 @@ final class StatementImportController
                     if (!is_array($transaction)) throw new \RuntimeException('iyzico raporunda geçersiz hareket bulundu.');
                     $allTransactions[] = array_intersect_key($transaction,$allowedFields);
                 }
+                if (count($allTransactions) > StatementImport::MAX_ROWS) throw new \RuntimeException('iyzico raporu 5.000 hareket sınırını aşıyor; daha kısa tarih aralığı seçin.');
                 for ($page = 2; $page <= $totalPages; $page++) {
+                    if (++$apiRequests > 50) throw new \RuntimeException('iyzico raporu 50 sayfa API sınırını aşıyor; daha kısa tarih aralığı seçin.');
                     $response = GatewayTransport::getJson($baseUrl,'/v2/reporting/payment/transactions',[
                         'locale'=>'tr','page'=>$page,'transactionDate'=>$date,
                     ],$apiKey,$secretKey);
