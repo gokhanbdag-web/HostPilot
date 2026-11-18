@@ -91,7 +91,8 @@
 **Exit criteria:** Sandbox/test server lifecycle operations work with least-privilege credentials and full audit history.
 
 ## Phase 6 — Domains and registrar adapters
-- [ ] Registrar framework and TLD/pricing matrix.
+- [x] Provider-neutral domain registrar interface and factory, with ResellerClub as the first adapter.
+- [ ] Additional registrar adapters (OpenSRS, etc.) and TLD/pricing matrix.
 - [x] ResellerClub asynchronous registration action tracking, including persisted EAQ IDs and order-ID fallback polling.
 - [ ] ResellerClub adapter.
 - [ ] OpenSRS adapter.
