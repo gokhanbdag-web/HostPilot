@@ -97,6 +97,8 @@ jobs:
         run: php tests/support_departments_policy.php
       - name: Test knowledge-base search and feedback policy
         run: php tests/knowledgebase_policy.php
+      - name: Test admin knowledge-base management policy
+        run: php tests/admin_knowledgebase_policy.php
       - name: Test ClamAV scanner policy
         run: php tests/clamav_scanner.php
       - name: Prevent Composer dependency
