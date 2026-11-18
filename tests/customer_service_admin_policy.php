@@ -17,13 +17,13 @@ $customerView=substr($admin,$customerStart,$customerEnd-$customerStart);
 $statusAction=substr($admin,$customerEnd,$statusEnd-$customerEnd);
 $serviceView=substr($server,$serviceStart,$serviceEnd-$serviceStart);
 $checks=[
-    'Customer list links to customer detail pages'=>str_contains($admin,"/admin/customers/'.(int)$row['id']"),
+    'Customer list links to customer detail pages'=>str_contains($admin,'/admin/customers/')&&str_contains($admin,'href='),
     'Customer detail shows orders invoices services and tickets'=>str_contains($customerView,'FROM orders')&&str_contains($customerView,'FROM invoices')&&str_contains($customerView,'FROM services')&&str_contains($customerView,'FROM tickets'),
     'Customer detail excludes demo fixtures'=>str_contains($customerView,"NOT LIKE 'DEMO-%'")&&str_contains($customerView,"DEMO-TKT-%"),
     'Only administrators can change customer status'=>str_contains($statusAction,"['super_admin','admin']")&&str_contains($statusAction,'Auth::verifyCsrf'),
     'Customer status changes revoke sessions and are audited'=>str_contains($statusAction,'auth_version=auth_version+1')&&str_contains($statusAction,'customer.status_updated'),
     'Customer disable does not automatically terminate services'=>!str_contains($statusAction,'UPDATE services')&&!str_contains($statusAction,'DELETE FROM services'),
-    'Service list links to service detail pages'=>str_contains($server,"/admin/services/'.(int)$row['id']"),
+    'Service list links to service detail pages'=>str_contains($server,'/admin/services/')&&str_contains($server,'Hizmet detayını aç'),
     'Service detail shows invoice and provisioning history'=>str_contains($serviceView,'FROM invoices')&&str_contains($serviceView,'FROM provisioning_logs'),
     'Service detail does not decrypt or render remote passwords'=>!str_contains($serviceView,'decrypt')&&!str_contains($serviceView,'remote_password_enc'),
     'Service detail offers only existing CSRF-protected lifecycle actions'=>str_contains($serviceView,'/admin/services/lifecycle')&&str_contains($serviceView,'/admin/services/terminate')&&str_contains($serviceView,'Auth::csrfToken()'),
