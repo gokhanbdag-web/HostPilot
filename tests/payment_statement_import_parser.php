@@ -37,7 +37,7 @@ $iyzicoApi=json_encode(['status'=>'success','transactions'=>[
  ['transactionType'=>'PAYMENT','transactionDate'=>'2026-11-17 14:30:00','transactionId'=>9003,'paymentTxId'=>88002,'paymentId'=>77002,'paidPrice'=>'50.00','price'=>'50.00','transactionCurrency'=>'TRY','transactionStatus'=>1],
 ]],JSON_THROW_ON_ERROR);
 $apiRows=StatementImport::parseFile($iyzicoApi,'iyzico');
-if(count($apiRows)!==3||$apiRows[0]['type']!=='capture'||$apiRows[0]['reference']!=='77001'||$apiRows[0]['amount']!=='150.00'||$apiRows[1]['type']!=='refund'||$apiRows[1]['reference']!=='77001'||$apiRows[1]['amount']!=='25.00'||$apiRows[2]['type']!=='unknown')throw new RuntimeException('iyzico daily reporting API JSON mapping failed.');
+if(count($apiRows)!==3||$apiRows[0]['type']!=='capture'||$apiRows[0]['reference']!=='77001'||$apiRows[0]['amount']!=='150.00'||$apiRows[1]['type']!=='refund'||$apiRows[1]['reference']!=='77001'||$apiRows[1]['amount']!=='25.00'||$apiRows[2]['type']!=='capture')throw new RuntimeException('iyzico daily reporting API JSON mapping failed.');
 if($apiRows[0]['date']!=='2026-11-17 10:30:00'||str_contains(json_encode($apiRows,JSON_THROW_ON_ERROR),'private@example.test'))throw new RuntimeException('iyzico API local time or PII filtering failed.');
 
 $invalid=[
