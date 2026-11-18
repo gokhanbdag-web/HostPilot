@@ -96,9 +96,9 @@ final class StatementImport
                 'REFUND' => 'refund',
                 default => 'unknown',
             };
-            $reference = $type === 'refund'
-                ? trim((string)($transaction['transactionId'] ?? $transaction['paymentTxId'] ?? ''))
-                : trim((string)($transaction['paymentId'] ?? ''));
+            // Use the parent payment ID so a refund can be matched to its
+            // exact recorded refund event by payment reference and event amount.
+            $reference = trim((string)($transaction['paymentId'] ?? $transaction['conversationId'] ?? ''));
             $currency = strtoupper(trim((string)($transaction['transactionCurrency'] ?? '')));
             $amountValue = $type === 'refund'
                 ? (string)($transaction['price'] ?? '')
@@ -163,11 +163,16 @@ final class StatementImport
                     'preauth', 'cancel' => 'unknown',
                     default => 'unknown',
                 };
-                $reference = $type === 'refund'
-                    ? ($value('paymenttxid') !== '' ? $value('paymenttxid') : ($value('refundconversationid') !== '' ? $value('refundconversationid') : $value('paymentid')))
-                    : $value('paymentid');
+                // paymentId is the parent payment identifier returned by iyzico and
+                // matches HostPilot's gateway_transaction_id. paymentTxId and
+                // refundConversationId identify a provider-side item/refund request.
+                $reference = $value('paymentid') !== '' ? $value('paymentid') : $value('conversationid');
                 if ($reference === '' || strlen($reference) > 190) throw new RuntimeException('iyzico CSV satır '.$line.' işlem referansı geçersiz.');
-                $amount = $value('paidprice') !== '' ? $value('paidprice') : $value('price');
+                // In iyzico refund rows, price is the refund event amount; paidPrice
+                // remains the original payment's final amount.
+                $amount = $type === 'refund'
+                    ? $value('price')
+                    : ($value('paidprice') !== '' ? $value('paidprice') : $value('price'));
                 if (!preg_match('/^(?:0|[1-9][0-9]{0,9})(?:\.[0-9]{1,2})?$/D', $amount)) throw new RuntimeException('iyzico CSV satır '.$line.' tutarı geçersiz.');
                 $currency = strtoupper($value('transactioncurrency'));
                 if (!preg_match('/^[A-Z]{3}$/D', $currency)) throw new RuntimeException('iyzico CSV satır '.$line.' para birimi geçersiz.');
@@ -343,13 +348,18 @@ final class StatementImport
     private static function findCandidate(PDO $db, array $row): array
     {
         if ($row['type'] === 'refund') {
-            $q = $db->prepare('SELECT pr.id AS refund_id,pr.amount,pr.currency FROM payment_refunds pr WHERE pr.provider_reference=:reference AND pr.currency=:currency LIMIT 2');
-            $q->execute([':reference'=>$row['reference'],':currency'=>$row['currency']]);
+            $q = $db->prepare('SELECT DISTINCT pr.id AS refund_id,pr.amount,pr.currency FROM payment_refunds pr JOIN payment_transactions pt ON pt.id=pr.payment_transaction_id WHERE (pr.provider_reference=:reference OR pt.request_reference=:order_reference OR pt.gateway_transaction_id=:gateway_reference OR pt.idempotency_key=:idempotency_reference) AND pr.currency=:currency AND pr.amount=:amount LIMIT 2');
+            $q->execute([':reference'=>$row['reference'],':order_reference'=>$row['reference'],':gateway_reference'=>$row['reference'],':idempotency_reference'=>$row['reference'],':currency'=>$row['currency'],':amount'=>$row['amount']]);
             $matches = $q->fetchAll(PDO::FETCH_ASSOC);
+            if (count($matches) === 0) {
+                $fallback = $db->prepare('SELECT DISTINCT pr.id AS refund_id,pr.amount,pr.currency FROM payment_refunds pr JOIN payment_transactions pt ON pt.id=pr.payment_transaction_id WHERE (pr.provider_reference=:reference OR pt.request_reference=:order_reference OR pt.gateway_transaction_id=:gateway_reference OR pt.idempotency_key=:idempotency_reference) AND pr.currency=:currency LIMIT 2');
+                $fallback->execute([':reference'=>$row['reference'],':order_reference'=>$row['reference'],':gateway_reference'=>$row['reference'],':idempotency_reference'=>$row['reference'],':currency'=>$row['currency']]);
+                $matches = $fallback->fetchAll(PDO::FETCH_ASSOC);
+            }
             $idField = 'refund_id';
         } elseif ($row['type'] === 'capture') {
-            $q = $db->prepare("SELECT pt.id AS payment_id,pt.amount,pt.currency FROM payment_transactions pt WHERE (pt.gateway_transaction_id=:gateway_reference OR pt.request_reference=:request_reference) AND pt.currency=:currency AND pt.status IN ('success','partially_refunded','refunded') LIMIT 2");
-            $q->execute([':gateway_reference'=>$row['reference'],':request_reference'=>$row['reference'],':currency'=>$row['currency']]);
+            $q = $db->prepare("SELECT pt.id AS payment_id,pt.amount,pt.currency FROM payment_transactions pt WHERE (pt.gateway_transaction_id=:gateway_reference OR pt.request_reference=:request_reference OR pt.idempotency_key=:idempotency_reference) AND pt.currency=:currency AND pt.status IN ('success','partially_refunded','refunded') LIMIT 2");
+            $q->execute([':gateway_reference'=>$row['reference'],':request_reference'=>$row['reference'],':idempotency_reference'=>$row['reference'],':currency'=>$row['currency']]);
             $matches = $q->fetchAll(PDO::FETCH_ASSOC);
             $idField = 'payment_id';
         } else {
