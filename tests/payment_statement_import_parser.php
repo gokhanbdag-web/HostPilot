@@ -10,12 +10,12 @@ $rows=StatementImport::parseCsv("\xEF\xBB\xBF".$canonical);
 if(count($rows)!==2||$rows[0]['reference']!=='TX-100'||$rows[0]['amount']!=='125.50'||$rows[1]['currency']!=='TRY')throw new RuntimeException('Canonical UTF-8/BOM CSV parsing failed.');
 if(count(StatementImport::parseFile($canonical,'bank'))!==2)throw new RuntimeException('Bank canonical CSV dispatch failed.');
 
-$iyzico="transactionDate,transactionType,paymentTxId,paymentId,conversationId,paidPrice,transactionCurrency,buyerEmail,settlementReferenceCode\n"
- ."2026-11-17 13:30:00,AUTH,tx-100,pay-100,conv-100,125.50,TRY,private@example.test,settle-1\n"
- ."2026-11-17 14:00:00,REFUND,tx-ref-1,pay-100,conv-ref-1,25.00,TRY,private@example.test,settle-1\n"
- ."2026-11-17 14:30:00,PREAUTH,tx-pre-1,pay-pre-1,conv-pre-1,99.00,TRY,private@example.test,settle-1\n";
+$iyzico="transactionDate,transactionType,paymentTxId,paymentId,conversationId,price,paidPrice,transactionCurrency,buyerEmail,settlementReferenceCode\n"
+ ."2026-11-17 13:30:00,AUTH,tx-100,pay-100,conv-100,125.50,125.50,TRY,private@example.test,settle-1\n"
+ ."2026-11-17 14:00:00,REFUND,tx-ref-1,pay-100,conv-ref-1,25.00,125.50,TRY,private@example.test,settle-1\n"
+ ."2026-11-17 14:30:00,PREAUTH,tx-pre-1,pay-pre-1,conv-pre-1,99.00,99.00,TRY,private@example.test,settle-1\n";
 $iyzRows=StatementImport::parseFile($iyzico,'iyzico');
-if(count($iyzRows)!==3||$iyzRows[0]['reference']!=='pay-100'||$iyzRows[0]['type']!=='capture'||$iyzRows[1]['reference']!=='tx-ref-1'||$iyzRows[1]['type']!=='refund'||$iyzRows[2]['type']!=='unknown')throw new RuntimeException('iyzico SFTP transaction report mapping failed.');
+if(count($iyzRows)!==3||$iyzRows[0]['reference']!=='pay-100'||$iyzRows[0]['type']!=='capture'||$iyzRows[1]['reference']!=='pay-100'||$iyzRows[1]['amount']!=='25.00'||$iyzRows[1]['type']!=='refund'||$iyzRows[2]['type']!=='unknown')throw new RuntimeException('iyzico SFTP transaction report mapping failed.');
 if($iyzRows[0]['date']!=='2026-11-17 10:30:00')throw new RuntimeException('iyzico Europe/Istanbul to UTC date conversion failed.');
 $semicolon="transactionDate;transactionType;paymentTxId;paymentId;conversationId;paidPrice;transactionCurrency\n2026-11-17 13:30:00;AUTH;tx-200;pay-200;conv-200;10.00;USD\n";
 if(StatementImport::parseFile($semicolon,'iyzico')[0]['currency']!=='USD')throw new RuntimeException('iyzico semicolon CSV parsing failed.');
@@ -37,7 +37,7 @@ $iyzicoApi=json_encode(['status'=>'success','transactions'=>[
  ['transactionType'=>'PAYMENT','transactionDate'=>'2026-11-17 14:30:00','transactionId'=>9003,'paymentTxId'=>88002,'paymentId'=>77002,'paidPrice'=>'50.00','price'=>'50.00','transactionCurrency'=>'TRY','transactionStatus'=>1],
 ]],JSON_THROW_ON_ERROR);
 $apiRows=StatementImport::parseFile($iyzicoApi,'iyzico');
-if(count($apiRows)!==3||$apiRows[0]['type']!=='capture'||$apiRows[0]['reference']!=='77001'||$apiRows[0]['amount']!=='150.00'||$apiRows[1]['type']!=='refund'||$apiRows[1]['reference']!=='9002'||$apiRows[1]['amount']!=='25.00'||$apiRows[2]['type']!=='unknown')throw new RuntimeException('iyzico daily reporting API JSON mapping failed.');
+if(count($apiRows)!==3||$apiRows[0]['type']!=='capture'||$apiRows[0]['reference']!=='77001'||$apiRows[0]['amount']!=='150.00'||$apiRows[1]['type']!=='refund'||$apiRows[1]['reference']!=='77001'||$apiRows[1]['amount']!=='25.00'||$apiRows[2]['type']!=='unknown')throw new RuntimeException('iyzico daily reporting API JSON mapping failed.');
 if($apiRows[0]['date']!=='2026-11-17 10:30:00'||str_contains(json_encode($apiRows,JSON_THROW_ON_ERROR),'private@example.test'))throw new RuntimeException('iyzico API local time or PII filtering failed.');
 
 $invalid=[
@@ -52,6 +52,7 @@ foreach([
  ['source'=>'paytr','contents'=>'{"status":"failed"}'],
  ['source'=>'paytr','contents'=>'{"status":"success","data":[{"islem_tipi":"X"}]}'],
  ['source'=>'iyzico','contents'=>"transactionDate,transactionType,paymentId,paidPrice,transactionCurrency\n2026-11-17,AUTH,p1,1,US\n"],
+ ['source'=>'iyzico','contents'=>"transactionDate,transactionType,paymentId,price,paidPrice,transactionCurrency\n2026-11-17,REFUND,p1,,150.00,TRY\n"],
 ] as $case){$failed=false;try{StatementImport::parseFile($case['contents'],$case['source']);}catch(RuntimeException){$failed=true;}if(!$failed)throw new RuntimeException('Invalid provider report was accepted.');}
 $failed=false;try{StatementImport::parseCsv(str_repeat('x',StatementImport::MAX_FILE_BYTES+1));}catch(RuntimeException){$failed=true;}if(!$failed)throw new RuntimeException('Oversized CSV was accepted.');
 echo "HostPilot statement import parser tests passed.\n";
