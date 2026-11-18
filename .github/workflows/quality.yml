@@ -1,7 +1,7 @@
 name: HostPilot quality checks
 on:
   push:
-    branches: [main]
+    branches: [main, 'finance/**']
   pull_request:
     branches: [main]
   workflow_dispatch:
