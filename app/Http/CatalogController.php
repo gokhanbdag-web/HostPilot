@@ -372,6 +372,13 @@ final class CatalogController
         echo '</tbody></table></div></section><section class="box"><h2>Bağlı faturalar</h2>';
         $rows=$invoices->fetchAll(PDO::FETCH_ASSOC);if(!$rows)echo '<p>Bağlı fatura yok.</p>';
         foreach($rows as $row)echo '<p><a href="'.$this->url('/admin/invoices/'.(int)$row['id']).'">#'.$this->e((string)$row['invoice_number']).'</a> · '.$this->e((string)$row['status']).' · '.number_format((float)$row['amount_paid'],2,',','.').' / '.number_format((float)$row['total'],2,',','.').' '.$this->e((string)$row['currency']).'</p>';
+        echo '</section><section class="box"><h2>Sipariş işlem geçmişi</h2>';
+        $history=$this->db->prepare("SELECT l.event_key,l.created_at FROM security_audit_logs l WHERE l.event_key='order.notes_updated' AND JSON_VALID(l.metadata_json) AND JSON_UNQUOTE(JSON_EXTRACT(l.metadata_json,'$.resource_id'))=:order_id ORDER BY l.id DESC LIMIT 50");
+        $history->execute([':order_id'=>(string)$id]);
+        echo '<p>Oluşturulma: '.$this->e((string)$order['created_at']).'</p>';
+        $events=$history->fetchAll(PDO::FETCH_ASSOC);
+        if(!$events)echo '<p>Kaydedilmiş yönetici notu işlemi yok.</p>';
+        foreach($events as $event)echo '<p>Yönetici notu güncellendi · '.$this->e((string)$event['created_at']).'</p>';
         echo '</section><section class="box"><h2>İç operasyon notu</h2><p>Bu not müşteri tarafından görüntülenmez; ödeme ve hizmet durumunu değiştirmez.</p>';
         if(in_array((string)(Auth::user()['role']??''),['super_admin','admin'],true)){
             echo '<form method="post" action="'.$this->url('/admin/orders/'.$id.'/notes').'"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><label>Yönetici notu<textarea name="notes" maxlength="4000" rows="5">'.$this->e((string)($order['notes']??'')).'</textarea></label><button class="button">Notu kaydet</button></form>';
