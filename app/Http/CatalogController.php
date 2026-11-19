@@ -385,7 +385,7 @@ final class CatalogController
         if(!in_array((string)$staff['role'],['super_admin','admin'],true)){http_response_code(403);echo 'Yetkisiz işlem.';return;}
         if(!Auth::verifyCsrf($_POST['_token']??null)){http_response_code(403);echo 'Güvenlik doğrulaması başarısız.';return;}
         $notes=trim((string)($_POST['notes']??''));
-        if(mb_strlen($notes,'UTF-8')>4000){http_response_code(422);echo 'Not en fazla 4000 karakter olabilir.';return;}
+        if(strlen($notes)>4000){http_response_code(422);echo 'Not en fazla 4000 karakter olabilir.';return;}
         $q=$this->db->prepare('UPDATE orders SET notes=:notes,updated_at=:now WHERE id=:id');
         $q->execute([':notes'=>$notes,':now'=>gmdate('Y-m-d H:i:s'),':id'=>$id]);
         if($q->rowCount()===0){
