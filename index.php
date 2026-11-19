@@ -139,6 +139,7 @@ if ($requestPath === '/admin/reset-password' && in_array($method, ['GET','POST']
 if ($requestPath === '/client/login' && in_array($method, ['GET', 'POST'], true)) { $client->login(); exit; }
 if ($requestPath === '/client/security/mfa' && in_array($method, ['GET','POST'], true)) { (new \HostPilot\Http\CustomerMfaController($pdo, $basePath, (string)($config['app']['key'] ?? '')))->index(); exit; }
 if ($requestPath === '/client/register' && in_array($method, ['GET', 'POST'], true)) { $client->register(); exit; }
+if ($requestPath === '/client/confirm-email-change' && in_array($method, ['GET','POST'], true)) { $client->confirmEmailChange(); exit; }
 if ($requestPath === '/client/verify-email' && in_array($method, ['GET','POST'], true)) { $client->verifyEmail(); exit; }
 if ($requestPath === '/client/resend-verification' && in_array($method, ['GET','POST'], true)) { $client->resendVerification(); exit; }
 if ($requestPath === '/client/logout' && $method === 'POST') { $client->logout(); exit; }
@@ -171,10 +172,11 @@ if ($requestPath === '/admin/email-queue' && in_array($method, ['GET','POST'], t
 
 if ($requestPath === '/admin/updates' && $method === 'GET') { (new \HostPilot\Http\UpdateController($pdo, $basePath, (string)($config['app']['base_url'] ?? '')))->index(); exit; }
 if ($requestPath === '/admin/updates/status' && $method === 'GET') { (new \HostPilot\Http\UpdateController($pdo, $basePath, (string)($config['app']['base_url'] ?? '')))->status(); exit; }
-$controller = new \HostPilot\Http\AdminController($pdo, $basePath, (string)($config['app']['key'] ?? ''));
+$controller = new \HostPilot\Http\AdminController($pdo, $basePath, (string)($config['app']['key'] ?? ''), (string)($config['app']['base_url'] ?? ''));
 if ($requestPath === '/admin/staff' && $method === 'GET') { (new \HostPilot\Http\StaffAccessController($pdo, $basePath))->index(); exit; }
 if ($requestPath === '/admin/staff/save' && $method === 'POST') { (new \HostPilot\Http\StaffAccessController($pdo, $basePath))->save(); exit; }
 if (preg_match('#^/admin/customers/([0-9]+)$#', $requestPath, $customerMatch) && $method === 'GET') { $controller->viewCustomer((int)$customerMatch[1]); exit; }
+if ($requestPath === '/admin/customers/email-request' && $method === 'POST') { $controller->requestCustomerEmailChange(); exit; }
 if ($requestPath === '/admin/customers/profile' && $method === 'POST') { $controller->updateCustomerProfile(); exit; }
 if ($requestPath === '/admin/customers/status' && $method === 'POST') { $controller->updateCustomerStatus(); exit; }
 if ($requestPath === '/admin/customers' && $method === 'GET') { $controller->customers(); exit; }
