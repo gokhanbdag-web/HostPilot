@@ -22,7 +22,6 @@ final class Authorization
             'Mağaza ve finans' => [
                 'catalog.manage' => 'Ürün ve paketleri yönetme',
                 'orders.view' => 'Siparişleri görüntüleme',
-                'orders.manage' => 'Sipariş iç operasyon notlarını yönetme',
                 'invoices.view' => 'Faturaları görüntüleme',
                 'payments.view' => 'Ödeme hareketlerini görüntüleme',
             ],
