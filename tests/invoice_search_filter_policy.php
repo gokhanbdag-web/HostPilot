@@ -12,6 +12,8 @@ $checks=[
  'Invoice status placeholder'=>str_contains($part,'i.status=:status'),
  'Parameterized query'=>str_contains($part,'$this->db->prepare($sql)')&&str_contains($part,'$query->execute($params)'),
  'Escaped filter values'=>str_contains($part,'$this->e($search)')&&str_contains($part,'$this->e($status)'),
- 'Bounded results'=>str_contains($part,'LIMIT 300'),
+ 'Bounded results'=>str_contains($part,'LIMIT 25 OFFSET '),
+ 'Filtered total count'=>str_contains($part,'$countQuery->execute($params)'),
+ 'Pagination retains filters'=>str_contains($part,'http_build_query(')&&str_contains($part,"'status'=>"),
 ];
 foreach($checks as $label=>$ok){if(!$ok)throw new RuntimeException('FAIL '.$label);echo 'PASS '.$label.PHP_EOL;}
