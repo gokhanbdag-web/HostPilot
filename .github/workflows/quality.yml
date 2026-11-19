@@ -124,6 +124,7 @@ jobs:
       - name: Test order search and filtering policy
         run: php tests/order_search_filter_policy.php
           php tests/customer_profile_edit_policy.php
+          php tests/customer_email_change_policy.php
       - name: Test invoice search and filtering policy
         run: php tests/invoice_search_filter_policy.php
       - name: Test customer announcements policy
