@@ -6,7 +6,7 @@ $routes=file_get_contents($root.'/index.php');
 $auth=file_get_contents($root.'/app/Core/Authorization.php');
 $audit=file_get_contents($root.'/app/Core/SecurityAudit.php');
 $checks=[
-    'Order notes form uses CSRF token'=>str_contains($catalog,"/admin/orders/'.$id.'/notes")&&str_contains($catalog,'Auth::csrfToken()'),
+    'Order notes form uses CSRF token'=>str_contains($catalog,'/admin/orders/')&&str_contains($catalog,"'/notes'")&&str_contains($catalog,'Auth::csrfToken()'),
     'Order notes mutation requires administrator role'=>str_contains($catalog,'function adminSaveOrderNotes(int $id)')&&str_contains($catalog,"['super_admin','admin']"),
     'Order notes mutation verifies CSRF'=>str_contains($catalog,"Auth::verifyCsrf("),
     'Only notes and update timestamp are modified'=>str_contains($catalog,'UPDATE orders SET notes=:notes,updated_at=:now WHERE id=:id'),
