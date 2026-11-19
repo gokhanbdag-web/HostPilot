@@ -121,6 +121,8 @@ jobs:
         run: php tests/order_notes_admin_policy.php
       - name: Test order activity timeline policy
         run: php tests/order_audit_timeline_policy.php
+      - name: Test order search and filtering policy
+        run: php tests/order_search_filter_policy.php
       - name: Test customer announcements policy
         run: php tests/customer_announcements_policy.php
       - name: Test registrar registration action tracking policy

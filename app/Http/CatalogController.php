@@ -349,8 +349,20 @@ final class CatalogController
 
     public function adminOrders():void
     {
-        $staff=$this->staff();if(!$staff)return;$rows=$this->db->query('SELECT o.id,o.order_number,o.status,o.currency,o.total,o.created_at,u.name,u.email FROM orders o JOIN users u ON u.id=o.user_id ORDER BY o.created_at DESC LIMIT 300')->fetchAll();$this->start('Siparişler');
-        echo '<div class="admin"><aside><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a href="'.$this->url('/admin').'">← Kontrol merkezi</a><a href="'.$this->url('/admin/products').'">Ürün & paketler</a><a class="active" href="'.$this->url('/admin/orders').'">Siparişler</a></aside><main><header><small>SATIŞ / SİPARİŞ</small><h1>Siparişler</h1><p>Müşterilerin oluşturduğu siparişleri inceleyin.</p></header><section class="box"><div class="tablewrap"><table><thead><tr><th>Sipariş</th><th>Müşteri</th><th>Tutar</th><th>Durum</th><th>Tarih</th></tr></thead><tbody>';
+        $staff=$this->staff();if(!$staff)return;
+        $search=trim((string)($_GET['q']??''));
+        $status=trim((string)($_GET['status']??''));
+        if(strlen($search)>120)$search=substr($search,0,120);
+        if(strlen($status)>24)$status='';
+        $where=[];$params=[];
+        if($search!==''){$where[]='(o.order_number LIKE :number OR u.name LIKE :customer OR u.email LIKE :email)';$pattern='%'.$search.'%';$params=[':number'=>$pattern,':customer'=>$pattern,':email'=>$pattern];}
+        if($status!==''){$where[]='o.status=:status';$params[':status']=$status;}
+        $sql='SELECT o.id,o.order_number,o.status,o.currency,o.total,o.created_at,u.name,u.email FROM orders o JOIN users u ON u.id=o.user_id';
+        if($where)$sql.=' WHERE '.implode(' AND ',$where);
+        $sql.=' ORDER BY o.created_at DESC,o.id DESC LIMIT 300';
+        $query=$this->db->prepare($sql);$query->execute($params);$rows=$query->fetchAll(PDO::FETCH_ASSOC);
+        $this->start('Siparişler');
+        echo '<div class="admin"><aside><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a href="'.$this->url('/admin').'">← Kontrol merkezi</a><a href="'.$this->url('/admin/products').'">Ürün & paketler</a><a class="active" href="'.$this->url('/admin/orders').'">Siparişler</a></aside><main><header><small>SATIŞ / SİPARİŞ</small><h1>Siparişler</h1><p>Müşterilerin oluşturduğu siparişleri inceleyin.</p></header><section class="box"><form method="get" action="'.$this->url('/admin/orders').'"><div class="grid"><label>Arama<input name="q" maxlength="120" placeholder="Sipariş no, müşteri veya e-posta" value="'.$this->e($search).'"></label><label>Durum<input name="status" maxlength="24" placeholder="Örn. pending" value="'.$this->e($status).'"></label></div><button class="button">Filtrele</button> <a href="'.$this->url('/admin/orders').'">Temizle</a></form><p>En fazla 300 kayıt gösterilir.</p><div class="tablewrap"><table><thead><tr><th>Sipariş</th><th>Müşteri</th><th>Tutar</th><th>Durum</th><th>Tarih</th></tr></thead><tbody>';
         if(!$rows)echo '<tr><td colspan="5">Henüz sipariş bulunmuyor.</td></tr>';foreach($rows as $o)echo '<tr><td><a href="'.$this->url('/admin/orders/'.(int)$o['id']).'">#'.$this->e($o['order_number']).'</a></td><td>'.$this->e($o['name']).'<small>'.$this->e($o['email']).'</small></td><td>'.number_format((float)$o['total'],2,',','.').' '.$this->e($o['currency']).'</td><td>'.$this->e($o['status']).'</td><td>'.date('d.m.Y H:i',strtotime($o['created_at'])).'</td></tr>';
         echo '</tbody></table></div></section></main></div>';$this->end();
     }
