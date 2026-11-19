@@ -9,7 +9,7 @@ use Throwable;
 
 final class AdminController
 {
-    public function __construct(private readonly PDO $db, private readonly string $basePath = '',private readonly string $applicationKey='') {}
+    public function __construct(private readonly PDO $db, private readonly string $basePath = '',private readonly string $applicationKey='',private readonly string $baseUrl='') {}
 
     public function login(): void
     {
@@ -163,6 +163,9 @@ final class AdminController
             echo '<form method="post" action="'.$this->url('/admin/customers/profile').'"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="customer_id" value="'.(int)$customer['id'].'"><label for="customer_name">Müşteri adı soyadı</label><input id="customer_name" name="name" maxlength="190" required value="'.$this->e((string)$customer['name']).'"><label for="customer_username">Kullanıcı adı</label><input id="customer_username" name="username" minlength="3" maxlength="80" pattern="[A-Za-z0-9_.-]{3,80}" required value="'.$this->e((string)$customer['username']).'"><button class="secondary" type="submit">Bilgileri kaydet</button></form>';
         }
         if(in_array($actor['role'],['super_admin','admin'],true)){
+            echo '<form method="post" action="'.$this->url('/admin/customers/email-request').'"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="customer_id" value="'.(int)$customer['id'].'"><label for="customer_new_email">Yeni e-posta (doğrulama gerektirir)</label><input type="email" id="customer_new_email" name="email" maxlength="190" required><button class="secondary" type="submit">Doğrulama bağlantısı gönder</button></form>';
+        }
+        if(in_array($actor['role'],['super_admin','admin'],true)){
             $nextStatus=$customer['status']==='active'?'disabled':'active';$label=$nextStatus==='disabled'?'Müşteri hesabını devre dışı bırak':'Müşteri hesabını yeniden etkinleştir';
             echo '<form method="post" action="'.$this->url('/admin/customers/status').'" onsubmit="return confirm(\'Hesap durumu değiştirilsin mi? Mevcut oturumlar kapatılacaktır.\')"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="customer_id" value="'.(int)$customer['id'].'"><input type="hidden" name="status" value="'.$nextStatus.'"><button class="secondary">'.$label.'</button></form><p>Hesabı devre dışı bırakmak yeni girişleri engeller ve mevcut oturumları geçersiz kılar; hizmetleri veya domainleri otomatik olarak sonlandırmaz.</p>';
         }else echo '<p>Hesap durumunu değiştirmek için yönetici yetkisi gerekir.</p>';
@@ -211,6 +214,43 @@ final class AdminController
             if($this->db->inTransaction())$this->db->rollBack();
             error_log('[HostPilot] Customer profile update failed: '.$e->getMessage());
             $this->redirect('/admin/customers/'.$id.'?error='.rawurlencode('Müşteri bilgileri güncellenemedi.'));
+        }
+    }
+
+    public function requestCustomerEmailChange(): void
+    {
+        if(!Auth::check())$this->redirect('/admin/login');
+        $actor=Auth::user();
+        if(!in_array($actor['role'],['super_admin','admin'],true)){http_response_code(403);echo 'Yetkisiz erişim.';return;}
+        $id=(int)($_POST['customer_id']??0);
+        $email=strtolower(trim((string)($_POST['email']??'')));
+        if(!Auth::verifyCsrf($_POST['_token']??null)||$id<1||strlen($email)>190||!filter_var($email,FILTER_VALIDATE_EMAIL)||$this->baseUrl===''||$this->applicationKey===''){
+            $this->redirect('/admin/customers/'.$id.'?error='.rawurlencode('Geçersiz istek veya e-posta yapılandırması.'));return;
+        }
+        try{
+            $this->db->beginTransaction();
+            $q=$this->db->prepare("SELECT id,name,email FROM users WHERE id=:id AND role='customer' FOR UPDATE");
+            $q->execute([':id'=>$id]);$customer=$q->fetch(PDO::FETCH_ASSOC);
+            if(!$customer)throw new \RuntimeException('Müşteri bulunamadı.');
+            $exists=$this->db->prepare('SELECT id FROM users WHERE email=:email AND id<>:id LIMIT 1');
+            $exists->execute([':email'=>$email,':id'=>$id]);
+            if($exists->fetchColumn()||$email===$customer['email'])throw new \RuntimeException('E-posta adresi kullanılamıyor.');
+            $recent=$this->db->prepare('SELECT id FROM customer_email_changes WHERE user_id=:id AND created_at>DATE_SUB(UTC_TIMESTAMP(),INTERVAL 60 SECOND) LIMIT 1');
+            $recent->execute([':id'=>$id]);
+            if($recent->fetchColumn())throw new \RuntimeException('Yeni bir istek için 60 saniye bekleyin.');
+            $token=bin2hex(random_bytes(32));$hash=hash('sha256',$token);
+            $this->db->prepare('UPDATE customer_email_changes SET used_at=UTC_TIMESTAMP() WHERE user_id=:id AND used_at IS NULL')->execute([':id'=>$id]);
+            $this->db->prepare('INSERT INTO customer_email_changes(user_id,new_email,token_hash,expires_at,created_at) VALUES(:id,:email,:hash,:expires,:created)')->execute([':id'=>$id,':email'=>$email,':hash'=>$hash,':expires'=>gmdate('Y-m-d H:i:s',time()+86400),':created'=>gmdate('Y-m-d H:i:s')]);
+            $link=rtrim($this->baseUrl,'/').rtrim($this->basePath,'/').'/client/confirm-email-change?token='.$token;
+            $body="Merhaba,\n\nHostPilot hesabınızın e-posta adresinin değiştirilmesi istendi. Yeni adresi doğrulamak için 24 saat içinde bağlantıyı açın:\n".$link."\n\nBu işlemi istemediyseniz bağlantıyı kullanmayın.";
+            if(!(new EmailService($this->db,$this->applicationKey))->queue($email,'HostPilot yeni e-posta doğrulaması',$body,'customer-email-change:'.$hash,'customer_email_change'))throw new \RuntimeException('Doğrulama e-postası kuyruğa alınamadı.');
+            \HostPilot\Core\SecurityAudit::record($this->db,'customer.email_change_requested',(int)$actor['id'],['resource_id'=>$id,'action'=>'requested']);
+            $this->db->commit();
+            $this->redirect('/admin/customers/'.$id.'?notice='.rawurlencode('Yeni adrese doğrulama bağlantısı gönderilmek üzere kuyruğa alındı.'));
+        }catch(Throwable $e){
+            if($this->db->inTransaction())$this->db->rollBack();
+            error_log('[HostPilot] Customer email change request failed: '.$e->getMessage());
+            $this->redirect('/admin/customers/'.$id.'?error='.rawurlencode($e instanceof \RuntimeException?$e->getMessage():'E-posta değişikliği başlatılamadı.'));
         }
     }
 
