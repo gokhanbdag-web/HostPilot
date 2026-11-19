@@ -188,7 +188,7 @@ final class AdminController
         if (!in_array($actor['role'], ['super_admin','admin'], true)) { http_response_code(403); echo 'Müşteri bilgilerini düzenleme yetkiniz yok.'; return; }
         $id=(int)($_POST['customer_id']??0);
         $name=trim((string)($_POST['name']??''));
-        if(!Auth::verifyCsrf($_POST['_token']??null)||$id<1||$name===''||mb_strlen($name,'UTF-8')>190||preg_match('/[\\x00-\\x1F\\x7F]/',$name)){
+        if(!Auth::verifyCsrf($_POST['_token']??null)||$id<1||$name===''||strlen($name)>190||preg_match('/[\\x00-\\x1F\\x7F]/',$name)){
             $this->redirect('/admin/customers/'.$id.'?error='.rawurlencode('Geçersiz müşteri bilgileri veya güvenlik doğrulaması.'));
             return;
         }
@@ -196,10 +196,10 @@ final class AdminController
             $this->db->beginTransaction();
             $q=$this->db->prepare("SELECT id FROM users WHERE id=:id AND role='customer' FOR UPDATE");
             $q->execute([':id'=>$id]);
-            if(!$q->fetch(PDO::FETCH_ASSOC))throw new \\RuntimeException('Müşteri bulunamadı.');
+            if(!$q->fetch(PDO::FETCH_ASSOC))throw new \RuntimeException('Müşteri bulunamadı.');
             $update=$this->db->prepare("UPDATE users SET name=:name,updated_at=:updated WHERE id=:id AND role='customer'");
             $update->execute([':name'=>$name,':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$id]);
-            \\HostPilot\\Core\\SecurityAudit::record($this->db,'customer.profile_updated',(int)$actor['id'],['resource_id'=>$id,'action'=>'updated']);
+            \HostPilot\Core\SecurityAudit::record($this->db,'customer.profile_updated',(int)$actor['id'],['resource_id'=>$id,'action'=>'updated']);
             $this->db->commit();
             $this->redirect('/admin/customers/'.$id.'?notice='.rawurlencode('Müşteri adı güncellendi.'));
         }catch(Throwable $e){
