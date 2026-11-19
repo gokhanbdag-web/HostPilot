@@ -286,12 +286,21 @@ final class CatalogController
         if($status!==''){$where[]='i.status=:status';$params[':status']=$status;}
         $sql='SELECT i.id,i.invoice_number,i.status,i.currency,i.total,i.amount_paid,i.issued_at,u.name,u.email FROM invoices i JOIN users u ON u.id=i.user_id';
         if($where)$sql.=' WHERE '.implode(' AND ',$where);
-        $sql.=' ORDER BY i.issued_at DESC,i.id DESC LIMIT 300';
+        $countSql='SELECT COUNT(*) FROM invoices i JOIN users u ON u.id=i.user_id';
+        if($where)$countSql.=' WHERE '.implode(' AND ',$where);
+        $countQuery=$this->db->prepare($countSql);$countQuery->execute($params);$total=(int)$countQuery->fetchColumn();
+        $perPage=25;$pages=max(1,(int)ceil($total/$perPage));
+        $page=min($pages,max(1,(int)($_GET['page']??1)));$offset=($page-1)*$perPage;
+        $sql.=' ORDER BY i.issued_at DESC,i.id DESC LIMIT 25 OFFSET '.$offset;
         $query=$this->db->prepare($sql);$query->execute($params);$rows=$query->fetchAll(PDO::FETCH_ASSOC);
-        $this->start('Faturalar');echo '<div class="admin"><aside><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a href="'.$this->url('/admin').'">← Kontrol merkezi</a><a href="'.$this->url('/admin/orders').'">Siparişler</a><a class="active" href="'.$this->url('/admin/invoices').'">Faturalar</a></aside><main><header><small>FİNANS / FATURALAR</small><h1>Faturalar</h1><p>Oluşturulan müşteri faturaları ve tahsilat durumları.</p></header><section class="box"><form method="get" action="'.$this->url('/admin/invoices').'"><div class="grid"><label>Arama<input name="q" maxlength="120" placeholder="Fatura no, müşteri veya e-posta" value="'.$this->e($search).'"></label><label>Durum<input name="status" maxlength="24" placeholder="Örn. paid" value="'.$this->e($status).'"></label></div><button class="button">Filtrele</button> <a href="'.$this->url('/admin/invoices').'">Temizle</a></form><p>En fazla 300 kayıt gösterilir.</p><div class="tablewrap"><table><thead><tr><th>Fatura</th><th>Müşteri</th><th>Toplam</th><th>Ödenen</th><th>Durum</th><th>Tarih</th></tr></thead><tbody>';
+        $this->start('Faturalar');echo '<div class="admin"><aside><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a href="'.$this->url('/admin').'">← Kontrol merkezi</a><a href="'.$this->url('/admin/orders').'">Siparişler</a><a class="active" href="'.$this->url('/admin/invoices').'">Faturalar</a></aside><main><header><small>FİNANS / FATURALAR</small><h1>Faturalar</h1><p>Oluşturulan müşteri faturaları ve tahsilat durumları.</p></header><section class="box"><form method="get" action="'.$this->url('/admin/invoices').'"><div class="grid"><label>Arama<input name="q" maxlength="120" placeholder="Fatura no, müşteri veya e-posta" value="'.$this->e($search).'"></label><label>Durum<input name="status" maxlength="24" placeholder="Örn. paid" value="'.$this->e($status).'"></label></div><button class="button">Filtrele</button> <a href="'.$this->url('/admin/invoices').'">Temizle</a></form><p>Toplam '.$total.' fatura · Sayfa '.$page.' / '.$pages.'</p><div class="tablewrap"><table><thead><tr><th>Fatura</th><th>Müşteri</th><th>Toplam</th><th>Ödenen</th><th>Durum</th><th>Tarih</th></tr></thead><tbody>';
         if(!$rows)echo '<tr><td colspan="6">Henüz fatura bulunmuyor.</td></tr>';
         foreach($rows as $v)echo '<tr><td><a href="'.$this->url('/admin/invoices/'.(int)$v['id']).'">#'.$this->e($v['invoice_number']).'</a></td><td>'.$this->e($v['name']).'<small>'.$this->e($v['email']).'</small></td><td>'.number_format((float)$v['total'],2,',','.').' '.$this->e($v['currency']).'</td><td>'.number_format((float)$v['amount_paid'],2,',','.').' '.$this->e($v['currency']).'</td><td>'.$this->e($this->invoiceStatus($v['status'])).'</td><td>'.date('d.m.Y',strtotime($v['issued_at'])).'</td></tr>';
-        echo '</tbody></table></div></section></main></div>';$this->end();
+        echo '</tbody></table></div><nav aria-label="Fatura sayfaları">';
+        $filters=http_build_query(['q'=>$search,'status'=>$status]);
+        if($page>1)echo '<a class="button" href="'.$this->url('/admin/invoices').'?'.$filters.'&page='.($page-1).'">← Önceki</a> ';
+        if($page<$pages)echo '<a class="button" href="'.$this->url('/admin/invoices').'?'.$filters.'&page='.($page+1).'">Sonraki →</a>';
+        echo '</nav></section></main></div>';$this->end();
     }
 
     private function cartSession():array
