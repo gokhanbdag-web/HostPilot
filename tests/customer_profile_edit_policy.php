@@ -11,6 +11,8 @@ $checks=[
  'Administrator permission'=>str_contains($part,"['super_admin','admin']"),
  'CSRF protection'=>str_contains($part,'Auth::verifyCsrf('),
  'Customer ownership scope'=>str_contains($part,"role='customer'"),
+ 'Unique username guard'=>str_contains($part,'username=:username')&&str_contains($part,'id<>:id'),
+ 'Username validation'=>str_contains($part,'preg_match('),
  'Parameterized update'=>str_contains($part,'name=:name')&&str_contains($part,'$update->execute('),
  'Audited change'=>str_contains($part,'customer.profile_updated'),
  'Transaction rollback'=>str_contains($part,'rollBack()'),

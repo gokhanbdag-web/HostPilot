@@ -160,7 +160,7 @@ final class AdminController
         echo '<section class="cards"><article class="metric"><span>Sipariş</span><strong>'.count($orderRows).'</strong><small>Son 50 gerçek sipariş</small></article><article class="metric"><span>Fatura</span><strong>'.count($invoiceRows).'</strong><small>Son 50 gerçek fatura</small></article><article class="metric"><span>Hizmet</span><strong>'.count($serviceRows).'</strong><small>Demo hizmetler hariç</small></article><article class="metric"><span>Destek</span><strong>'.count($ticketRows).'</strong><small>Gerçek destek talepleri</small></article></section>';
         echo '<section class="panel"><h3>Hesap bilgileri</h3><div class="status"><span>Ad soyad</span><strong>'.$this->e((string)$customer['name']).'</strong></div><div class="status"><span>E-posta</span><strong>'.$this->e((string)$customer['email']).'</strong></div><div class="status"><span>Kullanıcı adı</span><strong>'.$this->e((string)$customer['username']).'</strong></div><div class="status"><span>Durum</span><strong>'.$this->e((string)$customer['status']).'</strong></div><div class="status"><span>Kayıt tarihi</span><strong>'.$this->e((string)$customer['created_at']).'</strong></div>';
         if(in_array($actor['role'],['super_admin','admin'],true)){
-            echo '<form method="post" action="'.$this->url('/admin/customers/profile').'"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="customer_id" value="'.(int)$customer['id'].'"><label for="customer_name">Müşteri adı soyadı</label><input id="customer_name" name="name" maxlength="190" required value="'.$this->e((string)$customer['name']).'"><button class="secondary" type="submit">Ad soyadı kaydet</button></form>';
+            echo '<form method="post" action="'.$this->url('/admin/customers/profile').'"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="customer_id" value="'.(int)$customer['id'].'"><label for="customer_name">Müşteri adı soyadı</label><input id="customer_name" name="name" maxlength="190" required value="'.$this->e((string)$customer['name']).'"><label for="customer_username">Kullanıcı adı</label><input id="customer_username" name="username" minlength="3" maxlength="80" pattern="[A-Za-z0-9_.-]{3,80}" required value="'.$this->e((string)$customer['username']).'"><button class="secondary" type="submit">Bilgileri kaydet</button></form>';
         }
         if(in_array($actor['role'],['super_admin','admin'],true)){
             $nextStatus=$customer['status']==='active'?'disabled':'active';$label=$nextStatus==='disabled'?'Müşteri hesabını devre dışı bırak':'Müşteri hesabını yeniden etkinleştir';
@@ -188,20 +188,25 @@ final class AdminController
         if (!in_array($actor['role'], ['super_admin','admin'], true)) { http_response_code(403); echo 'Müşteri bilgilerini düzenleme yetkiniz yok.'; return; }
         $id=(int)($_POST['customer_id']??0);
         $name=trim((string)($_POST['name']??''));
-        if(!Auth::verifyCsrf($_POST['_token']??null)||$id<1||$name===''||strlen($name)>190||preg_match('/[\\x00-\\x1F\\x7F]/',$name)){
+        $username=trim((string)($_POST['username']??''));
+        if(!Auth::verifyCsrf($_POST['_token']??null)||$id<1||$name===''||!preg_match('/^[a-zA-Z0-9_.-]{3,80}$/',$username)||strlen($name)>190||preg_match('/[\\x00-\\x1F\\x7F]/',$name)){
             $this->redirect('/admin/customers/'.$id.'?error='.rawurlencode('Geçersiz müşteri bilgileri veya güvenlik doğrulaması.'));
             return;
         }
         try{
             $this->db->beginTransaction();
-            $q=$this->db->prepare("SELECT id FROM users WHERE id=:id AND role='customer' FOR UPDATE");
+            $q=$this->db->prepare("SELECT id,username FROM users WHERE id=:id AND role='customer' FOR UPDATE");
             $q->execute([':id'=>$id]);
-            if(!$q->fetch(PDO::FETCH_ASSOC))throw new \RuntimeException('Müşteri bulunamadı.');
-            $update=$this->db->prepare("UPDATE users SET name=:name,updated_at=:updated WHERE id=:id AND role='customer'");
-            $update->execute([':name'=>$name,':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$id]);
+            $target=$q->fetch(PDO::FETCH_ASSOC);
+            if(!$target)throw new \RuntimeException('Müşteri bulunamadı.');
+            $conflict=$this->db->prepare('SELECT id FROM users WHERE username=:username AND id<>:id LIMIT 1');
+            $conflict->execute([':username'=>$username,':id'=>$id]);
+            if($conflict->fetchColumn())throw new \RuntimeException('Bu kullanıcı adı zaten kullanılıyor.');
+            $update=$this->db->prepare("UPDATE users SET name=:name,username=:username,updated_at=:updated WHERE id=:id AND role='customer'");
+            $update->execute([':name'=>$name,':username'=>$username,':updated'=>gmdate('Y-m-d H:i:s'),':id'=>$id]);
             \HostPilot\Core\SecurityAudit::record($this->db,'customer.profile_updated',(int)$actor['id'],['resource_id'=>$id,'action'=>'updated']);
             $this->db->commit();
-            $this->redirect('/admin/customers/'.$id.'?notice='.rawurlencode('Müşteri adı güncellendi.'));
+            $this->redirect('/admin/customers/'.$id.'?notice='.rawurlencode('Müşteri bilgileri güncellendi.'));
         }catch(Throwable $e){
             if($this->db->inTransaction())$this->db->rollBack();
             error_log('[HostPilot] Customer profile update failed: '.$e->getMessage());
