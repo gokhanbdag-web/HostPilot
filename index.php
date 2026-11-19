@@ -175,6 +175,7 @@ $controller = new \HostPilot\Http\AdminController($pdo, $basePath, (string)($con
 if ($requestPath === '/admin/staff' && $method === 'GET') { (new \HostPilot\Http\StaffAccessController($pdo, $basePath))->index(); exit; }
 if ($requestPath === '/admin/staff/save' && $method === 'POST') { (new \HostPilot\Http\StaffAccessController($pdo, $basePath))->save(); exit; }
 if (preg_match('#^/admin/customers/([0-9]+)$#', $requestPath, $customerMatch) && $method === 'GET') { $controller->viewCustomer((int)$customerMatch[1]); exit; }
+if ($requestPath === '/admin/customers/profile' && $method === 'POST') { $controller->updateCustomerProfile(); exit; }
 if ($requestPath === '/admin/customers/status' && $method === 'POST') { $controller->updateCustomerStatus(); exit; }
 if ($requestPath === '/admin/customers' && $method === 'GET') { $controller->customers(); exit; }
 if ($requestPath === '/admin/reports' && $method === 'GET') { $controller->reports(); exit; }
