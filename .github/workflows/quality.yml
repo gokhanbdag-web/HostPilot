@@ -115,6 +115,8 @@ jobs:
         run: php tests/admin_reports_policy.php
       - name: Test customer and service admin workspaces
         run: php tests/customer_service_admin_policy.php
+      - name: Test order and invoice admin detail policies
+        run: php tests/order_invoice_admin_policy.php
       - name: Test customer announcements policy
         run: php tests/customer_announcements_policy.php
       - name: Test registrar registration action tracking policy
