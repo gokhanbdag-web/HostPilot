@@ -277,10 +277,10 @@ final class CatalogController
     public function adminInvoices():void
     {
         $staff=$this->staff();if(!$staff)return;
-        $rows=$this->db->query('SELECT i.invoice_number,i.status,i.currency,i.total,i.amount_paid,i.issued_at,u.name,u.email FROM invoices i JOIN users u ON u.id=i.user_id ORDER BY i.issued_at DESC LIMIT 300')->fetchAll();
+        $rows=$this->db->query('SELECT i.id,i.invoice_number,i.status,i.currency,i.total,i.amount_paid,i.issued_at,u.name,u.email FROM invoices i JOIN users u ON u.id=i.user_id ORDER BY i.issued_at DESC LIMIT 300')->fetchAll();
         $this->start('Faturalar');echo '<div class="admin"><aside><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a href="'.$this->url('/admin').'">← Kontrol merkezi</a><a href="'.$this->url('/admin/orders').'">Siparişler</a><a class="active" href="'.$this->url('/admin/invoices').'">Faturalar</a></aside><main><header><small>FİNANS / FATURALAR</small><h1>Faturalar</h1><p>Oluşturulan müşteri faturaları ve tahsilat durumları.</p></header><section class="box"><div class="tablewrap"><table><thead><tr><th>Fatura</th><th>Müşteri</th><th>Toplam</th><th>Ödenen</th><th>Durum</th><th>Tarih</th></tr></thead><tbody>';
         if(!$rows)echo '<tr><td colspan="6">Henüz fatura bulunmuyor.</td></tr>';
-        foreach($rows as $v)echo '<tr><td>#'.$this->e($v['invoice_number']).'</td><td>'.$this->e($v['name']).'<small>'.$this->e($v['email']).'</small></td><td>'.number_format((float)$v['total'],2,',','.').' '.$this->e($v['currency']).'</td><td>'.number_format((float)$v['amount_paid'],2,',','.').' '.$this->e($v['currency']).'</td><td>'.$this->e($this->invoiceStatus($v['status'])).'</td><td>'.date('d.m.Y',strtotime($v['issued_at'])).'</td></tr>';
+        foreach($rows as $v)echo '<tr><td><a href="'.$this->url('/admin/invoices/'.(int)$v['id']).'">#'.$this->e($v['invoice_number']).'</a></td><td>'.$this->e($v['name']).'<small>'.$this->e($v['email']).'</small></td><td>'.number_format((float)$v['total'],2,',','.').' '.$this->e($v['currency']).'</td><td>'.number_format((float)$v['amount_paid'],2,',','.').' '.$this->e($v['currency']).'</td><td>'.$this->e($this->invoiceStatus($v['status'])).'</td><td>'.date('d.m.Y',strtotime($v['issued_at'])).'</td></tr>';
         echo '</tbody></table></div></section></main></div>';$this->end();
     }
 
@@ -351,7 +351,44 @@ final class CatalogController
     {
         $staff=$this->staff();if(!$staff)return;$rows=$this->db->query('SELECT o.id,o.order_number,o.status,o.currency,o.total,o.created_at,u.name,u.email FROM orders o JOIN users u ON u.id=o.user_id ORDER BY o.created_at DESC LIMIT 300')->fetchAll();$this->start('Siparişler');
         echo '<div class="admin"><aside><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a href="'.$this->url('/admin').'">← Kontrol merkezi</a><a href="'.$this->url('/admin/products').'">Ürün & paketler</a><a class="active" href="'.$this->url('/admin/orders').'">Siparişler</a></aside><main><header><small>SATIŞ / SİPARİŞ</small><h1>Siparişler</h1><p>Müşterilerin oluşturduğu siparişleri inceleyin.</p></header><section class="box"><div class="tablewrap"><table><thead><tr><th>Sipariş</th><th>Müşteri</th><th>Tutar</th><th>Durum</th><th>Tarih</th></tr></thead><tbody>';
-        if(!$rows)echo '<tr><td colspan="5">Henüz sipariş bulunmuyor.</td></tr>';foreach($rows as $o)echo '<tr><td>#'.$this->e($o['order_number']).'</td><td>'.$this->e($o['name']).'<small>'.$this->e($o['email']).'</small></td><td>'.number_format((float)$o['total'],2,',','.').' '.$this->e($o['currency']).'</td><td>'.$this->e($o['status']).'</td><td>'.date('d.m.Y H:i',strtotime($o['created_at'])).'</td></tr>';
+        if(!$rows)echo '<tr><td colspan="5">Henüz sipariş bulunmuyor.</td></tr>';foreach($rows as $o)echo '<tr><td><a href="'.$this->url('/admin/orders/'.(int)$o['id']).'">#'.$this->e($o['order_number']).'</a></td><td>'.$this->e($o['name']).'<small>'.$this->e($o['email']).'</small></td><td>'.number_format((float)$o['total'],2,',','.').' '.$this->e($o['currency']).'</td><td>'.$this->e($o['status']).'</td><td>'.date('d.m.Y H:i',strtotime($o['created_at'])).'</td></tr>';
+        echo '</tbody></table></div></section></main></div>';$this->end();
+    }
+
+    public function adminOrderDetail(int $id):void
+    {
+        if(!$this->staff())return;
+        $q=$this->db->prepare('SELECT o.*,u.name AS customer_name,u.email AS customer_email FROM orders o JOIN users u ON u.id=o.user_id WHERE o.id=:id LIMIT 1');
+        $q->execute([':id'=>$id]);$order=$q->fetch(PDO::FETCH_ASSOC);
+        if(!$order){http_response_code(404);echo 'Sipariş bulunamadı.';return;}
+        $items=$this->db->prepare('SELECT product_name,quantity,unit_price,line_total FROM order_items WHERE order_id=:id ORDER BY id');
+        $items->execute([':id'=>$id]);
+        $invoices=$this->db->prepare('SELECT id,invoice_number,status,total,amount_paid,currency FROM invoices WHERE order_id=:id ORDER BY id DESC');
+        $invoices->execute([':id'=>$id]);
+        $this->start('Sipariş detayı');
+        echo '<div class="admin"><aside><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a href="'.$this->url('/admin/orders').'">← Siparişlere dön</a><a href="'.$this->url('/admin/invoices').'">Faturalar</a></aside><main><header><small>SATIŞ / SİPARİŞ DETAYI</small><h1>#'.$this->e((string)$order['order_number']).'</h1><p>'.$this->e((string)$order['customer_name']).' · '.$this->e((string)$order['customer_email']).'</p></header><section class="box"><h2>Sipariş bilgileri</h2><p>Durum: '.$this->e((string)$order['status']).' · Tarih: '.$this->e((string)$order['created_at']).'</p><p>Toplam: '.number_format((float)$order['total'],2,',','.').' '.$this->e((string)$order['currency']).'</p><a class="button" href="'.$this->url('/admin/customers/'.(int)$order['user_id']).'">Müşteri detayları</a></section><section class="box"><h2>Sipariş kalemleri</h2><div class="tablewrap"><table><thead><tr><th>Ürün</th><th>Adet</th><th>Birim</th><th>Toplam</th></tr></thead><tbody>';
+        $rows=$items->fetchAll(PDO::FETCH_ASSOC);if(!$rows)echo '<tr><td colspan="4">Sipariş kalemi yok.</td></tr>';
+        foreach($rows as $row)echo '<tr><td>'.$this->e((string)$row['product_name']).'</td><td>'.(int)$row['quantity'].'</td><td>'.number_format((float)$row['unit_price'],2,',','.').'</td><td>'.number_format((float)$row['line_total'],2,',','.').'</td></tr>';
+        echo '</tbody></table></div></section><section class="box"><h2>Bağlı faturalar</h2>';
+        $rows=$invoices->fetchAll(PDO::FETCH_ASSOC);if(!$rows)echo '<p>Bağlı fatura yok.</p>';
+        foreach($rows as $row)echo '<p><a href="'.$this->url('/admin/invoices/'.(int)$row['id']).'">#'.$this->e((string)$row['invoice_number']).'</a> · '.$this->e((string)$row['status']).' · '.number_format((float)$row['amount_paid'],2,',','.').' / '.number_format((float)$row['total'],2,',','.').' '.$this->e((string)$row['currency']).'</p>';
+        echo '</section></main></div>';$this->end();
+    }
+
+    public function adminInvoiceDetail(int $id):void
+    {
+        if(!$this->staff())return;
+        $q=$this->db->prepare('SELECT i.*,u.name AS customer_name,u.email AS customer_email FROM invoices i JOIN users u ON u.id=i.user_id WHERE i.id=:id LIMIT 1');
+        $q->execute([':id'=>$id]);$invoice=$q->fetch(PDO::FETCH_ASSOC);
+        if(!$invoice){http_response_code(404);echo 'Fatura bulunamadı.';return;}
+        $items=$this->db->prepare('SELECT description,quantity,unit_price,line_total FROM invoice_items WHERE invoice_id=:id ORDER BY id');
+        $items->execute([':id'=>$id]);
+        $this->start('Fatura detayı');
+        echo '<div class="admin"><aside><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a href="'.$this->url('/admin/invoices').'">← Faturalara dön</a><a href="'.$this->url('/admin/orders').'">Siparişler</a></aside><main><header><small>FİNANS / FATURA DETAYI</small><h1>#'.$this->e((string)$invoice['invoice_number']).'</h1><p>'.$this->e((string)$invoice['customer_name']).' · '.$this->e((string)$invoice['customer_email']).'</p></header><section class="box"><h2>Fatura özeti</h2><p>Durum: '.$this->e($this->invoiceStatus((string)$invoice['status'])).' · Düzenlenme: '.$this->e((string)$invoice['issued_at']).' · Vade: '.$this->e((string)($invoice['due_at']??'—')).'</p><p>Toplam: '.number_format((float)$invoice['total'],2,',','.').' '.$this->e((string)$invoice['currency']).'</p><p>Tahsil edilen: '.number_format((float)$invoice['amount_paid'],2,',','.').' '.$this->e((string)$invoice['currency']).'</p><a class="button" href="'.$this->url('/admin/customers/'.(int)$invoice['user_id']).'">Müşteri detayları</a>';
+        if(!empty($invoice['order_id']))echo ' <a class="button" href="'.$this->url('/admin/orders/'.(int)$invoice['order_id']).'">Bağlı sipariş</a>';
+        echo '</section><section class="box"><h2>Fatura kalemleri</h2><div class="tablewrap"><table><thead><tr><th>Açıklama</th><th>Adet</th><th>Birim</th><th>Toplam</th></tr></thead><tbody>';
+        $rows=$items->fetchAll(PDO::FETCH_ASSOC);if(!$rows)echo '<tr><td colspan="4">Fatura kalemi yok.</td></tr>';
+        foreach($rows as $row)echo '<tr><td>'.$this->e((string)$row['description']).'</td><td>'.(int)$row['quantity'].'</td><td>'.number_format((float)$row['unit_price'],2,',','.').'</td><td>'.number_format((float)$row['line_total'],2,',','.').'</td></tr>';
         echo '</tbody></table></div></section></main></div>';$this->end();
     }
 
