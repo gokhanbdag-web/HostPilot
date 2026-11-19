@@ -88,6 +88,46 @@ final class ClientController
         echo '<form method="post"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><label>Ad soyad<input name="name" maxlength="80" required></label><label>Kullanıcı adı<input name="username" minlength="3" maxlength="80" pattern="[A-Za-z0-9_.-]+" required></label><label>E-posta<input type="email" name="email" maxlength="190" required></label><label>Parola (en az 12 karakter)<input type="password" name="password" minlength="12" maxlength="4096" required></label><button>Hesap oluştur</button></form><a href="'.$this->url('/client/resend-verification').'">Doğrulama e-postasını yeniden gönder</a><br><a href="'.$this->url('/client/login').'">Zaten hesabım var</a></main>';$this->end();
     }
 
+    public function confirmEmailChange(): void
+    {
+        header('Cache-Control: no-store, max-age=0');
+        header('Referrer-Policy: no-referrer');
+        $method=strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'));
+        $token=trim((string)($method==='POST'?($_POST['token']??''):($_GET['token']??'')));
+        $valid=false;$success=false;
+        if(preg_match('/^[a-f0-9]{64}$/D',$token)===1){
+            try{
+                if($method==='GET'){
+                    $q=$this->db->prepare("SELECT c.id FROM customer_email_changes c JOIN users u ON u.id=c.user_id WHERE c.token_hash=:hash AND c.used_at IS NULL AND c.expires_at>UTC_TIMESTAMP() AND u.role='customer' LIMIT 1");
+                    $q->execute([':hash'=>hash('sha256',$token)]);$valid=(bool)$q->fetchColumn();
+                }elseif($method==='POST'&&Auth::verifyCsrf($_POST['_token']??null)){
+                    $this->db->beginTransaction();
+                    $q=$this->db->prepare("SELECT c.id,c.user_id,c.new_email FROM customer_email_changes c JOIN users u ON u.id=c.user_id WHERE c.token_hash=:hash AND c.used_at IS NULL AND c.expires_at>UTC_TIMESTAMP() AND u.role='customer' LIMIT 1 FOR UPDATE");
+                    $q->execute([':hash'=>hash('sha256',$token)]);$row=$q->fetch(PDO::FETCH_ASSOC);
+                    if($row){
+                        $conflict=$this->db->prepare('SELECT id FROM users WHERE email=:email AND id<>:id LIMIT 1');
+                        $conflict->execute([':email'=>$row['new_email'],':id'=>$row['user_id']]);
+                        if(!$conflict->fetchColumn()){
+                            $this->db->prepare("UPDATE users SET email=:email,email_verified_at=UTC_TIMESTAMP(),auth_version=auth_version+1,updated_at=UTC_TIMESTAMP() WHERE id=:id AND role='customer'")->execute([':email'=>$row['new_email'],':id'=>$row['user_id']]);
+                            $this->db->prepare('UPDATE customer_email_changes SET used_at=UTC_TIMESTAMP() WHERE user_id=:id AND used_at IS NULL')->execute([':id'=>$row['user_id']]);
+                            \HostPilot\Core\SecurityAudit::record($this->db,'customer.email_changed',(int)$row['user_id'],['resource_id'=>(int)$row['user_id'],'action'=>'updated']);
+                            $this->db->commit();$success=true;
+                        }else $this->db->rollBack();
+                    }else $this->db->rollBack();
+                }
+            }catch(Throwable $e){
+                if($this->db->inTransaction())$this->db->rollBack();
+                error_log('[HostPilot] Customer email confirmation failed: '.$e->getMessage());
+            }
+        }
+        $this->start('E-posta değişikliği');
+        echo '<main class="auth"><div class="brand">HOST<span>PILOT</span></div><h1>E-posta değişikliği</h1>';
+        if($success)echo '<p>E-posta adresi doğrulandı ve güncellendi. Yeniden giriş yapın.</p><a href="'.$this->url('/client/login').'">Giriş yap</a>';
+        elseif($valid&&$method==='GET')echo '<p>Yeni e-posta adresini onaylamak için devam edin.</p><form method="post"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><input type="hidden" name="token" value="'.$this->e($token).'"><button>Değişikliği onayla</button></form>';
+        else echo '<p>Bağlantı geçersiz, kullanılmış veya süresi dolmuş.</p>';
+        echo '</main>';$this->end();
+    }
+
     public function verifyEmail(): void
     {
         header('Cache-Control: no-store, max-age=0');
