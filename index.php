@@ -247,9 +247,11 @@ if ($requestPath === '/payment/iyzico/callback' && $method === 'POST') { $paymen
 if ($requestPath === '/payment/return' && $method === 'GET') { $payment->returnPage(); exit; }
 
 if ($requestPath === '/admin/products' && in_array($method, ['GET','POST'], true)) { $catalog->adminProducts(); exit; }
+if (preg_match('#^/admin/orders/([0-9]+)$#', $requestPath, $orderMatch) && $method === 'GET') { $catalog->adminOrderDetail((int)$orderMatch[1]); exit; }
 if ($requestPath === '/admin/orders' && $method === 'GET') { $catalog->adminOrders(); exit; }
 if ($requestPath === '/client/orders' && $method === 'GET') { $catalog->clientOrders(); exit; }
 if ($requestPath === '/client/invoices' && $method === 'GET') { $catalog->clientInvoices(); exit; }
+if (preg_match('#^/admin/invoices/([0-9]+)$#', $requestPath, $invoiceMatch) && $method === 'GET') { $catalog->adminInvoiceDetail((int)$invoiceMatch[1]); exit; }
 if ($requestPath === '/admin/invoices' && $method === 'GET') { $catalog->adminInvoices(); exit; }
 if ($requestPath === '/cart' && $method === 'GET') { $catalog->cart(); exit; }
 if ($requestPath === '/cart/add' && $method === 'POST') { $catalog->addToCart(); exit; }
