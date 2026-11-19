@@ -247,6 +247,7 @@ if ($requestPath === '/payment/iyzico/callback' && $method === 'POST') { $paymen
 if ($requestPath === '/payment/return' && $method === 'GET') { $payment->returnPage(); exit; }
 
 if ($requestPath === '/admin/products' && in_array($method, ['GET','POST'], true)) { $catalog->adminProducts(); exit; }
+if (preg_match('#^/admin/orders/([0-9]+)/notes$#', $requestPath, $orderNotesMatch) && $method === 'POST') { $catalog->adminSaveOrderNotes((int)$orderNotesMatch[1]); exit; }
 if (preg_match('#^/admin/orders/([0-9]+)$#', $requestPath, $orderMatch) && $method === 'GET') { $catalog->adminOrderDetail((int)$orderMatch[1]); exit; }
 if ($requestPath === '/admin/orders' && $method === 'GET') { $catalog->adminOrders(); exit; }
 if ($requestPath === '/client/orders' && $method === 'GET') { $catalog->clientOrders(); exit; }
