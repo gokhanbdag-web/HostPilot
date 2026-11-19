@@ -369,12 +369,21 @@ final class CatalogController
         if($status!==''){$where[]='o.status=:status';$params[':status']=$status;}
         $sql='SELECT o.id,o.order_number,o.status,o.currency,o.total,o.created_at,u.name,u.email FROM orders o JOIN users u ON u.id=o.user_id';
         if($where)$sql.=' WHERE '.implode(' AND ',$where);
-        $sql.=' ORDER BY o.created_at DESC,o.id DESC LIMIT 300';
+        $countSql='SELECT COUNT(*) FROM orders o JOIN users u ON u.id=o.user_id';
+        if($where)$countSql.=' WHERE '.implode(' AND ',$where);
+        $countQuery=$this->db->prepare($countSql);$countQuery->execute($params);$total=(int)$countQuery->fetchColumn();
+        $perPage=25;$pages=max(1,(int)ceil($total/$perPage));
+        $page=min($pages,max(1,(int)($_GET['page']??1)));$offset=($page-1)*$perPage;
+        $sql.=' ORDER BY o.created_at DESC,o.id DESC LIMIT 25 OFFSET '.$offset;
         $query=$this->db->prepare($sql);$query->execute($params);$rows=$query->fetchAll(PDO::FETCH_ASSOC);
         $this->start('Siparişler');
-        echo '<div class="admin"><aside><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a href="'.$this->url('/admin').'">← Kontrol merkezi</a><a href="'.$this->url('/admin/products').'">Ürün & paketler</a><a class="active" href="'.$this->url('/admin/orders').'">Siparişler</a></aside><main><header><small>SATIŞ / SİPARİŞ</small><h1>Siparişler</h1><p>Müşterilerin oluşturduğu siparişleri inceleyin.</p></header><section class="box"><form method="get" action="'.$this->url('/admin/orders').'"><div class="grid"><label>Arama<input name="q" maxlength="120" placeholder="Sipariş no, müşteri veya e-posta" value="'.$this->e($search).'"></label><label>Durum<input name="status" maxlength="24" placeholder="Örn. pending" value="'.$this->e($status).'"></label></div><button class="button">Filtrele</button> <a href="'.$this->url('/admin/orders').'">Temizle</a></form><p>En fazla 300 kayıt gösterilir.</p><div class="tablewrap"><table><thead><tr><th>Sipariş</th><th>Müşteri</th><th>Tutar</th><th>Durum</th><th>Tarih</th></tr></thead><tbody>';
+        echo '<div class="admin"><aside><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a href="'.$this->url('/admin').'">← Kontrol merkezi</a><a href="'.$this->url('/admin/products').'">Ürün & paketler</a><a class="active" href="'.$this->url('/admin/orders').'">Siparişler</a></aside><main><header><small>SATIŞ / SİPARİŞ</small><h1>Siparişler</h1><p>Müşterilerin oluşturduğu siparişleri inceleyin.</p></header><section class="box"><form method="get" action="'.$this->url('/admin/orders').'"><div class="grid"><label>Arama<input name="q" maxlength="120" placeholder="Sipariş no, müşteri veya e-posta" value="'.$this->e($search).'"></label><label>Durum<input name="status" maxlength="24" placeholder="Örn. pending" value="'.$this->e($status).'"></label></div><button class="button">Filtrele</button> <a href="'.$this->url('/admin/orders').'">Temizle</a></form><p>Toplam '.$total.' sipariş · Sayfa '.$page.' / '.$pages.'</p><div class="tablewrap"><table><thead><tr><th>Sipariş</th><th>Müşteri</th><th>Tutar</th><th>Durum</th><th>Tarih</th></tr></thead><tbody>';
         if(!$rows)echo '<tr><td colspan="5">Henüz sipariş bulunmuyor.</td></tr>';foreach($rows as $o)echo '<tr><td><a href="'.$this->url('/admin/orders/'.(int)$o['id']).'">#'.$this->e($o['order_number']).'</a></td><td>'.$this->e($o['name']).'<small>'.$this->e($o['email']).'</small></td><td>'.number_format((float)$o['total'],2,',','.').' '.$this->e($o['currency']).'</td><td>'.$this->e($o['status']).'</td><td>'.date('d.m.Y H:i',strtotime($o['created_at'])).'</td></tr>';
-        echo '</tbody></table></div></section></main></div>';$this->end();
+        echo '</tbody></table></div><nav aria-label="Sipariş sayfaları">';
+        $filters=http_build_query(['q'=>$search,'status'=>$status]);
+        if($page>1)echo '<a class="button" href="'.$this->url('/admin/orders').'?'.$filters.'&page='.($page-1).'">← Önceki</a> ';
+        if($page<$pages)echo '<a class="button" href="'.$this->url('/admin/orders').'?'.$filters.'&page='.($page+1).'">Sonraki →</a>';
+        echo '</nav></section></main></div>';$this->end();
     }
 
     public function adminOrderDetail(int $id):void
