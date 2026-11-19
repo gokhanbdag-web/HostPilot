@@ -355,7 +355,7 @@ final class CatalogController
         if(strlen($search)>120)$search=substr($search,0,120);
         if(strlen($status)>24)$status='';
         $where=[];$params=[];
-        if($search!==''){$where[]='(o.order_number LIKE :number OR u.name LIKE :customer OR u.email LIKE :email)';$pattern='%'.str_replace(['!','%','_'],['!!','!%','!_'],$search).'%';$params=[':number'=>$pattern,':customer'=>$pattern,':email'=>$pattern];}
+        if($search!==''){$where[]='(o.order_number LIKE :number OR u.name LIKE :customer OR u.email LIKE :email)';$pattern='%'.$search.'%';$params=[':number'=>$pattern,':customer'=>$pattern,':email'=>$pattern];}
         if($status!==''){$where[]='o.status=:status';$params[':status']=$status;}
         $sql='SELECT o.id,o.order_number,o.status,o.currency,o.total,o.created_at,u.name,u.email FROM orders o JOIN users u ON u.id=o.user_id';
         if($where)$sql.=' WHERE '.implode(' AND ',$where);
