@@ -180,6 +180,7 @@ if ($requestPath === '/admin/customers/email-request' && $method === 'POST') { $
 if ($requestPath === '/admin/customers/profile' && $method === 'POST') { $controller->updateCustomerProfile(); exit; }
 if ($requestPath === '/admin/customers/status' && $method === 'POST') { $controller->updateCustomerStatus(); exit; }
 if ($requestPath === '/admin/customers/bulk-status' && $method === 'POST') { $controller->bulkUpdateCustomerStatus(); exit; }
+if ($requestPath === '/admin/customers/export' && $method === 'GET') { $controller->exportCustomersCsv(); exit; }
 if ($requestPath === '/admin/customers' && $method === 'GET') { $controller->customers(); exit; }
 if ($requestPath === '/admin/reports' && $method === 'GET') { $controller->reports(); exit; }
 if ($requestPath === '/admin/tickets' && $method === 'GET') { $controller->tickets(); exit; }
