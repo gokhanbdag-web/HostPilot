@@ -116,28 +116,13 @@ final class AdminController
         if (!Auth::check()) $this->redirect('/admin/login');
         $user=Auth::user();
         if (!in_array($user['role'], ['super_admin','admin','staff'], true)) { http_response_code(403); echo 'Yetkisiz erişim.'; return; }
-        $term=trim((string)($_GET['q']??''));
-        $status=(string)($_GET['status']??'');
-        if (!in_array($status, ['', 'active', 'disabled'], true)) $status='';
-        $sort=(string)($_GET['sort']??'newest');
-        $sortOrders=['newest'=>'created_at DESC,id DESC','oldest'=>'created_at ASC,id ASC','name_asc'=>'name ASC,id ASC','name_desc'=>'name DESC,id DESC','status'=>'status ASC,name ASC,id ASC'];
-        if(!isset($sortOrders[$sort]))$sort='newest';
-        $dateFrom=(string)($_GET['date_from']??'');
-        $dateTo=(string)($_GET['date_to']??'');
-        $fromDate=\DateTimeImmutable::createFromFormat('!Y-m-d',$dateFrom);
-        if($dateFrom!==''&&(!$fromDate||$fromDate->format('Y-m-d')!==$dateFrom))$dateFrom='';
-        $toDate=\DateTimeImmutable::createFromFormat('!Y-m-d',$dateTo);
-        if($dateTo!==''&&(!$toDate||$toDate->format('Y-m-d')!==$dateTo))$dateTo='';
+        [$where,$params,$order,$term,$status,$sort,$dateFrom,$dateTo]=$this->customerListFilters();
         $page=max(1,(int)($_GET['page']??1));$limit=25;$offset=($page-1)*$limit;
-        $where="role='customer' AND email NOT LIKE 'demo.musteri%@example.invalid'";$params=[];
-        if($term!==''){$where.=" AND (name LIKE :q1 OR email LIKE :q2 OR username LIKE :q3)";$like='%'.$term.'%';$params=[':q1'=>$like,':q2'=>$like,':q3'=>$like];}
-        if ($status!=='') {$where.=" AND status=:status";$params[':status']=$status;}
-        if($dateFrom!==''){$where.=" AND created_at>=:date_from";$params[':date_from']=$dateFrom.' 00:00:00';}
-        if($dateTo!==''){$where.=" AND created_at<:date_to";$params[':date_to']=(new \DateTimeImmutable($dateTo))->modify('+1 day')->format('Y-m-d').' 00:00:00';}
         $count=$this->db->prepare("SELECT COUNT(*) FROM users WHERE ".$where);$count->execute($params);$total=(int)$count->fetchColumn();
-        $list=$this->db->prepare("SELECT id,name,email,username,status,created_at FROM users WHERE ".$where." ORDER BY ".$sortOrders[$sort]." LIMIT ".$limit." OFFSET ".$offset);$list->execute($params);$rows=$list->fetchAll();
+        $list=$this->db->prepare("SELECT id,name,email,username,status,created_at FROM users WHERE ".$where." ORDER BY ".$order." LIMIT ".$limit." OFFSET ".$offset);$list->execute($params);$rows=$list->fetchAll();
         $this->startPage('Müşteriler');
         echo '<div class="layout"><aside class="sidebar"><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a class="nav-item" href="'.$this->url('/admin').'">▦ Genel Bakış</a><a class="nav-item active" href="'.$this->url('/admin/customers').'">♙ Müşteriler</a><a class="nav-item" href="'.$this->url('/admin/orders').'">⇄ Siparişler</a></aside><main class="main"><header class="topbar"><div><small>YÖNETİM / MÜŞTERİLER</small><h1>Müşteri yönetimi</h1></div><a class="logout" href="'.$this->url('/admin').'">Kontrol merkezi</a></header><article class="panel"><div class="panel-head"><div><h3>Kayıtlı müşteriler</h3><p>'.$total.' müşteri hesabı</p></div><form method="get" action="'.$this->url('/admin/customers').'"><input name="q" value="'.$this->e($term).'" placeholder="Ad, e-posta veya kullanıcı adı" style="padding:10px;background:#0b1425;color:#fff;border:1px solid #34445e;border-radius:8px"><select name="status" aria-label="Hesap durumu" style="padding:10px;background:#0b1425;color:#fff;border:1px solid #34445e;border-radius:8px"><option value=""'.($status===''?' selected':'').'>Tüm durumlar</option><option value="active"'.($status==='active'?' selected':'').'>Aktif</option><option value="disabled"'.($status==='disabled'?' selected':'').'>Devre dışı</option></select><select name="sort" aria-label="Müşteri sıralaması" style="padding:10px;background:#0b1425;color:#fff;border:1px solid #34445e;border-radius:8px"><option value="newest"'.($sort==='newest'?' selected':'').'>En yeni kayıt</option><option value="oldest"'.($sort==='oldest'?' selected':'').'>En eski kayıt</option><option value="name_asc"'.($sort==='name_asc'?' selected':'').'>Ad A-Z</option><option value="name_desc"'.($sort==='name_desc'?' selected':'').'>Ad Z-A</option><option value="status"'.($sort==='status'?' selected':'').'>Hesap durumu</option></select><label for="date_from">Başlangıç</label><input type="date" id="date_from" name="date_from" value="'.$this->e($dateFrom).'" style="padding:10px;background:#0b1425;color:#fff;border:1px solid #34445e;border-radius:8px"><label for="date_to">Bitiş</label><input type="date" id="date_to" name="date_to" value="'.$this->e($dateTo).'" style="padding:10px;background:#0b1425;color:#fff;border:1px solid #34445e;border-radius:8px"><button style="padding:10px 14px">Ara</button></form></div>';
+        if(in_array($user['role'],['super_admin','admin'],true))echo '<p><a class="secondary" href="'.$this->url('/admin/customers/export').'?'.http_build_query(['q'=>$term,'status'=>$status,'sort'=>$sort,'date_from'=>$dateFrom,'date_to'=>$dateTo]).'">Filtrelenmiş müşterileri CSV indir</a></p>';
         if(in_array($user['role'],['super_admin','admin'],true))echo '<form id="customer-bulk" method="post" action="'.$this->url('/admin/customers/bulk-status').'" onsubmit="return confirm(\'Seçili müşteri hesaplarının durumu değiştirilsin mi? Oturumları kapatılacaktır.\')"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><label for="bulk-status">Seçili müşteriler</label><select id="bulk-status" name="status" required><option value="">İşlem seçin</option><option value="active">Etkinleştir</option><option value="disabled">Devre dışı bırak</option></select><button type="submit">Uygula</button></form>';
         if(isset($_GET['notice']))echo '<div class="notice">'.$this->e((string)$_GET['notice']).'</div>';
         if(isset($_GET['error']))echo '<div class="notice err">'.$this->e((string)$_GET['error']).'</div>';
@@ -150,6 +135,56 @@ final class AdminController
         $pages=max(1,(int)ceil($total/$limit));
         if($pages>1){echo '<nav style="display:flex;gap:12px;padding-top:18px">';for($n=1;$n<=$pages;$n++){if($n===$page)echo '<strong>'.$n.'</strong>';else echo '<a href="'.$this->url('/admin/customers').'?q='.rawurlencode($term).'&status='.rawurlencode($status).'&sort='.rawurlencode($sort).'&date_from='.rawurlencode($dateFrom).'&date_to='.rawurlencode($dateTo).'&page='.$n.'">'.$n.'</a>';}echo '</nav>';}
         echo '</article></main></div>';$this->endPage();
+    }
+
+    private function customerListFilters(): array
+    {
+        $term=trim((string)($_GET['q']??''));
+        $status=(string)($_GET['status']??'');
+        if (!in_array($status, ['', 'active', 'disabled'], true)) $status='';
+        $sort=(string)($_GET['sort']??'newest');
+        $sortOrders=['newest'=>'created_at DESC,id DESC','oldest'=>'created_at ASC,id ASC','name_asc'=>'name ASC,id ASC','name_desc'=>'name DESC,id DESC','status'=>'status ASC,name ASC,id ASC'];
+        if(!isset($sortOrders[$sort]))$sort='newest';
+        $dateFrom=(string)($_GET['date_from']??'');
+        $dateTo=(string)($_GET['date_to']??'');
+        $fromDate=\DateTimeImmutable::createFromFormat('!Y-m-d',$dateFrom);
+        if($dateFrom!==''&&(!$fromDate||$fromDate->format('Y-m-d')!==$dateFrom))$dateFrom='';
+        $toDate=\DateTimeImmutable::createFromFormat('!Y-m-d',$dateTo);
+        if($dateTo!==''&&(!$toDate||$toDate->format('Y-m-d')!==$dateTo))$dateTo='';
+        $where="role='customer' AND email NOT LIKE 'demo.musteri%@example.invalid'";$params=[];
+        if($term!==''){$where.=" AND (name LIKE :q1 OR email LIKE :q2 OR username LIKE :q3)";$like='%'.$term.'%';$params=[':q1'=>$like,':q2'=>$like,':q3'=>$like];}
+        if ($status!=='') {$where.=" AND status=:status";$params[':status']=$status;}
+        if($dateFrom!==''){$where.=" AND created_at>=:date_from";$params[':date_from']=$dateFrom.' 00:00:00';}
+        if($dateTo!==''){$where.=" AND created_at<:date_to";$params[':date_to']=(new \DateTimeImmutable($dateTo))->modify('+1 day')->format('Y-m-d').' 00:00:00';}
+        return [$where,$params,$sortOrders[$sort],$term,$status,$sort,$dateFrom,$dateTo];
+    }
+
+    public function exportCustomersCsv(): void
+    {
+        if (!Auth::check()) $this->redirect('/admin/login');
+        $actor=Auth::user();
+        if (!in_array($actor['role'],['super_admin','admin'],true)) { http_response_code(403); echo 'Yetkisiz erişim.'; return; }
+        [$where,$params,$order]=$this->customerListFilters();
+        $statement=$this->db->prepare("SELECT id,name,email,username,status,created_at FROM users WHERE ".$where." ORDER BY ".$order);
+        $statement->execute($params);
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="hostpilot-customers-'.gmdate('Ymd-His').'.csv"');
+        header('Cache-Control: no-store, private');
+        header('X-Content-Type-Options: nosniff');
+        $output=fopen('php://output','wb');
+        if($output===false)throw new \\RuntimeException('CSV çıktısı açılamadı.');
+        fwrite($output,"\\xEF\\xBB\\xBF");
+        fputcsv($output,['ID','Ad Soyad','E-posta','Kullanıcı Adı','Durum','Kayıt Tarihi']);
+        while($row=$statement->fetch(PDO::FETCH_ASSOC)){
+            $values=[];
+            foreach(['id','name','email','username','status','created_at'] as $field){
+                $value=(string)($row[$field]??'');
+                if(preg_match('/^[\\x00-\\x20]*[=+@-]/u',$value))$value="'".$value;
+                $values[]=$value;
+            }
+            fputcsv($output,$values);
+        }
+        fclose($output);
     }
 
     public function viewCustomer(int $id): void
