@@ -124,11 +124,10 @@ final class AdminController
         if(!isset($sortOrders[$sort]))$sort='newest';
         $dateFrom=(string)($_GET['date_from']??'');
         $dateTo=(string)($_GET['date_to']??'');
-        foreach(['date_from'=>&$dateFrom,'date_to'=>&$dateTo] as &$dateValue){
-            $parsed=\DateTimeImmutable::createFromFormat('!Y-m-d',$dateValue);
-            if($dateValue!==''&&(!$parsed||$parsed->format('Y-m-d')!==$dateValue))$dateValue='';
-        }
-        unset($dateValue);
+        $fromDate=\DateTimeImmutable::createFromFormat('!Y-m-d',$dateFrom);
+        if($dateFrom!==''&&(!$fromDate||$fromDate->format('Y-m-d')!==$dateFrom))$dateFrom='';
+        $toDate=\DateTimeImmutable::createFromFormat('!Y-m-d',$dateTo);
+        if($dateTo!==''&&(!$toDate||$toDate->format('Y-m-d')!==$dateTo))$dateTo='';
         $page=max(1,(int)($_GET['page']??1));$limit=25;$offset=($page-1)*$limit;
         $where="role='customer' AND email NOT LIKE 'demo.musteri%@example.invalid'";$params=[];
         if($term!==''){$where.=" AND (name LIKE :q1 OR email LIKE :q2 OR username LIKE :q3)";$like='%'.$term.'%';$params=[':q1'=>$like,':q2'=>$like,':q3'=>$like];}
