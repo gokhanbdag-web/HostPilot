@@ -127,9 +127,13 @@ final class AdminController
         $list=$this->db->prepare("SELECT id,name,email,username,status,created_at FROM users WHERE ".$where." ORDER BY created_at DESC,id DESC LIMIT ".$limit." OFFSET ".$offset);$list->execute($params);$rows=$list->fetchAll();
         $this->startPage('Müşteriler');
         echo '<div class="layout"><aside class="sidebar"><a class="brand" href="'.$this->url('/admin').'">HOST<span>PILOT</span></a><a class="nav-item" href="'.$this->url('/admin').'">▦ Genel Bakış</a><a class="nav-item active" href="'.$this->url('/admin/customers').'">♙ Müşteriler</a><a class="nav-item" href="'.$this->url('/admin/orders').'">⇄ Siparişler</a></aside><main class="main"><header class="topbar"><div><small>YÖNETİM / MÜŞTERİLER</small><h1>Müşteri yönetimi</h1></div><a class="logout" href="'.$this->url('/admin').'">Kontrol merkezi</a></header><article class="panel"><div class="panel-head"><div><h3>Kayıtlı müşteriler</h3><p>'.$total.' müşteri hesabı</p></div><form method="get" action="'.$this->url('/admin/customers').'"><input name="q" value="'.$this->e($term).'" placeholder="Ad, e-posta veya kullanıcı adı" style="padding:10px;background:#0b1425;color:#fff;border:1px solid #34445e;border-radius:8px"><select name="status" aria-label="Hesap durumu" style="padding:10px;background:#0b1425;color:#fff;border:1px solid #34445e;border-radius:8px"><option value=""'.($status===''?' selected':'').'>Tüm durumlar</option><option value="active"'.($status==='active'?' selected':'').'>Aktif</option><option value="disabled"'.($status==='disabled'?' selected':'').'>Devre dışı</option></select><button style="padding:10px 14px">Ara</button></form></div>';
+        if(in_array($user['role'],['super_admin','admin'],true))echo '<form id="customer-bulk" method="post" action="'.$this->url('/admin/customers/bulk-status').'" onsubmit="return confirm(\'Seçili müşteri hesaplarının durumu değiştirilsin mi? Oturumları kapatılacaktır.\')"><input type="hidden" name="_token" value="'.$this->e(Auth::csrfToken()).'"><label for="bulk-status">Seçili müşteriler</label><select id="bulk-status" name="status" required><option value="">İşlem seçin</option><option value="active">Etkinleştir</option><option value="disabled">Devre dışı bırak</option></select><button type="submit">Uygula</button></form>';
+        if(isset($_GET['notice']))echo '<div class="notice">'.$this->e((string)$_GET['notice']).'</div>';
+        if(isset($_GET['error']))echo '<div class="notice err">'.$this->e((string)$_GET['error']).'</div>';
         if(!$rows)echo '<p>Aramanızla eşleşen müşteri bulunamadı.</p>';
         foreach($rows as $row){
             $created=date('d.m.Y',strtotime((string)$row['created_at']));
+            if(in_array($user['role'],['super_admin','admin'],true))echo '<label style="display:inline-flex;align-items:center;padding:8px"><input type="checkbox" name="customer_ids[]" value="'.(int)$row['id'].'" form="customer-bulk" aria-label="Müşteri seç: '.$this->e((string)$row['name']).'"></label>';
             echo '<a class="ticket-admin" href="'.$this->url('/admin/customers/'.(int)$row['id']).'"><span><b>'.$this->e((string)$row['name']).'</b><small>'.$this->e((string)$row['email']).' · @'.$this->e((string)$row['username']).' · Kayıt: '.$created.'</small></span><em>'.$this->e((string)$row['status']).' · Detay →</em></a>';
         }
         $pages=max(1,(int)ceil($total/$limit));
@@ -278,6 +282,49 @@ final class AdminController
             if($this->db->inTransaction())$this->db->rollBack();
             error_log('[HostPilot] Customer status update failed: '.$e->getMessage());
             $this->redirect('/admin/customers/'.$id.'?error='.rawurlencode($e instanceof \RuntimeException?$e->getMessage():'Müşteri hesabı güncellenemedi.'));
+        }
+    }
+
+    public function bulkUpdateCustomerStatus(): void
+    {
+        if (!Auth::check()) $this->redirect('/admin/login');
+        $actor=Auth::user();
+        if (!in_array($actor['role'],['super_admin','admin'],true)) { http_response_code(403); echo 'Yetkisiz erişim.'; return; }
+        if (($_SERVER['REQUEST_METHOD']??'')!=='POST'||!Auth::verifyCsrf($_POST['_token']??null)) { http_response_code(400); echo 'Geçersiz istek.'; return; }
+        $status=(string)($_POST['status']??'');
+        $raw=$_POST['customer_ids']??[];
+        if (!is_array($raw)||!in_array($status,['active','disabled'],true)||count($raw)<1||count($raw)>100) {
+            $this->redirect('/admin/customers?error='.rawurlencode('1 ile 100 arasında müşteri seçin ve geçerli işlem belirtin.'));
+        }
+        $ids=[];
+        foreach($raw as $value){
+            if (!is_scalar($value)||!preg_match('/^[1-9][0-9]*$/D',(string)$value)) {
+                $this->redirect('/admin/customers?error='.rawurlencode('Geçersiz müşteri seçimi.'));
+            }
+            $ids[]=(int)$value;
+        }
+        $ids=array_values(array_unique($ids));
+        sort($ids,SORT_NUMERIC);
+        try {
+            $this->db->beginTransaction();
+            $column=$this->db->query("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='auth_version'");
+            if((int)$column->fetchColumn()!==1)throw new \RuntimeException('Oturum iptali için veritabanı güncellemelerini uygulayın.');
+            $placeholders=implode(',',array_fill(0,count($ids),'?'));
+            $q=$this->db->prepare("SELECT id FROM users WHERE role='customer' AND id IN ($placeholders) ORDER BY id FOR UPDATE");
+            $q->execute($ids);
+            $found=array_map('intval',$q->fetchAll(PDO::FETCH_COLUMN));
+            if(count($found)!==count($ids))throw new \RuntimeException('Seçilen hesaplardan biri müşteri değil veya bulunamadı.');
+            $update=$this->db->prepare('UPDATE users SET status=?,auth_version=auth_version+1,updated_at=? WHERE id=? AND role=\'customer\'');
+            foreach($ids as $id){
+                $update->execute([$status,gmdate('Y-m-d H:i:s'),$id]);
+                \HostPilot\Core\SecurityAudit::record($this->db,'customer.status_updated',(int)$actor['id'],['resource_id'=>$id,'action'=>'updated']);
+            }
+            $this->db->commit();
+            $this->redirect('/admin/customers?notice='.rawurlencode(count($ids).' müşteri hesabı güncellendi; oturumlar geçersiz kılındı.'));
+        }catch(Throwable $e){
+            if($this->db->inTransaction())$this->db->rollBack();
+            error_log('[HostPilot] Bulk customer status update failed: '.$e->getMessage());
+            $this->redirect('/admin/customers?error='.rawurlencode($e instanceof \RuntimeException?$e->getMessage():'Toplu işlem başarısız.'));
         }
     }
 
