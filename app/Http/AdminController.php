@@ -308,23 +308,23 @@ final class AdminController
         try {
             $this->db->beginTransaction();
             $column=$this->db->query("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='auth_version'");
-            if((int)$column->fetchColumn()!==1)throw new \\RuntimeException('Oturum iptali için veritabanı güncellemelerini uygulayın.');
+            if((int)$column->fetchColumn()!==1)throw new \RuntimeException('Oturum iptali için veritabanı güncellemelerini uygulayın.');
             $placeholders=implode(',',array_fill(0,count($ids),'?'));
             $q=$this->db->prepare("SELECT id FROM users WHERE role='customer' AND id IN ($placeholders) ORDER BY id FOR UPDATE");
             $q->execute($ids);
             $found=array_map('intval',$q->fetchAll(PDO::FETCH_COLUMN));
-            if(count($found)!==count($ids))throw new \\RuntimeException('Seçilen hesaplardan biri müşteri değil veya bulunamadı.');
+            if(count($found)!==count($ids))throw new \RuntimeException('Seçilen hesaplardan biri müşteri değil veya bulunamadı.');
             $update=$this->db->prepare('UPDATE users SET status=?,auth_version=auth_version+1,updated_at=? WHERE id=? AND role=\'customer\'');
             foreach($ids as $id){
                 $update->execute([$status,gmdate('Y-m-d H:i:s'),$id]);
-                \\HostPilot\\Core\\SecurityAudit::record($this->db,'customer.status_updated',(int)$actor['id'],['resource_id'=>$id,'action'=>'updated']);
+                \HostPilot\\Core\\SecurityAudit::record($this->db,'customer.status_updated',(int)$actor['id'],['resource_id'=>$id,'action'=>'updated']);
             }
             $this->db->commit();
             $this->redirect('/admin/customers?notice='.rawurlencode(count($ids).' müşteri hesabı güncellendi; oturumlar geçersiz kılındı.'));
         }catch(Throwable $e){
             if($this->db->inTransaction())$this->db->rollBack();
             error_log('[HostPilot] Bulk customer status update failed: '.$e->getMessage());
-            $this->redirect('/admin/customers?error='.rawurlencode($e instanceof \\RuntimeException?$e->getMessage():'Toplu işlem başarısız.'));
+            $this->redirect('/admin/customers?error='.rawurlencode($e instanceof \RuntimeException?$e->getMessage():'Toplu işlem başarısız.'));
         }
     }
 
