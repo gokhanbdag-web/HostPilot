@@ -133,6 +133,7 @@ final class AdminController
         if(!$rows)echo '<p>Aramanızla eşleşen müşteri bulunamadı.</p>';
         foreach($rows as $row){
             $created=date('d.m.Y',strtotime((string)$row['created_at']));
+            if(in_array($user['role'],['super_admin','admin'],true))echo '<label style="display:inline-flex;align-items:center;padding:8px"><input type="checkbox" name="customer_ids[]" value="'.(int)$row['id'].'" form="customer-bulk" aria-label="Müşteri seç: '.$this->e((string)$row['name']).'"></label>';
             echo '<a class="ticket-admin" href="'.$this->url('/admin/customers/'.(int)$row['id']).'"><span><b>'.$this->e((string)$row['name']).'</b><small>'.$this->e((string)$row['email']).' · @'.$this->e((string)$row['username']).' · Kayıt: '.$created.'</small></span><em>'.$this->e((string)$row['status']).' · Detay →</em></a>';
         }
         $pages=max(1,(int)ceil($total/$limit));
