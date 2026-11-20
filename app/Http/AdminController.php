@@ -317,7 +317,7 @@ final class AdminController
             $update=$this->db->prepare('UPDATE users SET status=?,auth_version=auth_version+1,updated_at=? WHERE id=? AND role=\'customer\'');
             foreach($ids as $id){
                 $update->execute([$status,gmdate('Y-m-d H:i:s'),$id]);
-                \HostPilot\\Core\\SecurityAudit::record($this->db,'customer.status_updated',(int)$actor['id'],['resource_id'=>$id,'action'=>'updated']);
+                \HostPilot\Core\SecurityAudit::record($this->db,'customer.status_updated',(int)$actor['id'],['resource_id'=>$id,'action'=>'updated']);
             }
             $this->db->commit();
             $this->redirect('/admin/customers?notice='.rawurlencode(count($ids).' müşteri hesabı güncellendi; oturumlar geçersiz kılındı.'));
