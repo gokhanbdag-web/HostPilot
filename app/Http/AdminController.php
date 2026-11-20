@@ -172,14 +172,14 @@ final class AdminController
         header('Cache-Control: no-store, private');
         header('X-Content-Type-Options: nosniff');
         $output=fopen('php://output','wb');
-        if($output===false)throw new \\RuntimeException('CSV çıktısı açılamadı.');
-        fwrite($output,"\\xEF\\xBB\\xBF");
+        if($output===false)throw new \RuntimeException('CSV çıktısı açılamadı.');
+        fwrite($output,"\xEF\xBB\xBF");
         fputcsv($output,['ID','Ad Soyad','E-posta','Kullanıcı Adı','Durum','Kayıt Tarihi']);
         while($row=$statement->fetch(PDO::FETCH_ASSOC)){
             $values=[];
             foreach(['id','name','email','username','status','created_at'] as $field){
                 $value=(string)($row[$field]??'');
-                if(preg_match('/^[\\x00-\\x20]*[=+@-]/u',$value))$value="'".$value;
+                if(preg_match('/^[\x00-\x20]*[=+@-]/u',$value))$value="'".$value;
                 $values[]=$value;
             }
             fputcsv($output,$values);
